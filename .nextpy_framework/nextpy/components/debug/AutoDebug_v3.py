@@ -44,6 +44,27 @@ try:
     # Use the real implementations
     debug_ui = real_debug_ui
     inject_debug_ui = real_inject_debug_ui
+    
+    # Load action runtime script
+    action_runtime_script = ""
+    try:
+        from ..psx.runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+        action_runtime_script = f"<script>{JS_ACTION_RUNTIME_SCRIPT}</script>"
+    except ImportError:
+        # Fallback if action runtime not available
+        action_runtime_script = "<script>console.log('[NextPy] Action Runtime not available');</script>"
+    
+    # Create complete debug system with proper structure
+    debug_system = f"""
+{debug_ui.generate_html()}
+<style>
+{debug_ui.generate_css()}
+</style>
+<script>
+{debug_ui.generate_javascript()}
+</script>
+{action_runtime_script}
+"""
 except ImportError as e:
     print(f"Warning: Debug UI import failed: {e}")
     debug_ui = None

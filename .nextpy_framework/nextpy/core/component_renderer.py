@@ -612,6 +612,15 @@ class ComponentRenderer:
         safe_error = html.escape(error)
         safe_path = html.escape(str(file_path))
 
+        # Inject the new action runtime script
+        action_runtime_script = ""
+        try:
+            from ..psx.runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+            action_runtime_script = f"<script>{JS_ACTION_RUNTIME_SCRIPT}</script>"
+        except ImportError:
+            # Fallback if action runtime not available
+            action_runtime_script = "<script>console.log('[NextPy] Action Runtime not available');</script>"
+
         return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -952,8 +961,17 @@ class ComponentRenderer:
             hydrator = get_component_hydrator()
             hydration_script = hydrator.generate_hydration_script()
             
+            # Load action runtime script
+            action_runtime_script = ""
+            try:
+                from ..psx.runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+                action_runtime_script = JS_ACTION_RUNTIME_SCRIPT
+            except ImportError:
+                # Fallback if action runtime not available
+                action_runtime_script = "console.log('[NextPy] Action Runtime not available');"
+            
             # Combine all scripts in correct order
-            complete_script = f"{full_script}\n\n{hydration_script}\n\n{handler_script}"
+            complete_script = f"{action_runtime_script}\n\n{full_script}\n\n{hydration_script}\n\n{handler_script}"
             
             # Return HTML with embedded scripts
             return f"{hydrated_html}\n<script type='text/javascript'>\n{complete_script}\n</script>"

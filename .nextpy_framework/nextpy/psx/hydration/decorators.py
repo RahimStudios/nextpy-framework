@@ -9,6 +9,7 @@ import re
 import ast
 import hashlib
 import html as html_module
+import json
 from functools import wraps
 from typing import Callable, Dict, Any, Optional, List
 
@@ -354,14 +355,14 @@ def generate_handler_registration_script(
     script = f"""
 // Handler registration for component: {component_id}
 (function() {{
-    // Safety check: Ensure NextPyRuntime exists
-    if (typeof window.NextPyRuntime === 'undefined') {{
-        console.error('NextPyRuntime not found. Skipping handler registration for component: {component_id}');
+    // Safety check: Ensure NextPyActionRuntime exists
+    if (typeof window.NextPyActionRuntime === 'undefined') {{
+        console.error('NextPyActionRuntime not found. Skipping handler registration for component: {component_id}');
         return;
     }}
     
     const componentId = '{component_id}';
-    const component = NextPyRuntime.components.get(componentId);
+    const component = window.nextpyComponents?.[componentId];
     
     if (!component) {{
         console.warn('Component not found: ' + componentId);
@@ -373,8 +374,25 @@ def generate_handler_registration_script(
 """
     
     for handler_name, handler_body in handlers.items():
-        js_body = python_code_to_js(handler_body, state_keys)
-        event_type = event_types.get(handler_name, 'click')
+        # Check if handler_body is already structured actions (list of Action objects or dicts)
+        if isinstance(handler_body, list) and handler_body:
+            if hasattr(handler_body[0], 'to_dict'):
+                # New AST-based structured Action objects
+                serialized_actions = [action.to_dict() for action in handler_body]
+                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId)"
+                event_type = event_types.get(handler_name, 'click')
+            elif isinstance(handler_body[0], dict):
+                # Already serialized actions
+                js_body = f"executeNextPyActions({json.dumps(handler_body)}, componentId)"
+                event_type = event_types.get(handler_name, 'click')
+            else:
+                # Fallback to old python_code_to_js for string-based handlers
+                js_body = python_code_to_js(handler_body, state_keys)
+                event_type = event_types.get(handler_name, 'click')
+        else:
+            # Fallback to old python_code_to_js for string-based handlers
+            js_body = python_code_to_js(handler_body, state_keys)
+            event_type = event_types.get(handler_name, 'click')
         
         # Create the handler function with error handling
         script += f"""
@@ -642,14 +660,23 @@ def interactive_component(func: Callable) -> Callable:
                 print(f"DEBUG: Fallback exception in handler extraction: {e}")
                 handlers = {}
         
-        # Extract create_on... handler assignments and merge them into handlers
+        # Extract handlers using new AST-based compiler
         try:
-            create_handlers, _ = extract_create_handler_assignments(func, handlers)
-            if create_handlers:
-                handlers.update(create_handlers)
-                print(f"DEBUG: Added create_on handlers: {list(create_handlers.keys())}")
+            from ..compiler.handler_compiler import extract_handlers_compiled
+            ast_handlers = extract_handlers_compiled(func, func.__name__)
+            if ast_handlers:
+                handlers.update(ast_handlers)
+                print(f"DEBUG: Added AST-based handlers: {list(ast_handlers.keys())}")
         except Exception as e:
-            print(f"DEBUG: Failed extract_create_handler_assignments: {e}")
+            print(f"DEBUG: Failed AST-based handler extraction: {e}")
+            # Fallback to old method
+            try:
+                create_handlers, _ = extract_create_handler_assignments(func, handlers)
+                if create_handlers:
+                    handlers.update(create_handlers)
+                    print(f"DEBUG: Fallback added create_on handlers: {list(create_handlers.keys())}")
+            except Exception as e2:
+                print(f"DEBUG: Fallback handler extraction failed: {e2}")
         
         # Get the HTML output with interactive handler context
         if hasattr(base_component_result, 'to_html'):
@@ -672,12 +699,8 @@ def interactive_component(func: Callable) -> Callable:
         except (OSError, TypeError):
             state_keys = []
         
-        # Convert handler attributes in HTML to data-handler format
-        print(f"DEBUG: Converting HTML with {len(handlers)} handlers")
-        print(f"DEBUG: HTML before conversion has onClick handle_increment: {'onClick=\"handle_increment\"' in html}")
+        # Convert handler attributes to data-handler attributes with dynamic targeting
         html = convert_handler_attributes_in_html(html, handlers, state_keys)
-        print(f"DEBUG: HTML after conversion has data-handler: {'data-handler' in html}")
-        print(f"DEBUG: HTML after conversion has onClick handle_increment: {'onClick=\"handle_increment\"' in html}")
         
         # Get engine first to generate consistent component ID
         from .engine import get_hydration_engine
