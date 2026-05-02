@@ -165,9 +165,51 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
                 </div>
             </div>
             
+            <!-- Event Listeners -->
+            <div class="nextpy-debug-section">
+                <h4>Event Listeners <span class="nextpy-debug-count" id="nextpy-event-count">0</span></h4>
+                <div class="nextpy-debug-events" id="nextpy-debug-events">
+                    <div class="nextpy-debug-event-item">
+                        <span class="nextpy-debug-event-target">document</span>
+                        <span class="nextpy-debug-event-type">click</span>
+                        <span class="nextpy-debug-event-count">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Component State -->
+            <div class="nextpy-debug-section">
+                <h4>Component State <span class="nextpy-debug-count" id="nextpy-component-count-display">0</span></h4>
+                <div class="nextpy-debug-components" id="nextpy-debug-components">
+                    <div class="nextpy-debug-component-item">
+                        <span class="nextpy-debug-component-id">No components</span>
+                        <span class="nextpy-debug-component-state">{}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- WebSocket Status -->
+            <div class="nextpy-debug-section">
+                <h4>WebSocket Status</h4>
+                <div class="nextpy-debug-websocket">
+                    <div class="nextpy-debug-row">
+                        <span class="nextpy-debug-label">Status:</span>
+                        <span class="nextpy-debug-value" id="nextpy-ws-status">Disconnected</span>
+                    </div>
+                    <div class="nextpy-debug-row">
+                        <span class="nextpy-debug-label">Client ID:</span>
+                        <span class="nextpy-debug-value" id="nextpy-ws-client-id">None</span>
+                    </div>
+                    <div class="nextpy-debug-row">
+                        <span class="nextpy-debug-label">Messages:</span>
+                        <span class="nextpy-debug-value" id="nextpy-ws-messages">0</span>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Console Logs -->
             <div class="nextpy-debug-section">
-                <h4>Console Logs</h4>
+                <h4>Console Logs <span class="nextpy-debug-count" id="nextpy-log-count">0</span></h4>
                 <div class="nextpy-debug-logs" id="nextpy-debug-logs">
                     <div class="nextpy-debug-log-item nextpy-debug-log-info">
                         <span class="nextpy-debug-log-time">12:34:56</span>
@@ -190,6 +232,14 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
             // Global debug state
             window.nextpyDebug = {{
                 logs: [],
+                eventListeners: new Map(),
+                componentStates: new Map(),
+                websocketState: {{
+                    connected: false,
+                    clientId: null,
+                    messageCount: 0,
+                    lastMessage: null
+                }},
                 metrics: {{
                     componentCount: 0,
                     rerenderCount: 0,
@@ -197,7 +247,92 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
                     renderTime: 0,
                     startTime: performance.now()
                 }},
-                settings: DEBUG_CONFIG
+                settings: DEBUG_CONFIG,
+                // Exposed event listener functions
+                exposeEventListeners: function() {{
+                    return this.eventListeners;
+                }},
+                trackEventListener: function(target, eventType, listener) {{
+                    const key = target.constructor.name + '-' + eventType;
+                    if (!this.eventListeners.has(key)) {{
+                        this.eventListeners.set(key, {{
+                            target: target.constructor.name,
+                            eventType: eventType,
+                            count: 0,
+                            listeners: new Set()
+                        }});
+                    }}
+                    const eventInfo = this.eventListeners.get(key);
+                    eventInfo.listeners.add(listener);
+                    eventInfo.count++;
+                    this.updateEventDisplay();
+                }},
+                updateComponentState: function(componentId, state) {{
+                    this.componentStates.set(componentId, state);
+                    this.updateComponentDisplay();
+                }},
+                updateWebSocketState: function(state) {{
+                    Object.assign(this.websocketState, state);
+                    this.updateWebSocketDisplay();
+                }},
+                updateEventDisplay: function() {{
+                    const container = document.getElementById('nextpy-debug-events');
+                    const countElement = document.getElementById('nextpy-event-count');
+                    if (!container) return;
+                    
+                    let html = '';
+                    this.eventListeners.forEach((info, key) => {{
+                        html += '<div class="nextpy-debug-event-item">' +
+                            '<span class="nextpy-debug-event-target">' + info.target + '</span>' +
+                            '<span class="nextpy-debug-event-type">' + info.eventType + '</span>' +
+                            '<span class="nextpy-debug-event-count">' + info.count + '</span>' +
+                            '</div>';
+                    }});
+                    
+                    container.innerHTML = html || '<div class="nextpy-debug-event-item"><span class="nextpy-debug-event-target">No listeners</span></div>';
+                    if (countElement) countElement.textContent = this.eventListeners.size;
+                }},
+                updateComponentDisplay: function() {{
+                    const container = document.getElementById('nextpy-debug-components');
+                    const countElement = document.getElementById('nextpy-component-count-display');
+                    if (!container) return;
+                    
+                    let html = '';
+                    this.componentStates.forEach((state, componentId) => {{
+                        const stateStr = JSON.stringify(state, null, 2);
+                        html += '<div class="nextpy-debug-component-item">' +
+                            '<span class="nextpy-debug-component-id">' + componentId + '</span>' +
+                            '<span class="nextpy-debug-component-state">' + stateStr + '</span>' +
+                            '</div>';
+                    }});
+                    
+                    container.innerHTML = html || '<div class="nextpy-debug-component-item"><span class="nextpy-debug-component-id">No components</span></div>';
+                    if (countElement) countElement.textContent = this.componentStates.size;
+                }},
+                updateWebSocketDisplay: function() {{
+                    const statusElement = document.getElementById('nextpy-ws-status');
+                    const clientIdElement = document.getElementById('nextpy-ws-client-id');
+                    const messagesElement = document.getElementById('nextpy-ws-messages');
+                    
+                    if (statusElement) {{
+                        statusElement.textContent = this.websocketState.connected ? 'Connected' : 'Disconnected';
+                        statusElement.style.color = this.websocketState.connected ? '#4ade80' : '#ff4444';
+                    }}
+                    if (clientIdElement) clientIdElement.textContent = this.websocketState.clientId || 'None';
+                    if (messagesElement) messagesElement.textContent = this.websocketState.messageCount;
+                }}
+            }};
+            
+            // Expose debug functions to window
+            window.nextpyDebugExpose = {{
+                getEventListeners: function() {{ return window.nextpyDebug.exposeEventListeners(); }},
+                getComponentStates: function() {{ return window.nextpyDebug.componentStates; }},
+                getWebSocketState: function() {{ return window.nextpyDebug.websocketState; }},
+                getLogs: function() {{ return window.nextpyDebug.logs; }},
+                getMetrics: function() {{ return window.nextpyDebug.metrics; }},
+                trackEvent: function(target, event, listener) {{ return window.nextpyDebug.trackEventListener(target, event, listener); }},
+                updateComponent: function(id, state) {{ return window.nextpyDebug.updateComponentState(id, state); }},
+                updateWebSocket: function(state) {{ return window.nextpyDebug.updateWebSocketState(state); }}
             }};
             
             // Toggle debug panel
@@ -221,11 +356,16 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
                 const currentTime = performance.now();
                 metrics.renderTime = Math.round(currentTime - metrics.startTime);
                 
-                // Update UI
-                document.getElementById('nextpy-render-time').textContent = metrics.renderTime + 'ms';
-                document.getElementById('nextpy-component-count').textContent = metrics.componentCount;
-                document.getElementById('nextpy-rerender-count').textContent = metrics.rerenderCount;
-                document.getElementById('nextpy-api-calls').textContent = metrics.apiCalls;
+                // Update UI with true values
+                const renderTimeElement = document.getElementById('nextpy-render-time');
+                const componentCountElement = document.getElementById('nextpy-component-count');
+                const rerenderCountElement = document.getElementById('nextpy-rerender-count');
+                const apiCallsElement = document.getElementById('nextpy-api-calls');
+                
+                if (renderTimeElement) renderTimeElement.textContent = metrics.renderTime + 'ms';
+                if (componentCountElement) componentCountElement.textContent = metrics.componentCount;
+                if (rerenderCountElement) rerenderCountElement.textContent = metrics.rerenderCount;
+                if (apiCallsElement) apiCallsElement.textContent = metrics.apiCalls;
                 
                 // Memory usage (if available)
                 if (performance.memory) {{
@@ -450,12 +590,38 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
                 }}
             }}
             
-            // Initialize
+            // Enhanced initialization
             addDebugLog('INFO', 'NextPy Debug system initialized');
+            addDebugLog('INFO', 'Event listener tracking enabled');
+            addDebugLog('INFO', 'Component state monitoring active');
+            addDebugLog('INFO', 'WebSocket status monitoring enabled');
+            
+            // Track existing event listeners
+            document.querySelectorAll('*').forEach(element => {{
+                const events = ["click", "change", "submit", "focus", "blur"];
+                events.forEach(eventType => {{
+                    const handler = element["on" + eventType];
+                    if (handler) {{
+                        window.nextpyDebug.trackEventListener(element, eventType, handler);
+                    }}
+                }});
+            }});
+            
+            // Monitor WebSocket if available
+            if (window.sendWebSocketMessage) {{
+                window.nextpyDebug.updateWebSocketState({{"connected": true}});
+                addDebugLog('INFO', 'WebSocket client detected');
+            }}
+            
             updateMetrics();
             
             // Auto-update metrics every 2 seconds
             setInterval(updateMetrics, 2000);
+            
+            // Update displays
+            window.nextpyDebug.updateEventDisplay();
+            window.nextpyDebug.updateComponentDisplay();
+            window.nextpyDebug.updateWebSocketDisplay();
         }})();
     </script>
     '''
@@ -540,8 +706,8 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
             position: fixed;
             bottom: 80px;
             right: 20px;
-            width: 400px;
-            max-height: 600px;
+            width: 450px;
+            max-height: 80vh;
             background: #1a1a1a;
             border: 1px solid #333;
             border-radius: 8px;
@@ -551,6 +717,8 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
             font-family: 'SF Mono', 'Monaco', monospace;
             font-size: 12px;
             color: #fff;
+            display: flex;
+            flex-direction: column;
         }
         
         .nextpy-debug-header {
@@ -608,10 +776,25 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
         .nextpy-debug-section {
             border-bottom: 1px solid #333;
             padding: 12px 16px;
+            flex-shrink: 0;
         }
         
         .nextpy-debug-section:last-child {
             border-bottom: none;
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .nextpy-debug-count {
+            background: #0070f3;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 9px;
+            font-weight: 500;
+            margin-left: 8px;
         }
         
         .nextpy-debug-section h4 {
@@ -696,12 +879,88 @@ def inject_debug_icon(html_content: str, page_props: Dict[str, Any] = None) -> s
             color: white;
         }
         
+        .nextpy-debug-events {
+            max-height: 150px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .nextpy-debug-event-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 8px;
+            background: rgba(0, 112, 243, 0.05);
+            border-radius: 3px;
+            font-size: 10px;
+        }
+        
+        .nextpy-debug-event-target {
+            color: #0070f3;
+            font-weight: 500;
+            min-width: 80px;
+        }
+        
+        .nextpy-debug-event-type {
+            color: #ffa500;
+            font-weight: 500;
+            min-width: 60px;
+        }
+        
+        .nextpy-debug-event-count {
+            color: #4ade80;
+            font-weight: bold;
+        }
+        
+        .nextpy-debug-components {
+            max-height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .nextpy-debug-component-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 6px 8px;
+            background: rgba(76, 175, 80, 0.05);
+            border-radius: 3px;
+            border-left: 3px solid #4caf50;
+        }
+        
+        .nextpy-debug-component-id {
+            color: #4caf50;
+            font-weight: 600;
+            font-size: 10px;
+        }
+        
+        .nextpy-debug-component-state {
+            color: #ccc;
+            font-size: 9px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        
+        .nextpy-debug-websocket {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
         .nextpy-debug-logs {
             max-height: 200px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 2px;
+            flex: 1;
         }
         
         .nextpy-debug-log-item {

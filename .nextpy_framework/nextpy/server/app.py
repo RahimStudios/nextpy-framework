@@ -10,10 +10,11 @@ import importlib.util
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketState
 
 # Import PSX for complete integration
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -36,6 +37,7 @@ from nextpy.core.data_fetching import (
 from nextpy.server.middleware import NextPyMiddleware
 from nextpy.security import security_manager
 from nextpy.jsx_preprocessor import JSXSyntaxError
+from nextpy.websocket import manager, handle_websocket
 
 
 class NextPyApp:
@@ -91,6 +93,7 @@ class NextPyApp:
         
         self._setup_middleware()
         self._setup_static_files()
+        self._setup_websocket()
         self._setup_routes()
         # optionally compile tailwind CSS after routes are registered
         try:
@@ -98,8 +101,6 @@ class NextPyApp:
         except Exception as e:
             if self.debug:
                 print(f"Tailwind check/build failed: {e}")
-        # optionally compile tailwind at startup if requested
-        self._ensure_tailwind_compiled()
         
     def _setup_middleware(self) -> None:
         """Configure middleware"""
@@ -172,6 +173,13 @@ class NextPyApp:
                 name="nextpy_static",
             )
             
+    def _setup_websocket(self) -> None:
+        """Setup WebSocket endpoint for live development tools"""
+        @self.app.websocket("/ws")
+        async def websocket_endpoint(websocket: WebSocket):
+            """Handle WebSocket connections for live development"""
+            await websocket.accept()
+            await handle_websocket(websocket)
             
     def _add_seo_routes(self) -> None:
         """Add special SEO routes for sitemap.xml and robots.txt"""
@@ -252,6 +260,134 @@ Allow: /
         # Register the SEO routes
         self.app.add_route("/sitemap.xml", sitemap_handler, methods=["GET"])
         self.app.add_route("/robots.txt", robots_handler, methods=["GET"])
+        
+        # Add debug API routes
+        self._add_debug_routes()
+            
+    def _add_debug_routes(self) -> None:
+        """Add debug API routes for the debug panel"""
+        
+        # Debug components endpoint
+        async def debug_components(request: Request):
+            try:
+                # Import debug core to get component data
+                from ..debug.core import debug_core
+                components = debug_core.get_all_components() if debug_core else {}
+                return JSONResponse(components)
+            except ImportError:
+                return JSONResponse({})
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug components error: {e}")
+                return JSONResponse({})
+        
+        # Debug events endpoint
+        async def debug_events(request: Request):
+            try:
+                from ..debug.core import debug_core
+                events = debug_core.get_recent_events() if debug_core else []
+                return JSONResponse(events)
+            except ImportError:
+                return JSONResponse([])
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug events error: {e}")
+                return JSONResponse([])
+        
+        # Debug performance endpoint
+        async def debug_performance(request: Request):
+            try:
+                from ..debug.performance import performance_monitor
+                metrics = performance_monitor.get_all_metrics() if performance_monitor else {}
+                return JSONResponse(metrics)
+            except ImportError:
+                return JSONResponse({})
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug performance error: {e}")
+                return JSONResponse({})
+        
+        # Debug WebSocket endpoint
+        async def debug_websocket(request: Request):
+            try:
+                from ..debug.websocket import websocket_tracker
+                status = websocket_tracker.get_status() if websocket_tracker else {"connected": False, "client_id": None}
+                return JSONResponse(status)
+            except ImportError:
+                return JSONResponse({"connected": False, "client_id": None})
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug WebSocket error: {e}")
+                return JSONResponse({"connected": False, "client_id": None})
+        
+        # Debug session start endpoint
+        async def debug_start_session(request: Request):
+            try:
+                import time
+                from ..debug.core import start_debug_session
+                session_data = start_debug_session() if start_debug_session else {"session_id": "mock_session", "start_time": time.time()}
+                return JSONResponse(session_data)
+            except ImportError:
+                import time
+                return JSONResponse({"session_id": "mock_session", "start_time": time.time()})
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug start session error: {e}")
+                import time
+                return JSONResponse({"session_id": "mock_session", "start_time": time.time()})
+        
+        # Debug session end endpoint
+        async def debug_end_session(request: Request):
+            try:
+                from ..debug.core import end_debug_session
+                summary = end_debug_session() if end_debug_session else {"mock": "summary"}
+                return JSONResponse(summary)
+            except ImportError:
+                return JSONResponse({"mock": "summary"})
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug end session error: {e}")
+                return JSONResponse({"mock": "summary"})
+        
+        # Debug export endpoint
+        async def debug_export(request: Request):
+            try:
+                import time
+                from ..debug.core import debug_core
+                data = {
+                    "components": debug_core.get_all_components() if debug_core else {},
+                    "events": debug_core.get_recent_events() if debug_core else [],
+                    "timestamp": time.time()
+                }
+                return JSONResponse(data)
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug export error: {e}")
+                return JSONResponse({})
+        
+        # Debug clear endpoint
+        async def debug_clear(request: Request):
+            try:
+                from ..debug.core import debug_core
+                if debug_core:
+                    debug_core.clear_data()
+                return JSONResponse({"success": True})
+            except ImportError:
+                return JSONResponse({"success": True})
+            except Exception as e:
+                if self.debug:
+                    print(f"Debug clear error: {e}")
+                return JSONResponse({"success": True})
+        
+        # Register all debug routes
+        self.app.add_route("/__nextpy/debug/components", debug_components, methods=["GET"])
+        self.app.add_route("/__nextpy/debug/events", debug_events, methods=["GET"])
+        self.app.add_route("/__nextpy/debug/performance", debug_performance, methods=["GET"])
+        self.app.add_route("/__nextpy/debug/websocket", debug_websocket, methods=["GET"])
+        self.app.add_route("/__nextpy/debug/start", debug_start_session, methods=["POST"])
+        self.app.add_route("/__nextpy/debug/end", debug_end_session, methods=["POST"])
+        self.app.add_route("/__nextpy/debug/export", debug_export, methods=["GET"])
+        self.app.add_route("/__nextpy/debug/clear", debug_clear, methods=["POST"])
             
     def _setup_routes(self) -> None:
         """Setup page routes using the router"""
@@ -287,13 +423,6 @@ Allow: /
                     create_page_handler(route.path),
                     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
                 )
-        
-        if route.is_api:
-            self.app.add_api_route(
-                route.path,
-                create_api_handler(route),
-                methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
-            )
         
     def _load_module_from_file(self, file_path: Path, module_name: Optional[str] = None) -> Any:
         """Enhanced module loader with complete PSX support"""
