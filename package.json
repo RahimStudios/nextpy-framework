@@ -1,0 +1,28 @@
+{
+  "name": "nextpy-framework",
+  "version": "1.0.0",
+  "description": "A Python web framework inspired by Next.js. Build modern web applications with file-based routing, server-side rendering (SSR), static site generation (SSG), and more.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "pytest -q",
+    "build:tailwind": "npx tailwindcss -i ./styles/styles.css -o ./public/tailwind.css --minify",
+    "ci:tailwind": "npm ci && npm run build:tailwind"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.1",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.2.1"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "postcss-cli": "^11.0.1"
+  }
+}

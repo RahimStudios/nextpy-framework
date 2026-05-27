@@ -61,7 +61,7 @@ class Database:
     
     def close(self):
         """Close connection pool"""
-        self.engine.dispose()
+        self.engine.dispose() 
 
 
 # Global database instance

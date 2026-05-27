@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextpy-framework"
-version = "3.6.1"
+version = "3.7.1"
 description = "A Python web framework inspired by Next.js with file-based routing, SSR, and SSG and more"
 readme = "README.md"
 requires-python = ">=3.11"

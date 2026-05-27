@@ -49,7 +49,7 @@ async def get_server_side_props(context):
     return {
         "props": {
             "title": "NextPy",
-            "description": "The Python web framework inspired by Next.js. Build modern web applications with file-based routing, SSR, SSG, and more.",
+            "description": "The Python web framework. Build modern web applications with file-based routing, SSR, SSG, and more.",
             "features": features,
         }
     }

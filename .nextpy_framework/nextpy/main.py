@@ -28,9 +28,28 @@ try:
         print("Warning: styles.css not found in project root, creating a default file.")
         styles_file.write_text("@tailwind base;\n@tailwind components;\n@tailwind utilities;\n")
 
-    # Run the build script defined in the vendored framework's package.json
-    subprocess.run(["npm", "run", "build:tailwind"], cwd=str(framework_dir), check=True)
-    print("Tailwind CSS compiled successfully.")
+    import shutil
+
+    npm_bin = shutil.which("npm")
+    if not npm_bin:
+        raise FileNotFoundError("npm not found on PATH")
+
+    # Ensure node deps are present. Prefer `npm ci` when a lockfile exists.
+    lockfile = framework_dir / "package-lock.json"
+    node_modules = framework_dir / "node_modules"
+    try:
+        if not node_modules.exists():
+            if lockfile.exists():
+                subprocess.run([npm_bin, "ci"], cwd=str(framework_dir), check=True)
+            else:
+                subprocess.run([npm_bin, "install"], cwd=str(framework_dir), check=True)
+
+        # Run the build script defined in the vendored framework's package.json
+        subprocess.run([npm_bin, "run", "build:tailwind"], cwd=str(framework_dir), check=True)
+        print("Tailwind CSS compiled successfully.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error compiling Tailwind CSS: {e}")
+        print("You can try running `cd .nextpy_framework/nextpy && npm ci && npm run build:tailwind` manually.")
 except subprocess.CalledProcessError as e:
     print(f"Error compiling Tailwind CSS: {e}")
     print("You can try running `cd .nextpy_framework/nextpy && npm ci && npm run build:tailwind` manually.")
