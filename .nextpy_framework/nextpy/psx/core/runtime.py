@@ -252,8 +252,26 @@ class PSXRuntime:
         attrs = []
         for key, value in node.attributes.items():
             # JSX -> HTML attribute mapping
-            html_key = 'class' if key == 'className' else key
-            
+            if key == 'className':
+                html_key = 'class'
+            elif key == 'htmlFor':
+                html_key = 'for'
+            else:
+                html_key = key
+
+            # Convert style object into inline CSS text
+            if html_key == 'style' and isinstance(value, dict):
+                style_value = '; '.join(f'{k}: {v}' for k, v in value.items())
+                value = style_value
+
+            # Handle boolean and null-like attributes correctly
+            if isinstance(value, bool):
+                if value:
+                    attrs.append(f'{html_key}')
+                continue
+            if value is None:
+                continue
+
             # Handle different value types
             if isinstance(value, str):
                 # Don't escape already HTML content

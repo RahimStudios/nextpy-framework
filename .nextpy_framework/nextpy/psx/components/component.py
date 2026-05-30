@@ -7,6 +7,8 @@ import time
 import threading
 import uuid
 import inspect
+import re
+import hashlib
 from typing import Any, Dict, List, Optional, Callable, Union
 from dataclasses import dataclass, field
 from functools import wraps
@@ -120,8 +122,35 @@ def component(func):
             if not key.startswith('_') and key not in ['func', 'props', 'result', 'execution_result', 'execute_component', 'wrapper', 'execute_with_locals', 'component_locals', 'component_frame', 'frame', 'current_frame', 'original_globals']:
                 context[key] = value
         
+        # CRITICAL FIX: Add useState hook values to context
+        # This ensures variables like 'count' from useState are available in expressions
+        if hasattr(component_state, 'hooks') and component_state.hooks:
+            # Add useState hook values to context with common variable names
+            # Since we can't extract actual variable names from destructuring easily,
+            # we'll add common useState variable names as fallbacks
+            common_state_names = ['count', 'name', 'value', 'data', 'items', 'index', 'loading', 'error', 'success', 'user', 'message', 'text', 'visible', 'active', 'selected']
+            
+            for i, hook_data in enumerate(component_state.hooks):
+                if 'value' in hook_data:
+                    # Add with generic name
+                    context[f"_state_{i}"] = hook_data['value']
+                    
+                    # Also add with common names if this is the first few hooks
+                    if i < len(common_state_names):
+                        context[common_state_names[i]] = hook_data['value']
+                    
+                    # Try to find actual variable names from component_locals
+                    for var_name, var_value in component_locals.items():
+                        if isinstance(var_value, tuple) and len(var_value) == 2:
+                            # This is likely a useState destructuring assignment
+                            # Use the actual variable name
+                            context[var_name] = hook_data['value']
+                            break
+        
         # Store context in component state for expression evaluation
         component_state.state.update(context)
+        print(f"DEBUG: Final context keys: {list(context.keys())}")
+        print(f"DEBUG: 'count' in context: {'count' in context}")
         
         # Handle different return types
         if isinstance(result, PSXElement):
@@ -1430,6 +1459,21 @@ def dict_to_query_string(params: Dict[str, Any]) -> str:
     return urllib.parse.urlencode(params)
 
 
+def _create_python_call_placeholder(handler_func: Callable, prefix: str = 'python_call') -> str:
+    func_name = getattr(handler_func, '__name__', 'handler')
+    if func_name == '<lambda>':
+        try:
+            source = inspect.getsource(handler_func)
+            match = re.search(r'lambda\b.*', source)
+            lambda_text = match.group(0).strip() if match else source.strip()
+            normalized = re.sub(r'\s+', ' ', lambda_text)
+            digest = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
+            return f"{prefix}_lambda_{digest}"
+        except (OSError, TypeError):
+            return f"{prefix}_lambda_{id(handler_func)}"
+    return f"{prefix}_{func_name}"
+
+
 # Event Handlers - Complete React event system with ALL events
 class EventHandlers:
     """Complete event handler utilities for PSX - ALL React events supported"""
@@ -1437,8 +1481,7 @@ class EventHandlers:
     @staticmethod
     def create_onclick(handler_func: Callable) -> str:
         """Create an onclick handler from Python function"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_call_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def alert(message: str) -> Callable:
@@ -1476,8 +1519,7 @@ class EventHandlers:
     @staticmethod
     def create_onclick(handler_func: Callable) -> str:
         """Create onclick handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_call_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_ondblclick(handler_func: Callable) -> str:

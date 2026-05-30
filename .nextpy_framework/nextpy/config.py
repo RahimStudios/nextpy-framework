@@ -14,6 +14,8 @@ def get_bool(key: str, default=False) -> bool:
     val = os.getenv(key, str(default))
     return val.lower() in ("1", "true", "yes", "on")
 
+
+
 # Application settings
 settings = {
     # App
@@ -26,7 +28,7 @@ settings = {
     "development": get_bool("DEVELOPMENT", True),
     "nextpy_debug": get_bool("NEXTPY_DEBUG", True),
     "host": os.getenv("HOST", "0.0.0.0"),
-    "port": int(os.getenv("PORT", 5000)),
+    "port": int(os.getenv("PORT", 5000)), 
     "nextpy_debug_icon": get_bool("NEXTPY_DEBUG_ICON", True),
     "nextpy_hot_reload": get_bool("NEXTPY_HOT_RELOAD", True),
     "nextpy_log_level": os.getenv("NEXTPY_LOG_LEVEL", "info"),
@@ -56,6 +58,8 @@ settings = {
     "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:5000"),
     "backend_url": os.getenv("BACKEND_URL", "http://localhost:5000"),
 }
+
+
 
 # Optional helper functions
 def get_setting(key, default=None):

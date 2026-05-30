@@ -99,14 +99,14 @@ class PSXParser:
         self.runtime = PSXRuntime()
         
         # Regex patterns for parsing - use non-greedy matching
-        self.psx_pattern = re.compile(r'<([a-zA-Z][a-zA-Z0-9]*)\s*([^>]*?)>(.*?)</\1>', re.DOTALL)
-        self.self_closing_pattern = re.compile(r'<([a-zA-Z][a-zA-Z0-9]*)\s*([^>]*?)\s*/>', re.DOTALL)
+        self.psx_pattern = re.compile(r'<([a-zA-Z][a-zA-Z0-9:_-]*)\s*([^>]*?)>(.*?)</\1>', re.DOTALL)
+        self.self_closing_pattern = re.compile(r'<([a-zA-Z][a-zA-Z0-9:_-]*)\s*([^>]*?)\s*/>', re.DOTALL)
         self.prop_pattern = re.compile(
-            r'([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*\{([^}]+)\}|'
-            r'([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*"([^"]*)"|'
-            r'([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*\'([^\']*)\'|'
-            r'([a-zA-Z][a-zA-Z0-9-]+)|'
-            r'(\.\.\.\w+)'  # Spread props
+            r'([a-zA-Z][a-zA-Z0-9:_-]*)\s*=\s*\{([^}]+)\}|'
+            r'([a-zA-Z][a-zA-Z0-9:_-]*)\s*=\s*"([^"]*)"|'
+            r'([a-zA-Z][a-zA-Z0-9:_-]*)\s*=\s*\'([^\']*)\'|'
+            r'([a-zA-Z][a-zA-Z0-9:_-]+)|'
+            r'\.{3}[a-zA-Z_][a-zA-Z0-9_:-]*'  # Spread props
         )
     
     def parse_psx(self, psx_str: str, context: Dict[str, Any] = None) -> PSXNodeUnion:
@@ -119,18 +119,21 @@ class PSXParser:
         # Process Python logic first
         psx_str = process_python_logic(psx_str, context)
         
-        # Try to parse as element
-        ast_node = self._parse_element(psx_str, context)
+        # Normalize whitespace for parsing while preserving original content if needed
+        psx_str_stripped = psx_str.strip()
+        
+        # Try to parse as fragment first, since fragments use special shorthand syntax
+        ast_node = self._parse_fragment(psx_str_stripped, context)
         if ast_node:
             return self.optimizer.optimize_node(ast_node)
-        
-        # Try to parse as component
-        ast_node = self._parse_component(psx_str, context)
+
+        # Try to parse as component next
+        ast_node = self._parse_component(psx_str_stripped, context)
         if ast_node:
             return self.optimizer.optimize_node(ast_node)
-        
-        # Try to parse as fragment
-        ast_node = self._parse_fragment(psx_str, context)
+
+        # Try to parse as element last
+        ast_node = self._parse_element(psx_str_stripped, context)
         if ast_node:
             return self.optimizer.optimize_node(ast_node)
         
@@ -207,7 +210,7 @@ class PSXParser:
     def _read_tag_name(self, code: str, index: int):
         """Read tag name from code"""
         start = index
-        while index < len(code) and (code[index].isalnum() or code[index] == '-'):
+        while index < len(code) and (code[index].isalnum() or code[index] in '-_:'):
             index += 1
         return code[start:index], index
     
@@ -227,7 +230,7 @@ class PSXParser:
             
             # Read attribute name
             key_start = index
-            while index < len(code) and (code[index].isalnum() or code[index] in '-_'):
+            while index < len(code) and (code[index].isalnum() or code[index] in '-_:.'):
                 index += 1
             key = code[key_start:index]
             
@@ -416,6 +419,7 @@ class PSXParser:
     
     def _parse_fragment(self, psx_str: str, context: Dict[str, Any]) -> Optional[FragmentNode]:
         """Parse PSX string to FragmentNode"""
+        psx_str = psx_str.strip()
         # Fragment patterns
         fragment_patterns = [
             re.compile(r'<>\s*(.*?)\s*</>', re.DOTALL),  # Shorthand

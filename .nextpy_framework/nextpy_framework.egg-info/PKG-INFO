@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: nextpy-framework
-Version: 3.5.1
+Version: 3.7.1
 Summary: A Python web framework inspired by Next.js with file-based routing, SSR, and SSG and more
 Author: NextPy Team
 License: MIT

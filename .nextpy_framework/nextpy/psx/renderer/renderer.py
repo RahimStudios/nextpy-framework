@@ -74,8 +74,19 @@ class PSXRenderer:
         if vnode.props:
             prop_parts = []
             for key, value in vnode.props.items():
-                if key != 'children' and value is not None:
-                    prop_parts.append(f'{key}="{value}"')
+                if key == 'children' or value is None:
+                    continue
+
+                html_key = 'class' if key == 'className' else key
+                if isinstance(value, bool):
+                    if value:
+                        prop_parts.append(f'{html_key}')
+                    continue
+                if isinstance(value, dict) and html_key == 'style':
+                    style_value = '; '.join(f'{k}: {v}' for k, v in value.items())
+                    prop_parts.append(f'{html_key}="{style_value}"')
+                else:
+                    prop_parts.append(f'{html_key}="{value}"')
             props_str = ' ' + ' '.join(prop_parts) if prop_parts else ''
         
         # Handle self-closing tags

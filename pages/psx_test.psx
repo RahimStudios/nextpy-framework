@@ -1,7 +1,7 @@
 # Import all necessary PSX components
-from nextpy.psx import component, psx, useState, useEffect, useCallback, useMemo, create_onclick, create_onchange, create_onsubmit
+from nextpy.psx import component, psx, useState, useEffect, useCallback, useMemo, create_onclick, create_onchange, create_onsubmit, interactive_component
 
-@component
+@interactive_component
 def Home(props=None):
     # Python-style array destructuring for hooks
     [name, setName] = useState('rahim')
@@ -27,7 +27,7 @@ def Home(props=None):
     
     return (
         <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
-            <div className="text-center text-white max-w-4xl mx-auto p-8">
+            <div className="text-center text-black max-w-4xl mx-auto p-8">
                 <h1 className="mb-4 text-5xl font-bold">{title}</h1>
                 <p className="text-xl mb-8">{message} {name}</p>
                 
@@ -37,7 +37,7 @@ def Home(props=None):
                     <p className="mb-4">Count: {count}</p>
                     
                     <div className="flex flex-wrap gap-4 justify-center">
-                        <button onclick={handleIncrement} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium">
+                        <button create_onclick={handleIncrement} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium">
                             Increment: {count}
                         </button>
                         

@@ -17,9 +17,9 @@ from ..jsx_transformer import load_jsx_module
 from ..jsx_preprocessor import is_jsx_file, JSXSyntaxError
 
 
-# Import auto-debug system
+# Import auto-debug system (modular v3.0)
 try:
-    from ..components.debug.AutoDebug import inject_debug_icon, should_show_debug
+    from ..components.debug.AutoDebug_v3 import inject_debug_icon, should_show_debug
     AUTO_DEBUG_AVAILABLE = True
 except ImportError:
     AUTO_DEBUG_AVAILABLE = False
@@ -264,8 +264,8 @@ class ComponentRenderer:
                             window.__NEXTPY_CLIENT_COMPONENTS__ = window.__NEXTPY_CLIENT_COMPONENTS__ || [];
                             window.__NEXTPY_CLIENT_COMPONENTS__.push({{
                                 id: '{result['component_id']}',
-                                props: {repr(result['props'])},
-                                hasInteractivity: {result['has_interactivity']}
+                                props: {json.dumps(result['props'])},
+                                hasInteractivity: {json.dumps(result['has_interactivity'])}
                             }});
                             </script>
                             """
@@ -327,26 +327,170 @@ class ComponentRenderer:
     NextPy Live Error Overlay
     ================================ */
 
-    const socket = new WebSocket("ws://localhost:5000");
-
+    // Enhanced WebSocket client with structured events and multi-user sync
+    let socket = null;
+    let clientId = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
     let lastError = null;
 
-    // Handle WebSocket connection errors gracefully
-    socket.onerror = (error) => {
-        console.log("NextPy Live Error Overlay: WebSocket connection failed - development tool not available");
-    };
-    
-    socket.onclose = (event) => {
-        if (event.code !== 1000) {
-            console.log("NextPy Live Error Overlay: WebSocket connection closed");
-        }
-    };
+    function connectWebSocket() {
+        // Use dynamic WebSocket URL based on current page
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const wsUrl = `${protocol}//${host}/ws`;
+        socket = new WebSocket(wsUrl);
+        
+        socket.onopen = () => {
+            console.log("NextPy WebSocket connected");
+            reconnectAttempts = 0;
+        };
+        
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                handleWebSocketMessage(message);
+            } catch (e) {
+                console.error("Error parsing WebSocket message:", e);
+            }
+        };
+        
+        socket.onerror = (error) => {
+            console.log("NextPy Live Error Overlay: WebSocket connection failed - development tool not available");
+        };
+        
+        socket.onclose = (event) => {
+            if (event.code !== 1000) {
+                console.log("NextPy Live Error Overlay: WebSocket connection closed");
+                // Auto-reconnect with exponential backoff
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    const delay = Math.pow(2, reconnectAttempts) * 1000;
+                    setTimeout(connectWebSocket, delay);
+                    reconnectAttempts++;
+                }
+            }
+        };
+    }
 
-    socket.onmessage = (event) => {
-        const err = JSON.parse(event.data);
-        lastError = err;
-        showErrorOverlay(err);
-    };
+    function handleWebSocketMessage(message) {
+        const { type, payload, component_id, timestamp } = message;
+        
+        switch (type) {
+            case "CONNECTION_ESTABLISHED":
+                clientId = payload.client_id;
+                console.log("Connected with client ID:", clientId);
+                
+                // Initialize component states from server
+                if (payload.component_states) {
+                    Object.entries(payload.component_states).forEach(([compId, state]) => {
+                        updateComponentState(compId, state);
+                    });
+                }
+                break;
+                
+            case "STATE_UPDATE":
+                // Handle multi-user state sync
+                if (component_id && payload) {
+                    updateComponentState(component_id, payload);
+                    emitComponentEvent(component_id, "stateSync", payload);
+                }
+                break;
+                
+            case "COMPONENT_EVENT":
+                // Handle component events from other users
+                if (component_id && message.event_name) {
+                    emitComponentEvent(component_id, message.event_name, payload);
+                }
+                break;
+                
+            case "UI_UPDATE":
+                // Handle server-driven UI updates
+                if (component_id && message.update_type) {
+                    handleUIUpdate(component_id, message.update_type, payload);
+                }
+                break;
+                
+            case "SYNC_RESPONSE":
+                // Handle sync response for multi-user collaboration
+                if (component_id && payload) {
+                    updateComponentState(component_id, payload);
+                }
+                break;
+                
+            case "ERROR_BROADCAST":
+                // Handle development overlay errors
+                lastError = payload;
+                showErrorOverlay(payload);
+                break;
+                
+            case "pong":
+                // Handle ping/pong for connection health
+                break;
+                
+            default:
+                console.log("Unknown WebSocket message type:", type, message);
+        }
+    }
+
+    function updateComponentState(componentId, state) {
+        // Update local component state
+        if (window.NextPyRuntime && window.NextPyRuntime.components) {
+            const component = window.NextPyRuntime.components.get(componentId);
+            if (component && component.stateManager) {
+                component.stateManager.update(state);
+            }
+        }
+    }
+
+    function emitComponentEvent(componentId, eventName, data) {
+        // Emit custom event for component handlers
+        const event = new CustomEvent(`nextpy:${componentId}:${eventName}`, {
+            detail: { componentId, eventName, data, timestamp }
+        });
+        document.dispatchEvent(event);
+    }
+
+    function handleUIUpdate(componentId, updateType, data) {
+        // Handle server-driven UI updates
+        switch (updateType) {
+            case "replace_content":
+                const targetElement = document.getElementById(componentId);
+                if (targetElement && data.html) {
+                    targetElement.innerHTML = data.html;
+                }
+                break;
+            case "update_attributes":
+                const attrElement = document.getElementById(componentId);
+                if (attrElement && data.attributes) {
+                    Object.entries(data.attributes).forEach(([attr, value]) => {
+                        attrElement.setAttribute(attr, value);
+                    });
+                }
+                break;
+            case "add_class":
+                const classElement = document.getElementById(componentId);
+                if (classElement && data.className) {
+                    classElement.classList.add(data.className);
+                }
+                break;
+            case "remove_class":
+                const removeClassElement = document.getElementById(componentId);
+                if (removeClassElement && data.className) {
+                    removeClassElement.classList.remove(data.className);
+                }
+                break;
+        }
+    }
+
+    function sendWebSocketMessage(type, data) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            const message = { type, ...data };
+            socket.send(JSON.stringify(message));
+        }
+    }
+
+    // Initialize WebSocket connection
+    connectWebSocket();
 
     function showErrorOverlay(err) {
         let overlay = document.getElementById("nextpy-error-overlay");
@@ -467,6 +611,15 @@ class ComponentRenderer:
 
         safe_error = html.escape(error)
         safe_path = html.escape(str(file_path))
+
+        # Inject the new action runtime script
+        action_runtime_script = ""
+        try:
+            from ..psx.runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+            action_runtime_script = f"<script>{JS_ACTION_RUNTIME_SCRIPT}</script>"
+        except ImportError:
+            # Fallback if action runtime not available
+            action_runtime_script = "<script>console.log('[NextPy] Action Runtime not available');</script>"
 
         return f"""
     <!DOCTYPE html>
@@ -808,8 +961,17 @@ class ComponentRenderer:
             hydrator = get_component_hydrator()
             hydration_script = hydrator.generate_hydration_script()
             
+            # Load action runtime script
+            action_runtime_script = ""
+            try:
+                from ..psx.runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+                action_runtime_script = JS_ACTION_RUNTIME_SCRIPT
+            except ImportError:
+                # Fallback if action runtime not available
+                action_runtime_script = "console.log('[NextPy] Action Runtime not available');"
+            
             # Combine all scripts in correct order
-            complete_script = f"{full_script}\n\n{hydration_script}\n\n{handler_script}"
+            complete_script = f"{action_runtime_script}\n\n{full_script}\n\n{hydration_script}\n\n{handler_script}"
             
             # Return HTML with embedded scripts
             return f"{hydrated_html}\n<script type='text/javascript'>\n{complete_script}\n</script>"

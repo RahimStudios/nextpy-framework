@@ -6,6 +6,10 @@ Enables client-side interactivity with proper handler registration
 import sys
 import inspect
 import re
+import ast
+import hashlib
+import html as html_module
+import json
 from functools import wraps
 from typing import Callable, Dict, Any, Optional, List
 
@@ -24,36 +28,137 @@ def extract_handler_functions(component_func: Callable) -> Dict[str, str]:
     except (OSError, TypeError):
         return handlers
     
-    # Split by function definitions at component level (4+ spaces)
+    # Only parse the component body before the return statement
+    lines = source.split('\n')
+    component_lines = []
+    in_def = False
+    for line in lines:
+        if re.match(r'^\s*def\b', line):
+            in_def = True
+        if in_def:
+            if re.match(r'^\s*return\b', line):
+                break
+            component_lines.append(line)
+    
+    source = '\n'.join(component_lines)
+    
+    # Split by function definitions at component or nested function level
     lines = source.split('\n')
     i = 0
     while i < len(lines):
         line = lines[i]
-        # Look for def handle_* or def on_* at indentation level 4 (nested in component)
-        match = re.match(r'^    def\s+((?:handle|on)_\w+)\s*\([^)]*\)\s*:', line)
+        # Look for nested def handle_* or def on_* definitions
+        match = re.match(r'^(\s+)def\s+((?:handle|on)_\w+)\s*\([^)]*\)\s*:', line)
         if match:
-            func_name = match.group(1)
+            indent = len(match.group(1))
+            func_name = match.group(2)
             func_lines = []
             i += 1
-            # Collect lines until next def or end of component
+            # Collect lines until next def at same or lesser indentation
             while i < len(lines):
                 next_line = lines[i]
-                # Stop if we hit another def at same level or less indentation
-                if next_line.startswith('    def ') or (next_line and not next_line.startswith('        ')):
+                if not next_line.strip():
+                    func_lines.append('')
+                    i += 1
+                    continue
+                next_indent = len(next_line) - len(next_line.lstrip(' '))
+                if next_indent <= indent:
                     break
-                # Add if it's body (starts with 8 spaces)
-                if next_line.startswith('        '):
-                    func_lines.append(next_line[8:])  # Remove 8 spaces
+                # Remove the extra indentation for the function body
+                if next_indent >= indent + 4:
+                    func_lines.append(next_line[indent + 4:])
+                else:
+                    func_lines.append(next_line.lstrip(' '))
                 i += 1
             
-            # Store handler
-            body = '\n'.join(func_lines).strip()
+            body = '\n'.join(func_lines).rstrip()
             if body:
                 handlers[func_name] = body
         else:
             i += 1
     
     return handlers
+
+
+def _get_python_call_placeholder_from_ast(arg: ast.expr) -> str:
+    if isinstance(arg, ast.Name):
+        return f"python_call_{arg.id}"
+
+    if isinstance(arg, ast.Lambda):
+        try:
+            lambda_src = ast.unparse(arg).strip()
+            normalized = re.sub(r'\s+', ' ', lambda_src)
+            digest = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
+            return f"python_call_lambda_{digest}"
+        except Exception:
+            return f"python_call_lambda_{hash(ast.dump(arg))}"
+
+    return "python_call_handler"
+
+
+def extract_create_handler_assignments(component_func: Callable, existing_handlers: Optional[Dict[str, str]] = None) -> (Dict[str, str], Dict[str, str]):
+    """
+    Extract handlers created with create_on... utility functions.
+    Returns a tuple of (handlers, event_types).
+    """
+    handlers: Dict[str, str] = {}
+    event_types: Dict[str, str] = {}
+
+    try:
+        source = inspect.getsource(component_func)
+    except (OSError, TypeError):
+        return handlers, event_types
+
+    # Only parse the component body before the return statement
+    lines = source.split('\n')
+    body_lines = []
+    in_def = False
+    for line in lines:
+        if re.match(r'^\s*def\b', line):
+            in_def = True
+        if in_def:
+            if re.match(r'^\s*return\b', line):
+                break
+            body_lines.append(line)
+
+    try:
+        tree = ast.parse('\n'.join(body_lines))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                    continue
+
+                target_name = node.targets[0].id
+                value = node.value
+
+                if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+                    func_name = value.func.id
+                    if func_name.startswith('create_on') and value.args:
+                        event_name = func_name[len('create_on'):].lower()
+                        arg = value.args[0]
+
+                        if isinstance(arg, ast.Lambda):
+                            try:
+                                handler_body = ast.unparse(arg.body).strip()
+                                placeholder = _get_python_call_placeholder_from_ast(arg)
+                                if handler_body:
+                                    handlers[target_name] = handler_body
+                                    handlers[placeholder] = handler_body
+                                    event_types[target_name] = event_name
+                                    event_types[placeholder] = event_name
+                            except Exception:
+                                continue
+                        elif isinstance(arg, ast.Name):
+                            # The handler function is defined elsewhere
+                            placeholder = _get_python_call_placeholder_from_ast(arg)
+                            event_types[target_name] = event_name
+                            event_types[placeholder] = event_name
+                            if existing_handlers and arg.id in existing_handlers:
+                                handlers[placeholder] = existing_handlers[arg.id]
+    except Exception:
+        pass
+
+    return handlers, event_types
 
 
 def replace_state_variables(expr: str, state_keys: Optional[List[str]] = None) -> str:
@@ -67,14 +172,16 @@ def replace_state_variables(expr: str, state_keys: Optional[List[str]] = None) -
     
     for potential_key in keys_to_check:
         # More sophisticated patterns to avoid false positives
-        # Don't replace if part of a larger variable name or function call
+        # Don't replace if part of a larger variable name, in quotes, or function call
+        # Use negative lookbehind/lookahead to avoid quotes
         patterns = [
             # Standalone variable: count -> this.stateManager.get('count')
-            (rf'\b{potential_key}\b(?!\s*[\.\(\[])', f'this.stateManager.get(\'{potential_key}\')'),
+            # Not preceded by quote, not followed by quote or dot or bracket
+            (rf'(?<![\'"])\b{potential_key}\b(?!\s*[\.\(\[])(?![\'"])', f'this.stateManager.get(\'{potential_key}\')'),
             # Method calls: name.upper() -> this.stateManager.get('name').upper()
-            (rf'\b{potential_key}\b(?=\s*\.)', f'this.stateManager.get(\'{potential_key}\')'),
+            (rf'(?<![\'"])\b{potential_key}\b(?=\s*\.)(?![\'"])', f'this.stateManager.get(\'{potential_key}\')'),
             # Array access: items[0] -> this.stateManager.get('items')[0]
-            (rf'\b{potential_key}\b(?=\s*\[)', f'this.stateManager.get(\'{potential_key}\')'),
+            (rf'(?<![\'"])\b{potential_key}\b(?=\s*\[)(?![\'"])', f'this.stateManager.get(\'{potential_key}\')'),
         ]
         
         for pattern, replacement in patterns:
@@ -102,6 +209,9 @@ def python_code_to_js(python_code: str, state_keys: Optional[List[str]] = None) 
     - User input in state values could cause issues
     """
     js_code = python_code
+    
+    # Convert lambda to arrow function
+    js_code = re.sub(r'lambda\s+(\w+):(.*)', r'(\1) => \2', js_code)
     
     # SECURITY: Prevent dangerous patterns
     dangerous_patterns = [
@@ -245,14 +355,14 @@ def generate_handler_registration_script(
     script = f"""
 // Handler registration for component: {component_id}
 (function() {{
-    // Safety check: Ensure NextPyRuntime exists
-    if (typeof window.NextPyRuntime === 'undefined') {{
-        console.error('NextPyRuntime not found. Skipping handler registration for component: {component_id}');
+    // Safety check: Ensure NextPyActionRuntime exists
+    if (typeof window.NextPyActionRuntime === 'undefined') {{
+        console.error('NextPyActionRuntime not found. Skipping handler registration for component: {component_id}');
         return;
     }}
     
     const componentId = '{component_id}';
-    const component = NextPyRuntime.components.get(componentId);
+    const component = window.nextpyComponents?.[componentId];
     
     if (!component) {{
         console.warn('Component not found: ' + componentId);
@@ -264,8 +374,25 @@ def generate_handler_registration_script(
 """
     
     for handler_name, handler_body in handlers.items():
-        js_body = python_code_to_js(handler_body, state_keys)
-        event_type = event_types.get(handler_name, 'click')
+        # Check if handler_body is already structured actions (list of Action objects or dicts)
+        if isinstance(handler_body, list) and handler_body:
+            if hasattr(handler_body[0], 'to_dict'):
+                # New AST-based structured Action objects
+                serialized_actions = [action.to_dict() for action in handler_body]
+                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId)"
+                event_type = event_types.get(handler_name, 'click')
+            elif isinstance(handler_body[0], dict):
+                # Already serialized actions
+                js_body = f"executeNextPyActions({json.dumps(handler_body)}, componentId)"
+                event_type = event_types.get(handler_name, 'click')
+            else:
+                # Fallback to old python_code_to_js for string-based handlers
+                js_body = python_code_to_js(handler_body, state_keys)
+                event_type = event_types.get(handler_name, 'click')
+        else:
+            # Fallback to old python_code_to_js for string-based handlers
+            js_body = python_code_to_js(handler_body, state_keys)
+            event_type = event_types.get(handler_name, 'click')
         
         # Create the handler function with error handling
         script += f"""
@@ -296,49 +423,127 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
     """
     Convert onClick/onChange/etc. attributes from JSX to data-handler format.
     
-    IMPROVED: Supports multiple event types and better attribute patterns.
+    IMPROVED: Supports multiple event types, create_on utilities, and inline lambda handlers.
     Also adds data bindings for state variables.
     
     Converts:
     - onClick={handle_increment} -> data-handler-click="handle_increment"
+    - create_onclick={handle_increment} -> data-handler-click="handle_increment"
+    - onClick={lambda: ...} -> data-handler-click="lambda_handler_123"
     - onChange={handle_change} -> data-handler-change="handle_change"
     - on{EventName}={handler} -> data-handler-{eventname}="handler"
     - {variable} -> data-bind="textContent:state_key"
     """
         
     # Pattern 1: onClick={handler_name} (JSX format)
-    # Matches: onClick, onChange, onSubmit, onFocus, onBlur, onMouseEnter, etc.
-    jsx_pattern = r'\bon([A-Z][a-z]*)\s*=\s*\{(\w+)\}'
+    # Matches: onClick, onChange, onSubmit, onFocus, onBlur, onMouseEnter, onclick, onchange, etc.
+    jsx_pattern = r'\bon([A-Za-z][a-zA-Z0-9]*)\s*=\s*\{(\w+)\}'
     
     def replace_jsx_event_handler(match):
-        event_name = match.group(1).lower()  # "Click" -> "click"
+        event_name = match.group(1).lower()  # "Click" -> "click", "click" -> "click"
         handler_name = match.group(2)
         
         # Only replace if it's a known handler
         if handler_name in handlers:
             # Return data-handler attribute with event type and default onclick behavior
-            return f'data-handler-{event_name}="{handler_name}" on{match.group(1)}="return false;"'
+            return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
         return match.group(0)
     
     html = re.sub(jsx_pattern, replace_jsx_event_handler, html)
     
     # Pattern 1b: onClick="handler_name" (HTML format from PSX)
-    # Matches: onClick="handler", onChange="handler", etc.
-    html_pattern = r'\bon([A-Z][a-z]*)\s*=\s*"([^"]+)"'
+    # Matches: onClick="handler", onChange="handler", onclick="handler", etc.
+    html_pattern = r'\bon([A-Za-z][a-zA-Z0-9]*)\s*=\s*"([^"]+)"'
     
     def replace_html_event_handler(match):
-        event_name = match.group(1).lower()  # "Click" -> "click"
+        event_name = match.group(1).lower()  # "Click" -> "click", "click" -> "click"
         handler_name = match.group(2)
         
         # Only replace if it's a known handler
         if handler_name in handlers:
             # Return data-handler attribute with event type and default onclick behavior
-            return f'data-handler-{event_name}="{handler_name}" on{match.group(1)}="return false;"'
+            return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
         return match.group(0)
     
     html = re.sub(html_pattern, replace_html_event_handler, html)
     
-    # Pattern 2: Add data bindings for state variables
+    # Pattern 1c: create_onclick="python_call_..." or onclick="python_call_..." in rendered HTML
+    python_call_pattern = r'\b(?:create_on|on)([A-Za-z][a-zA-Z0-9]*)\s*=\s*"([^"]*python_[^"]*)"'
+    
+    def replace_python_call_handler(match):
+        event_name = match.group(1).lower()
+        handler_value = html_module.unescape(match.group(2))
+        
+        if handler_value in handlers:
+            return f'data-handler-{event_name}="{handler_value}" on{event_name.capitalize()}="return false;"'
+        return match.group(0)
+    
+    html = re.sub(python_call_pattern, replace_python_call_handler, html)
+    # Matches: create_onclick, create_onchange, create_onsubmit, etc.
+    create_on_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(\w+)\}'
+    
+    def replace_create_on_handler(match):
+        event_name = match.group(1)  # "click", "change", etc.
+        handler_name = match.group(2)
+        
+        # Only replace if it's a known handler
+        if handler_name in handlers:
+            # Return data-handler attribute with event type and default onclick behavior
+            return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+        return match.group(0)
+    
+    html = re.sub(create_on_pattern, replace_create_on_handler, html)
+    
+    # Pattern 3: onClick={lambda ...} (inline lambda handlers)
+    # Matches: onClick={lambda e: ...}, onclick={lambda e: ...}, etc.
+    lambda_pattern = r'\bon([A-Za-z][a-zA-Z0-9]*)\s*=\s*\{(lambda[^}]+)\}'
+    
+    def replace_lambda_handler(match):
+        event_name = match.group(1).lower()  # "Click" -> "click", "click" -> "click"
+        lambda_code = match.group(2).strip()
+        
+        # Generate unique handler name
+        handler_name = f"lambda_handler_{abs(hash(lambda_code))}"
+        
+        # Convert lambda to JavaScript if not already in handlers
+        if handler_name not in handlers:
+            try:
+                js_code = python_code_to_js(lambda_code, state_keys)
+                handlers[handler_name] = js_code
+            except Exception as e:
+                # If conversion fails, keep original
+                return match.group(0)
+        
+        # Return data-handler attribute
+        return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+    
+    html = re.sub(lambda_pattern, replace_lambda_handler, html)
+    
+    # Pattern 4: create_onclick={lambda ...} (create_on with inline lambda)
+    create_lambda_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(lambda[^}]+)\}'
+    
+    def replace_create_lambda_handler(match):
+        event_name = match.group(1)  # "click", "change", etc.
+        lambda_code = match.group(2).strip()
+        
+        # Generate unique handler name
+        handler_name = f"create_lambda_handler_{abs(hash(lambda_code))}"
+        
+        # Convert lambda to JavaScript if not already in handlers
+        if handler_name not in handlers:
+            try:
+                js_code = python_code_to_js(lambda_code, state_keys)
+                handlers[handler_name] = js_code
+            except Exception as e:
+                # If conversion fails, keep original
+                return match.group(0)
+        
+        # Return data-handler attribute
+        return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+    
+    html = re.sub(create_lambda_pattern, replace_create_lambda_handler, html)
+    
+    # Pattern 5: Add data bindings for state variables
     if state_keys:
         for state_key in state_keys:
             # Find {state_key} patterns and add data binding
@@ -350,7 +555,7 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
             
             html = re.sub(pattern, add_binding, html)
     
-    # Pattern 3: data-event="click:handler_name" format (alternative syntax)
+    # Pattern 6: data-event="click:handler_name" format (alternative syntax)
     # This allows more flexible specification if developer uses this pattern
     
     return html
@@ -395,43 +600,83 @@ def interactive_component(func: Callable) -> Callable:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Extract handlers using regex pattern (same as extract_handler_functions)
             lines = content.split('\n')
-            i = 0
-            while i < len(lines):
-                line = lines[i]
-                # Look for def handle_* or def on_* at component level (4+ spaces)
-                match = re.match(r'^    def\s+((?:handle|on)_\w+)\s*\([^)]*\)\s*:', line)
-                if match:
-                    func_name = match.group(1)
-                    func_lines = []
-                    i += 1
-                    # Collect lines until next def or end of component
-                    while i < len(lines):
-                        next_line = lines[i]
-                        # Stop if we hit another def at same level or less indentation
-                        if next_line.startswith('    def ') or (next_line and not next_line.startswith('        ')):
-                            break
-                        # Add if it's body (starts with 8 spaces)
-                        if next_line.startswith('        '):
-                            func_lines.append(next_line[8:])  # Remove 8 spaces
+            component_pattern = re.compile(rf'^\s*def\s+{re.escape(func.__name__)}\s*\([^)]*\)\s*:')
+            component_start = None
+            component_indent = 0
+            for index, line in enumerate(lines):
+                comp_match = component_pattern.match(line)
+                if comp_match:
+                    component_start = index
+                    component_indent = len(line) - len(line.lstrip(' '))
+                    break
+            
+            if component_start is not None:
+                i = component_start + 1
+                while i < len(lines):
+                    line = lines[i]
+                    if not line.strip():
                         i += 1
-                    
-                    # Store handler
-                    body = '\n'.join(func_lines).strip()
-                    if body:
-                        handlers[func_name] = body
-                else:
-                    i += 1
+                        continue
+                    line_indent = len(line) - len(line.lstrip(' '))
+                    if line_indent <= component_indent:
+                        break
+                    match = re.match(r'^(\s+)def\s+((?:handle|on)_\w+)\s*\([^)]*\)\s*:', line)
+                    if match:
+                        indent = len(match.group(1))
+                        func_name = match.group(2)
+                        func_lines = []
+                        i += 1
+                        while i < len(lines):
+                            next_line = lines[i]
+                            if not next_line.strip():
+                                func_lines.append('')
+                                i += 1
+                                continue
+                            next_indent = len(next_line) - len(next_line.lstrip(' '))
+                            if next_indent <= indent:
+                                break
+                            if next_indent >= indent + 4:
+                                func_lines.append(next_line[indent + 4:])
+                            else:
+                                func_lines.append(next_line.lstrip(' '))
+                            i += 1
+                        body = '\n'.join(func_lines).rstrip()
+                        if body:
+                            handlers[func_name] = body
+                    else:
+                        i += 1
             
             print(f"DEBUG: Found {len(handlers)} handlers: {list(handlers.keys())}")
         except Exception as e:
             print(f"DEBUG: Exception in handler extraction: {e}")
-            # Fallback to try extracting from the function directly
+            handlers = {}
+        
+        if not handlers:
             try:
                 handlers = extract_handler_functions(func)
-            except:
+                print(f"DEBUG: Fallback found {len(handlers)} handlers: {list(handlers.keys())}")
+            except Exception as e:
+                print(f"DEBUG: Fallback exception in handler extraction: {e}")
                 handlers = {}
+        
+        # Extract handlers using new AST-based compiler
+        try:
+            from ..compiler.handler_compiler import extract_handlers_compiled
+            ast_handlers = extract_handlers_compiled(func, func.__name__)
+            if ast_handlers:
+                handlers.update(ast_handlers)
+                print(f"DEBUG: Added AST-based handlers: {list(ast_handlers.keys())}")
+        except Exception as e:
+            print(f"DEBUG: Failed AST-based handler extraction: {e}")
+            # Fallback to old method
+            try:
+                create_handlers, _ = extract_create_handler_assignments(func, handlers)
+                if create_handlers:
+                    handlers.update(create_handlers)
+                    print(f"DEBUG: Fallback added create_on handlers: {list(create_handlers.keys())}")
+            except Exception as e2:
+                print(f"DEBUG: Fallback handler extraction failed: {e2}")
         
         # Get the HTML output with interactive handler context
         if hasattr(base_component_result, 'to_html'):
@@ -454,12 +699,8 @@ def interactive_component(func: Callable) -> Callable:
         except (OSError, TypeError):
             state_keys = []
         
-        # Convert handler attributes in HTML to data-handler format
-        print(f"DEBUG: Converting HTML with {len(handlers)} handlers")
-        print(f"DEBUG: HTML before conversion has onClick handle_increment: {'onClick=\"handle_increment\"' in html}")
+        # Convert handler attributes to data-handler attributes with dynamic targeting
         html = convert_handler_attributes_in_html(html, handlers, state_keys)
-        print(f"DEBUG: HTML after conversion has data-handler: {'data-handler' in html}")
-        print(f"DEBUG: HTML after conversion has onClick handle_increment: {'onClick=\"handle_increment\"' in html}")
         
         # Get engine first to generate consistent component ID
         from .engine import get_hydration_engine

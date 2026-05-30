@@ -25,6 +25,7 @@ class ComponentHydrator:
             "name": component_func.__name__,
             "state": self._extract_state(component_func),
             "handlers": self._extract_handlers(component_func),
+            "effects": self._extract_effects(component_func),
         }
     
     def _extract_state(self, component_func: Callable) -> Dict[str, Any]:
@@ -101,21 +102,32 @@ class ComponentHydrator:
                     if body:
                         handlers[handler_name] = body
             return handlers
-        except:
-            return {}
-            # Generate a unique handler name
-            handler_name = f'handler_{len(handlers)}'
-            handlers[handler_name] = code.strip()
-        
-        # Pattern for create_onclick style: create_onclick(lambda e: ...)
-        pattern2 = r'create_on\w+\s*\(\s*lambda\s+e\s*:\s*([^)]+)\)'
-        matches2 = re.findall(pattern2, source)
-        
-        for code in matches2:
-            handler_name = f'handler_{len(handlers)}'
-            handlers[handler_name] = code.strip()
-        
-        return handlers
+        except Exception as e:
+            return {}  # Changed from return(str(e)) to return {}
+    
+    def _extract_effects(self, component_func: Callable) -> List[Dict[str, Any]]:
+        """Extract useEffect calls from component"""
+        try:
+            # Try to get the original file path
+            file_path = None
+            if hasattr(component_func, '__module__') and component_func.__module__ in sys.modules:
+                module = sys.modules[component_func.__module__]
+                if hasattr(module, '__original_file__'):
+                    file_path = module.__original_file__
+            
+            if file_path:
+                # Read the original file
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    source = f.read()
+            else:
+                # Fallback to inspect.getsource
+                source = inspect.getsource(component_func)
+            
+            # Use the existing _extract_effects_from_source method
+            return self._extract_effects_from_source(source)
+        except Exception as e:
+            print(f"Warning: Could not extract effects: {e}")
+            return []
     
     def _extract_effects_from_source(self, source: str) -> List[Dict[str, Any]]:
         """Extract useEffect calls from source"""
