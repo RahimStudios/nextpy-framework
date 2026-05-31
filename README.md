@@ -1,865 +1,214 @@
-# 🚀 NextPy Framework
+<div align="center">
 
-**A RAHIMSTUDIOS Product** | The Python web framework with exact Next.js syntax! Build modern web applications with file-based routing, True JSX components, React-like hooks, server-side rendering (SSR), static site generation (SSG), and more - all with the same developer experience as Next.js but in Python!
+<img src="./public/images/icon.png" alt="NextPy Logo" width="120"/>
+
+
+
+# NextPy Framework
+
+### The Full-Stack Python Framework
+
+![PyPI](https://img.shields.io/pypi/v/nextpy-framework)
+![Python](https://img.shields.io/pypi/pyversions/nextpy-framework)
+![License](https://img.shields.io/github/license/RahimStudios/nextpy-framework)
+![Stars](https://img.shields.io/github/stars/RahimStudios/nextpy-framework)
+
+
+
+
+
+Build modern web applications using Python, PSX, file-based routing, server-side rendering, static generation, React-style hooks, and integrated AI development tools.
+
+[Documentation](https://nextpy.dev) •
+[Examples](https://nextpy.dev/examples) •
+[Discord](https://discord.gg/nextpy) •
+[GitHub Discussions](https://github.com/RahimStudios/nextpy/discussions)
+
+</div
+
+
+
 
 ---
 
-## 🏢 **About RAHIMSTUDIOS**
+## Getting Started
 
-**NextPy** is proudly developed and maintained by **RAHIMSTUDIOS** - a cutting-edge technology company dedicated to creating innovative developer tools and frameworks. Our mission is to bridge the gap between Python's simplicity and modern web development paradigms.
+NextPy is a Python-first full-stack framework inspired by the developer experience of Next.js while introducing powerful innovations such as:
 
-### 🎯 **Why RAHIMSTUDIOS Built NextPy:**
-- 🐍 **Python-First Philosophy** - Leverage Python's simplicity for web development
-- ⚡ **Performance Focus** - Blazing fast SSR and SSG capabilities
-- 🎨 **Developer Experience** - Tooling that makes development joyful
-- 🔧 **Enterprise Ready** - Production-grade features and reliability
-- 🌍 **Community Driven** - Open-source with professional backing
-
----
-
-## 🚀 Quick Start
+* PSX (Python Syntax Extension)
+* File-based routing
+* Server-side rendering (SSR)
+* Static site generation (SSG)
+* API routes
+* React-style hooks in Python
+* Built-in AI coding assistant
+* Modern CLI tooling
+* Enterprise-ready architecture
 
 ### Installation
 
 ```bash
-# Install NextPy
 pip install nextpy-framework
+```
 
-# Create new project
+### Create a Project
+
+```bash
 nextpy create my-app
-
-# Navigate to project
 cd my-app
-
-# Start development server
 nextpy dev
 ```
 
-### Your First NextPy App with PSX
+Visit:
 
-Create `pages/index.psx`:
+```text
+http://localhost:8000
+```
+
+---
+
+## Why NextPy?
+
+### Python First
+
+Build full-stack applications without switching languages.
+
+### PSX
+
+Write component-based user interfaces using NextPy's Python Syntax Extension.
+
+### AI Native
+
+NextPy includes an integrated AI coding assistant:
+
+```bash
+nextpy ai
+```
+
+Chat mode:
+
+```bash
+nextpy ai chatbot
+```
+
+Agent mode:
+
+```bash
+nextpy ai agent
+```
+
+Generate complete applications:
+
+```bash
+nextpy ai create ecommerce app
+```
+
+### Full-Stack by Default
+
+* Frontend
+* Backend
+* API Routes
+* Database Integration
+* Authentication
+* Deployment
+
+Everything in one framework.
+
+---
+
+## Example
 
 ```python
-# Import all React-like features from NextPy
-from nextpy import (
-    component, psx, useState, useEffect, useCallback, useMemo,
-    create_onclick, create_onchange, create_onsubmit
-)
-
-# Import components like in React
-from components.Button import Button
+from nextpy import component, useState
 
 @component
-def Home(props=None):
-    # Python-style array destructuring for hooks
-    [name, setName] = useState('rahim')
+def Home():
     [count, setCount] = useState(0)
-    [loading, setLoading] = useState(false)
-    
-    # Server-side props
-    props = props or {}
-    title = props.get("title", "Welcome to NextPy")
-    message = props.get("message", "Your Python-powered web framework with True JSX")
-    
-    # Event handlers with create utilities
-    handleClick = create_onclick(lambda e: setName(name.upper()))
-    handleIncrement = create_onclick(lambda e: setCount(count + 1))
-    
-    # Client-side data fetching
-    def fetch_data():
-        setLoading(true)
-        # Simulate API call
-        setLoading(false)
-    
-    useEffect(fetch_data, [])
-    
+
     return (
-        <div className={clsx('flex', 'items-center', 'justify-center', 'min-h-screen', 'bg-gradient-to-br', 'from-blue-500', 'to-purple-600')}>
-            <div className={clsx('text-center', 'text-white', 'max-w-4xl', 'mx-auto', 'p-8')}>
-                <h1 className={clsx('mb-4', 'text-5xl', 'font-bold')}>{title}</h1>
-                <p className={clsx('text-xl', 'mb-8')}>{message} {name}</p>
-                
-                {/* Interactive Section */}
-                <div className={clsx('mb-8', 'bg-white', 'bg-opacity-10', 'backdrop-blur-sm', 'rounded-lg', 'p-6')}>
-                    <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>Interactive Demo</h2>
-                    <p className="mb-4">Count: {count}</p>
-                    
-                    <div className={clsx('flex', 'flex-wrap', 'gap-4', 'justify-center')}>
-                        <Button onclick={handleIncrement} variant="primary" size="lg">
-                            Increment: {count}
-                        </Button>
-                        
-                        <Button onclick={handleClick} variant="secondary" size="lg">
-                            Uppercase Name
-                        </Button>
-                        
-                        <Button onclick={lambda e: setCount(0)} variant="danger" size="lg">
-                            Reset
-                        </Button>
-                    </div>
-                </div>
-                
-                {/* Component Nesting Demo */}
-                <div className={clsx('mb-8', 'bg-white', 'bg-opacity-10', 'backdrop-blur-sm', 'rounded-lg', 'p-6')}>
-                    <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>Component Nesting</h2>
-                    <Button variant="success" onclick={lambda e: console.log("Nested button clicked!")}>
-                        Nested Button Component
-                    </Button>
-                </div>
-                
-                {/* Python Logic Demo */}
-                <div className={clsx('mb-8', 'bg-white', 'bg-opacity-10', 'backdrop-blur-sm', 'rounded-lg', 'p-6')}>
-                    <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>Python Logic in JSX</h2>
-                    
-                    {/* Conditional rendering */}
-                    {if len(name) > 5:
-                        <p className="text-green-300">✅ Long name detected!</p>
-                    {else:
-                        <p className="text-yellow-300">⚠️ Short name</p>
-                    {/if}}
-                    
-                    {/* For loop */}
-                    <div className="mt-4">
-                        {for i in range(3):
-                            <div key={i} className={clsx('mb-2', 'p-2', 'bg-white', 'bg-opacity-20', 'rounded')}>
-                                Item {i}: {name} {i + 1}
-                            </div>
-                        {/for}
-                    </div>
-                </div>
-                
-                {/* Navigation */}
-                <div className={clsx('flex', 'flex-wrap', 'gap-4', 'justify-center')}>
-                    <a href="/about" className={clsx('inline-block', 'px-6', 'py-3', 'font-semibold', 'text-blue-600', 'transition-all', 'duration-300', 'transform', 'bg-white', 'rounded-lg', 'shadow-lg', 'hover:bg-gray-100', 'hover:text-blue-700', 'hover:scale-105')}>
-                        Learn More
-                    </a>
-                    
-                    <a href="/blog" className={clsx('inline-block', 'px-6', 'py-3', 'font-semibold', 'text-purple-600', 'transition-all', 'duration-300', 'transform', 'bg-white', 'rounded-lg', 'shadow-lg', 'hover:bg-gray-100', 'hover:text-purple-700', 'hover:scale-105')}>
-                        View Blog
-                    </a>
-                </div>
-            </div>
+        <div>
+            <h1>Welcome to NextPy</h1>
+
+            <button onclick={lambda e: setCount(count + 1)}>
+                Count: {count}
+            </button>
         </div>
     )
-
-# Server-side props (Next.js style)
-def getServerSideProps(context):
-    return {
-        "props": {
-            "title": "Welcome to NextPy by RAHIMSTUDIOS",
-            "message": "Your Python-powered web framework with True JSX"
-        }
-    }
 
 default = Home
 ```
 
-Visit `http://localhost:8000` to see your app!
+---
+
+## Documentation
+
+Visit the official documentation:
+
+https://nextpy.dev/docs
+
+Documentation includes:
+
+* Getting Started
+* Routing
+* PSX
+* Components
+* Hooks
+* Data Fetching
+* API Routes
+* Deployment
+* AI Assistant
+* CLI Reference
 
 ---
 
-## 🎯 **Why Choose NextPy by RAHIMSTUDIOS?**
+## Community
 
-### ✅ **Complete React Experience in Python**
-- **✅ True JSX Syntax** - Write exact Next.js JSX syntax in Python
-- **✅ All React Hooks** - useState, useEffect, useCallback, useMemo, useRef, useContext, useReducer
-- **✅ Python-Style Destructuring** - `[name, setName] = useState('rahim')`
-- **✅ Event Utilities** - create_onclick, create_onchange, create_onsubmit
-- **✅ Custom Hooks** - useCounter, useToggle, useLocalStorage, useFetch
-- **✅ Component Nesting** - Full component composition and props passing
+The NextPy community can be found on GitHub Discussions where you can ask questions, share projects, suggest features, and connect with other developers.
 
-### ✅ **Next.js Features in Python**
-- **✅ File-Based Routing** - Automatic route discovery like Next.js
-- **✅ PSX Files** - `.psx` extension for Python JSX components
-- **✅ Server-Side Rendering** - Full SSR support with `getServerSideProps`
-- **✅ Static Site Generation** - Build static sites with `getStaticProps`
-- **✅ Dynamic Routes** - `[slug].psx`, `[id].psx` with full params support
-- **✅ API Routes** - Python API endpoints in `pages/api/`
-- **✅ Middleware** - Authentication, logging, custom middleware
-- **✅ Component Imports** - `from components.Button import Button`
+* GitHub Discussions
+* Discord Community
+* X (Twitter)
+* YouTube
 
-### ✅ **Developer Experience**
-- **✅ Hot Reload** - Instant development feedback
-- **✅ VS Code Extension** - Dedicated extension for syntax highlighting
-- **✅ Language Server** - Auto-completion, IntelliSense, error checking
-- **✅ TypeScript Support** - Full type definitions and IntelliSense
-- **✅ Debug Tools** - Built-in debugging with detailed error pages
-- **✅ Plugin System** - Extensible architecture
-
-### ✅ **Production Ready**
-- **✅ Template System** - Jinja2 templates with PSX content injection
-- **✅ Tailwind CSS** - Automatic compilation and optimization
-- **✅ Error Handling** - Comprehensive error pages and debugging
-- **✅ Performance** - Optimized rendering and caching
-- **✅ Security** - Built-in security headers and protections
-- **✅ Deployment** - Docker, Vercel, Heroku, AWS support
+Please read and follow our Code of Conduct when participating in community spaces.
 
 ---
 
-## 🛣️ **Routing System**
+## Contributing
 
-### File-Based Routing with PSX
+Contributions are welcome and greatly appreciated.
 
-NextPy uses file-based routing just like Next.js, with full `.psx` support:
+Before contributing, please read:
 
-```
-pages/
-├── index.psx             # → /
-├── about.psx             # → /about
-├── contact.psx           # → /contact
-├── blog/
-│   ├── index.psx         # → /blog
-│   ├── post.psx          # → /blog/post
-│   └── [slug].psx       # → /blog/:slug
-├── users/
-│   ├── [id].psx         # → /users/:id
-│   └── [...all].psx     # → /users/*
-└── api/
-    ├── hello.psx         # → /api/hello
-    └── users/
-        └── [id].psx     # → /api/users/:id
-```
+* Contribution Guidelines
+* Code of Conduct
 
-### Dynamic Routes with PSX
-
-```python
-# pages/blog/[slug].psx
-from nextpy import component, psx, useState, useEffect
-
-@component
-def BlogPost(props=None):
-    slug = props.get("params", {}).get("slug", "")
-    [post, setPost] = useState({})
-    [loading, setLoading] = useState(true)
-    
-    def fetch_post():
-        # Simulate API call
-        setPost({
-            "title": f"Blog Post: {slug}",
-            "content": f"This is the content for {slug}",
-            "date": "2024-03-26"
-        })
-        setLoading(false)
-    
-    useEffect(fetch_post, [slug])
-    
-    return (
-        <div className={clsx('container', 'mx-auto', 'p-8')}>
-            {loading and (
-                <div className={clsx('text-center', 'py-12')}>
-                    <div className={clsx('animate-spin', 'rounded-full', 'h-12', 'w-12', 'border-b-2', 'border-blue-600', 'mx-auto')}></div>
-                    <p className={clsx('mt-4', 'text-gray-600')}>Loading post...</p>
-                </div>
-            )}
-            
-            {post and not loading and (
-                <article className={clsx('max-w-4xl', 'mx-auto')}>
-                    <header className="mb-8">
-                        <h1 className={clsx('text-4xl', 'font-bold', 'mb-4')}>{post.get('title')}</h1>
-                        <time className="text-gray-600">{post.get('date')}</time>
-                    </header>
-                    
-                    <div className={clsx('prose', 'prose-lg', 'max-w-none')}>
-                        <div>{post.get('content')}</div>
-                    </div>
-                </article>
-            )}
-        </div>
-    )
-
-def getServerSideProps(context):
-    slug = context.get("params", {}).get("slug", "")
-    
-    # Pre-fetch data on server
-    return {
-        "props": {
-            "params": {"slug": slug}
-        }
-    }
-
-default = BlogPost
-```
-
-### API Routes
-
-```python
-# pages/api/users.psx
-from nextpy.server.app import JSONResponse
-
-async def get(request):
-    """GET /api/users - Fetch all users"""
-    import requests
-    response = requests.get("https://jsonplaceholder.typicode.com/users")
-    users = response.json()
-    
-    return JSONResponse({
-        "success": True,
-        "data": users,
-        "count": len(users)
-    })
-
-async def post(request):
-    """POST /api/users - Create new user"""
-    data = await request.json()
-    
-    # Validate required fields
-    required_fields = ["name", "email"]
-    for field in required_fields:
-        if field not in data:
-            return JSONResponse({
-                "success": False,
-                "error": f"Missing required field: {field}"
-            }, status_code=400)
-    
-    # Create new user (in real app, save to database)
-    new_user = {
-        "id": len(requests.get("https://jsonplaceholder.typicode.com/users").json()) + 1,
-        **data
-    }
-    
-    return JSONResponse({
-        "success": True,
-        "data": new_user,
-        "message": "User created successfully"
-    }, status_code=201)
-```
+Good first issues are available for new contributors looking to get involved.
 
 ---
 
-## 🔧 **Data Fetching & State Management**
+## Security
 
-### Server-Side Rendering (SSR)
+If you discover a security vulnerability, please do not create a public issue.
 
-```python
-# pages/dashboard.psx
-from nextpy import component, psx, useState, useEffect
-from nextpy.psx import useFetch
+Instead, contact:
 
-@component
-def Dashboard(props=None):
-    # Server-rendered data
-    initial_data = props.get("data", {})
-    
-    # Client-side state
-    [users, setUsers] = useState(initial_data.get("users", []))
-    [posts, setPosts] = useState([])
-    [loading, setLoading] = useState(false)
-    
-    # Custom hook for data fetching
-    [data, loading_data, error_data] = useFetch("https://jsonplaceholder.typicode.com/posts?_limit=5")
-    
-    def fetch_posts():
-        setLoading(true)
-        try:
-            import requests
-            response = requests.get("https://jsonplaceholder.typicode.com/posts?_limit=10")
-            if response.status_code == 200:
-                setPosts(response.json())
-        except Exception as e:
-            print(f"Error fetching posts: {e}")
-        finally:
-            setLoading(false)
-    
-    # Initial data fetch
-    useEffect(lambda: {
-        if data:
-            setPosts(data)
-        fetch_posts()
-    }, [data])
-    
-    return (
-        <div className={clsx('min-h-screen', 'bg-gray-100')}>
-            <div className={clsx('container', 'mx-auto', 'p-8')}>
-                <header className="mb-8">
-                    <h1 className={clsx('text-4xl', 'font-bold', 'text-gray-800', 'mb-4')}>Dashboard</h1>
-                    <p className="text-gray-600">Real-time data fetching with PSX</p>
-                </header>
-                
-                <div className={clsx('grid', 'grid-cols-1', 'lg:grid-cols-2', 'gap-8')}>
-                    {/* Users Section */}
-                    <section className={clsx('bg-white', 'rounded-lg', 'shadow', 'p-6')}>
-                        <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>Users ({len(users)})</h2>
-                        
-                        {loading_data and (
-                            <div className={clsx('text-center', 'py-8')}>
-                                <div className={clsx('animate-spin', 'rounded-full', 'h-8', 'w-8', 'border-b-2', 'border-blue-600', 'mx-auto')}></div>
-                            </div>
-                        )}
-                        
-                        {not loading_data and users and (
-                            <div className="space-y-3">
-                                {for user in users[:5]:
-                                    <div key={user.get('id')} className={clsx('border-b', 'pb-3')}>
-                                        <div className={clsx('flex', 'items-center', 'justify-between')}>
-                                            <div>
-                                                <h3 className="font-semibold">{user.get('name')}</h3>
-                                                <p className={clsx('text-sm', 'text-gray-600')}>{user.get('email')}</p>
-                                            </div>
-                                            <span className={clsx('text-xs', 'bg-blue-100', 'text-blue-800', 'px-2', 'py-1', 'rounded')}>
-                                                {user.get('company', {}).get('name', 'N/A')}
-                                            </span>
-                                        </div>
-                                    </div>
-                                {/for}}
-                            </div>
-                        )}
-                    </section>
-                    
-                    {/* Posts Section */}
-                    <section className={clsx('bg-white', 'rounded-lg', 'shadow', 'p-6')}>
-                        <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>Latest Posts ({len(posts)})</h2>
-                        
-                        {loading and (
-                            <div className={clsx('text-center', 'py-8')}>
-                                <div className={clsx('animate-spin', 'rounded-full', 'h-8', 'w-8', 'border-b-2', 'border-green-600', 'mx-auto')}></div>
-                            </div>
-                        )}
-                        
-                        {not loading and posts and (
-                            <div className="space-y-4">
-                                {for post in posts:
-                                    <div key={post.get('id')} className={clsx('border-l-4', 'border-blue-500', 'pl-4')}>
-                                        <h3 className={clsx('font-semibold', 'mb-1')}>{post.get('title')}</h3>
-                                        <p className={clsx('text-sm', 'text-gray-600', 'line-clamp-2')}>{post.get('body')}</p>
-                                    </div>
-                                {/for}}
-                            </div>
-                        )}
-                    </section>
-                </div>
-                
-                {/* Statistics */}
-                <section className={clsx('mt-8', 'bg-white', 'rounded-lg', 'shadow', 'p-6')}>
-                    <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>Statistics</h2>
-                    <div className={clsx('grid', 'grid-cols-1', 'md:grid-cols-3', 'gap-6')}>
-                        <div className="text-center">
-                            <div className={clsx('text-3xl', 'font-bold', 'text-blue-600')}>{len(users)}</div>
-                            <div className="text-gray-600">Total Users</div>
-                        </div>
-                        <div className="text-center">
-                            <div className={clsx('text-3xl', 'font-bold', 'text-green-600')}>{len(posts)}</div>
-                            <div className="text-gray-600">Total Posts</div>
-                        </div>
-                        <div className="text-center">
-                            <div className={clsx('text-3xl', 'font-bold', 'text-purple-600')}>
-                                {len([u for u in users if u.get('company', {}).get('name')])}
-                            </div>
-                            <div className="text-gray-600">Companies</div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-        </div>
-    )
+[security@rahimstudios.com](mailto:security@rahimstudios.com)
 
-def getServerSideProps(context):
-    """Server-side data fetching"""
-    try:
-        import requests
-        response = requests.get("https://jsonplaceholder.typicode.com/users")
-        users = response.json()
-        
-        return {
-            "props": {
-                "data": {
-                    "users": users[:10],  # First 10 users
-                    "userCount": len(users)
-                }
-            }
-        }
-    except Exception as e:
-        return {
-            "props": {
-                "data": {
-                    "users": [],
-                    "error": str(e)
-                }
-            }
-        }
-
-default = Dashboard
-```
+We will investigate and respond as quickly as possible.
 
 ---
 
-## 🎨 **Component System**
+## License
 
-### Reusable Components
-
-```python
-# components/Button.psx
-from nextpy import component, psx
-
-@component
-def Button(props=None):
-    props = props or {}
-    onclick = props.get("onclick", lambda e: None)
-    children = props.get("children", "Button")
-    variant = props.get("variant", "primary")
-    size = props.get("size", "md")
-    disabled = props.get("disabled", false)
-    
-    # Variant styles
-    variant_styles = {
-        "primary": "bg-blue-500 hover:bg-blue-600 text-white shadow-lg hover:shadow-xl",
-        "secondary": "bg-gray-200 hover:bg-gray-300 text-gray-800",
-        "danger": "bg-red-500 hover:bg-red-600 text-white",
-        "success": "bg-green-500 hover:bg-green-600 text-white",
-        "outline": "border-2 border-blue-500 text-blue-500 hover:bg-blue-50"
-    }
-    
-    # Size styles
-    size_styles = {
-        "sm": "px-3 py-1.5 text-sm",
-        "md": "px-4 py-2 text-base",
-        "lg": "px-6 py-3 text-lg"
-    }
-    
-    button_class = f"{variant_styles.get(variant, variant_styles['primary'])} {size_styles.get(size, size_styles['md'])} font-medium transition-all duration-200 transform rounded"
-    
-    return (
-        <button 
-            onclick={onclick}
-            disabled={disabled}
-            className={button_class + (disabled and " opacity-50 cursor-not-allowed" or " hover:scale-105 active:scale-95")}
-        >
-            {children}
-        </button>
-    )
-
-default = Button
-```
-
-### Component Nesting
-
-```python
-# components/Card.psx
-from nextpy import component, psx
-from Button import Button
-
-@component
-def Card(props=None):
-    props = props or {}
-    title = props.get("title", "Card Title")
-    content = props.get("content", "Card content")
-    show_button = props.get("showButton", True)
-    
-    def handle_card_click():
-        print(f"Card '{title}' button clicked!")
-    
-    return (
-        <div className={clsx('bg-white', 'rounded-lg', 'shadow-lg', 'p-6', 'max-w-md')}>
-            <h2 className={clsx('text-xl', 'font-bold', 'mb-4')}>{title}</h2>
-            <p className={clsx('text-gray-600', 'mb-6')}>{content}</p>
-            
-            {show_button and (
-                <div className={clsx('flex', 'space-x-4')}>
-                    <Button 
-                        onclick={handle_card_click}
-                        variant="primary"
-                        size="md"
-                    >
-                        Learn More
-                    </Button>
-                    
-                    <Button 
-                        onclick={lambda e: print("Secondary button clicked!")}
-                        variant="secondary"
-                        size="md"
-                    >
-                        Cancel
-                    </Button>
-                </div>
-            )}
-        </div>
-    )
-
-default = Card
-```
+Licensed under the MIT License.
 
 ---
 
-## 🎯 **All React Hooks Available**
+<div align="center">
 
-### Core Hooks
+### Built with ❤️ by RahimStudios
 
-```python
-from nextpy import (
-    useState, useEffect, useCallback, useMemo, useRef,
-    useContext, useReducer, useImperativeHandle, useLayoutEffect,
-    useDebugValue, useTransition, useDeferredValue, useId
-)
+The future of AI-native Python development.
 
-@component
-def HooksDemo(props=None):
-    # State hooks
-    [count, setCount] = useState(0)
-    [name, setName] = useState('NextPy')
-    [isVisible, setIsVisible] = useState(true)
-    
-    # Ref hooks
-    inputRef = useRef(None)
-    
-    # Reducer hook
-    def reducer(state, action):
-        if action['type'] == 'increment':
-            return {'count': state['count'] + 1}
-        elif action['type'] == 'decrement':
-            return {'count': state['count'] - 1}
-        return state
-    
-    [reducerState, dispatch] = useReducer(reducer, {'count': 0})
-    
-    # Memoized callback
-    handleClick = useCallback(lambda e: setCount(count + 1), [count])
-    
-    # Memoized value
-    expensiveValue = useMemo(lambda: sum(range(count + 1)), [count])
-    
-    # Effect hook
-    def effect():
-        print(f"Component updated: count={count}, name={name}")
-    
-    useEffect(effect, [count, name])
-    
-    return (
-        <div className={clsx('p-6', 'bg-white', 'rounded-lg', 'shadow')}>
-            <h2 className={clsx('text-2xl', 'font-bold', 'mb-4')}>React Hooks Demo</h2>
-            
-            <div className="space-y-4">
-                <div>
-                    <p>Count: {count}</p>
-                    <p>Expensive Value: {expensiveValue}</p>
-                    <p>Reducer Count: {reducerState['count']}</p>
-                </div>
-                
-                <div className={clsx('flex', 'space-x-4')}>
-                    <Button onclick={handleClick} variant="primary">
-                        Increment
-                    </Button>
-                    
-                    <Button onclick={lambda e: dispatch({'type': 'increment'})} variant="secondary">
-                        Reducer Increment
-                    </Button>
-                    
-                    <Button onclick={lambda e: setIsVisible(!isVisible)} variant="outline">
-                        Toggle Visibility
-                    </Button>
-                </div>
-                
-                {isVisible and (
-                    <div className={clsx('mt-4', 'p-4', 'bg-gray-50', 'rounded')}>
-                        <input 
-                            ref={inputRef}
-                            value={name}
-                            onchange={lambda e: setName(e.target.value)}
-                            className={clsx('px-3', 'py-2', 'border', 'rounded')}
-                            placeholder="Enter name"
-                        />
-                        <p className="mt-2">Hello, {name}!</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-
-default = HooksDemo
-```
-
----
-
-## 🛠️ **CLI Commands**
-
-### Project Management
-
-```bash
-# Create new project
-nextpy create my-app
-
-# Start development server
-nextpy dev
-
-# Build for production
-nextpy build
-
-# Start production server
-nextpy start
-
-# Export static site
-nextpy export
-
-# Show available routes
-nextpy routes
-
-# Show version info
-nextpy version
-
-# Show project info
-nextpy info
-```
-
-### Development Tools
-
-```bash
-# Generate TypeScript definitions
-nextpy generate types
-
-# Run tests
-nextpy test
-
-# Lint code
-nextpy lint
-
-# Format code
-nextpy format
-```
-
----
-
-## 📦 **Project Structure**
-
-```
-my-app/
-├── pages/                    # Route pages (.py and .psx)
-│   ├── index.psx             # Home page
-│   ├── about.psx             # About page
-│   ├── blog/
-│   │   ├── index.psx         # Blog index
-│   │   └── [slug].psx      # Dynamic blog posts
-│   └── api/                # API routes
-│       ├── hello.psx         # Hello API
-│       └── users/
-│           └── [id].psx     # User API
-├── components/              # Reusable components
-│   ├── Button.psx           # Button component
-│   ├── Card.psx             # Card component
-│   └── Layout.psx           # Layout component
-├── hooks/                   # Custom hooks
-│   ├── useCounter.py        # Counter hook
-│   ├── useToggle.py         # Toggle hook
-│   └── useLocalStorage.py  # Local storage hook
-├── styles/                 # CSS files
-│   ├── global.css          # Global styles
-│   └── components.css      # Component styles
-├── public/                 # Static assets
-│   ├── images/            # Images
-│   ├── fonts/             # Fonts
-│   └── favicon.ico        # Favicon
-├── templates/              # HTML templates (optional)
-│   ├── _page.html         # Base page template
-│   └── _404.html         # 404 page template
-├── .nextpy/               # NextPy configuration
-│   ├── config.js          # Configuration file
-│   └── plugins/          # Plugin configurations
-├── .vscode/               # VS Code settings
-│   ├── settings.json       # Editor settings
-│   ├── extensions.json     # Recommended extensions
-│   └── launch.json        # Debug configuration
-├── main.py                # Application entry point
-├── requirements.txt        # Python dependencies
-├── package.json           # Node.js dependencies (for VS Code extension)
-└── README.md              # Project documentation
-```
-
----
-
-## 🚀 **Deployment**
-
-### Production Build
-
-```bash
-# Build optimized production bundle
-nextpy build
-
-# Start production server
-nextpy start
-
-# Export static site
-nextpy export
-```
-
-### Docker Deployment
-
-```dockerfile
-# Dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-
-CMD ["nextpy", "start"]
-```
-
----
-
-## 🎯 **Why RAHIMSTUDIOS?**
-
-### 🏢 **Professional Development**
-- **Enterprise-Grade**: Built for production environments
-- **Expert Support**: Professional backing and maintenance
-- **Regular Updates**: Continuous improvements and new features
-- **Security First**: Built with security as a top priority
-
-### 🌟 **Innovation Leadership**
-- **Cutting-Edge Technology**: Latest web development paradigms
-- **Python Ecosystem**: Leveraging Python's vast ecosystem
-- **Developer-Focused**: Tools that make developers productive
-- **Community-Driven**: Open-source with professional oversight
-
-### 🚀 **Performance & Scale**
-- **Optimized Rendering**: Blazing fast SSR and SSG
-- **Scalable Architecture**: Built for applications of all sizes
-- **Modern Tooling**: Latest development tools and practices
-- **Production Ready**: Battle-tested in real-world applications
-
----
-
-## 📚 **Documentation & Support**
-
-### 📖 **Comprehensive Docs**
-- [Getting Started Guide](https://docs.nextpy.dev)
-- [API Reference](https://api.nextpy.dev)
-- [Examples & Templates](https://examples.nextpy.dev)
-- [Best Practices](https://bestpractices.nextpy.dev)
-
-### 🤝 **Community**
-- [GitHub Repository](https://github.com/rahimstudios/nextpy-framework)
-- [Discord Community](https://discord.gg/nextpy)
-- [Stack Overflow](https://stackoverflow.com/questions/tagged/nextpy)
-- [Twitter](https://twitter.com/rahimstudios)
-
-### 💼 **Enterprise Support**
-- [Premium Support](https://rahimstudios.com/support)
-- [Consulting Services](https://rahimstudios.com/consulting)
-- [Training Programs](https://rahimstudios.com/training)
-- [Custom Development](https://rahimstudios.com/custom)
-
----
-
-## 🎉 **Get Started Today!**
-
-```bash
-# Install NextPy by RAHIMSTUDIOS
-pip install nextpy-framework
-
-# Create your first project
-nextpy create my-awesome-app
-
-# Start building amazing web applications with Python!
-cd my-awesome-app && nextpy dev
-```
-
----
-
-**NextPy** - *Where Python meets modern web development*  
-**A RAHIMSTUDIOS Product** - *Building the future of Python web frameworks*
-
----
-
-*© 2026 RAHIMSTUDIOS. All rights reserved. NextPy is a trademark of RAHIMSTUDIOS.*
+</div>
