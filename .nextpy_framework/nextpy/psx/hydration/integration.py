@@ -54,14 +54,28 @@ class ComponentHydrator:
             for var_name, initial_value in matches:
                 try:
                     # Safely evaluate the initial value
-                    if initial_value.strip().startswith(('"') or initial_value.strip().startswith("'")):
-                        value = initial_value.strip()[1:-1]
+                    initial_value = initial_value.strip()
+                    if initial_value.startswith('"') or initial_value.startswith("'"):
+                        # String value
+                        value = initial_value[1:-1]
+                    elif initial_value == 'True':
+                        value = True
+                    elif initial_value == 'False':
+                        value = False
+                    elif initial_value == 'None':
+                        value = None
+                    elif initial_value.isdigit():
+                        value = int(initial_value)
                     else:
-                        value = ast.literal_eval(initial_value.strip())
+                        # Try ast.literal_eval for more complex expressions
+                        value = ast.literal_eval(initial_value)
                     state[var_name] = value
-                except:
+                    print(f"DEBUG _extract_state: {var_name} = {value} (type: {type(value).__name__})")
+                except Exception as e:
+                    print(f"DEBUG _extract_state: Could not parse initial value for {var_name}: {initial_value}, error: {e}")
                     state[var_name] = initial_value.strip()
             
+            print(f"DEBUG _extract_state: Final state dict: {state}")
             return state
         except Exception as e:
             print(f"Warning: Could not extract state: {e}")

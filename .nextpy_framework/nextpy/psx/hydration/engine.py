@@ -151,6 +151,11 @@ class HydrationEngine:
             this.setupDataBindings();
             this.setupEventHandlers();
             this.setupEffects();
+            
+            // Register with global action runtime so _executeVariable resolves state
+            if (window.NextPyActionRuntime) {{
+                window.NextPyActionRuntime.registerComponent(id, {{ ...initialState }});
+            }}
         }}
         
         setupDataBindings() {{
@@ -265,7 +270,12 @@ class HydrationEngine:
             console.log('Rerendering component:', this.id, 'with state:', this.stateManager.state);
             
             // Update all data bindings with current state
-            this.updateUI();
+            this.updateBindings();
+        }}
+        
+        updateUI() {{
+            // Update all data bindings with current state
+            this.updateBindings();
         }}
         
         updateBindings() {{

@@ -217,7 +217,16 @@ class PSXRuntime:
             if hasattr(result, 'to_html'):
                 return result.to_html()
             else:
-                return html.escape(str(result))
+                # Check if this is a simple variable reference that should be bound
+                expr = node.expression.strip()
+                # Simple heuristic: if expression is a single variable name in context
+                # wrap it in a span with data-bind attribute for reactive updates
+                if expr in self.context and not any(c in expr for c in '+-*/%()[]{}'):
+                    # This looks like a state variable, add binding
+                    result_str = str(result)
+                    return f'<span data-bind="textContent:{expr}">{html.escape(result_str)}</span>'
+                else:
+                    return html.escape(str(result))
         elif isinstance(node, LogicNode):
             return self.execute_logic(node)
         elif isinstance(node, ElementNode):

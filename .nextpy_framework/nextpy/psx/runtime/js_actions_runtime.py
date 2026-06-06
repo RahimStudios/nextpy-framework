@@ -23,7 +23,16 @@ class NextPyActionRuntime {
             state: { ...initialState },
             listeners: []
         });
+        this._ensureStateDefaults(componentId);
         return this.components.get(componentId);
+    }
+
+    _ensureStateDefaults(componentId) {
+        if (!this.components.has(componentId)) return;
+        const state = this.components.get(componentId).state;
+        for (const key of Object.keys(state)) {
+            state[key] ??= "";
+        }
     }
 
     executeAction(action, componentId = null) {
@@ -151,7 +160,8 @@ class NextPyActionRuntime {
         console.log(`DEBUG _executeCallMethod: Object value:`, obj);
         
         if (obj === undefined || obj === null) {
-            throw new Error(`Object '${object}' is undefined or null`);
+            console.warn(`Object '${object}' is undefined or null, returning empty string`);
+            return "";
         }
         
         // Call the method on the object
@@ -332,7 +342,15 @@ class NextPyActionRuntime {
     }
 
     _triggerComponentUpdate(componentId, key, newValue, oldValue) {
-        // Find DOM elements that depend on this state
+        // Sync to hydration component's StateManager to trigger DOM data-bind updates
+        if (window.nextpyComponents && window.nextpyComponents[componentId]) {
+            const hydComp = window.nextpyComponents[componentId];
+            if (hydComp.stateManager && hydComp.stateManager.state[key] !== newValue) {
+                hydComp.stateManager.set(key, newValue);
+            }
+        }
+
+        // Find DOM elements that depend on this state (legacy data-state-* attributes)
         const elements = document.querySelectorAll(`[data-state-${key}]`);
         elements.forEach(element => {
             if (element.dataset.componentId === componentId) {

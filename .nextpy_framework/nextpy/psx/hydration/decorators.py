@@ -554,7 +554,7 @@ def generate_handler_registration_script(
     return script
 
 
-def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], state_keys: Optional[List[str]] = None) -> str:
+def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], state_keys: Optional[List[str]] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
     """
     Convert onClick/onChange/etc. attributes from JSX to data-handler format.
     
@@ -755,14 +755,18 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
     
     # Pattern 5: Add data-bind attributes to elements containing state variables
     # Since PSX renderer outputs actual values instead of {state_key} patterns,
-    # we add data-bind attributes to elements that contain state variable names
-    if state_keys:
+    # we match against the actual rendered values from initial_state
+    if state_keys and initial_state:
         binding_counter = 0
         for state_key in state_keys:
-            # Pattern to find elements containing the state variable name in their text
+            state_value = str(initial_state.get(state_key, ''))
+            if not state_value:
+                continue
+            
+            # Pattern to find elements containing the state value in their text
             # This adds data-bind attribute to the opening tag
             # More flexible pattern that handles various HTML structures
-            pattern = rf'(<(\w+)[^>]*>)([^<]*\b{state_key}\b[^<]*)(</\2>)'
+            pattern = rf'(<(\w+)[^>]*>)([^<]*\b{re.escape(state_value)}\b[^<]*)(</\2>)'
             
             def add_binding_to_element(match):
                 nonlocal binding_counter
@@ -786,7 +790,7 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
                 return f'{modified_tag}{text_content}{closing_tag}'
             
             html = re.sub(pattern, add_binding_to_element, html)
-            print(f"DEBUG: Added data-bind attribute for state key: {state_key}")
+            print(f"DEBUG: Added data-bind attribute for state key: {state_key} (value: {state_value})")
     
     # Pattern 6: data-event="click:handler_name" format (alternative syntax)
     # This allows more flexible specification if developer uses this pattern
@@ -968,20 +972,24 @@ def interactive_component(func: Callable) -> Callable:
         
         print(f"DEBUG: state_keys passed to convert_handler_attributes_in_html: {state_keys}")
         
+        # Register component with the generated ID
+        from .integration import get_component_hydrator
+        hydrator = get_component_hydrator()
+        
+        # Get initial state for data-bind pattern matching
+        metadata = hydrator.extract_component_metadata(func)
+        print(f"DEBUG: Extracted metadata state: {metadata['state']}")
+        initial_state = metadata['state']
+        
         # Convert handler attributes to data-handler attributes with dynamic targeting
-        html = convert_handler_attributes_in_html(html, handlers, state_keys)
+        html = convert_handler_attributes_in_html(html, handlers, state_keys, initial_state)
         
         # Get engine first to generate consistent component ID
         from .engine import get_hydration_engine
         engine = get_hydration_engine()
         component_id = engine.generate_component_id()
         
-        # Register component with the generated ID
-        from .integration import get_component_hydrator
-        hydrator = get_component_hydrator()
-        
         # Manually register component to ensure consistent ID
-        metadata = hydrator.extract_component_metadata(func)
         component_data = {
             'name': metadata['name'],
             'state': metadata['state'],
@@ -989,6 +997,7 @@ def interactive_component(func: Callable) -> Callable:
             'effects': metadata['effects'],
             'props': props or {},
         }
+        print(f"DEBUG: Component data state: {component_data['state']}")
         # Override the generated ID with our consistent one
         original_id = engine.register_component(component_data)
         engine.contexts[component_id] = engine.contexts[original_id]
@@ -996,6 +1005,7 @@ def interactive_component(func: Callable) -> Callable:
         
         # Wrap HTML with hydration data using consistent ID
         state = metadata['state']
+        print(f"DEBUG: State passed to generate_html_wrapper: {state}")
         hydrated_html = engine.generate_html_wrapper(component_id, html, state)
         
         # Generate scripts
