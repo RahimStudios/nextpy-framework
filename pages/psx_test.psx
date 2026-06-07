@@ -6,7 +6,9 @@ def Home(props=None):
     # Python-style array destructuring for hooks
     [name, setName] = useState('rahim')
     [count, setCount] = useState(0)
+    [me, setMe]=useState([1, 2, 3, 4, 5])
     [loading, setLoading] = useState(False)
+    [user, setUser]=useState('my user')
     
     # Server-side props
     props = props or {}
@@ -14,9 +16,12 @@ def Home(props=None):
     message = props.get("message", "Your Python-powered web framework with True JSX")
     
     # Event handlers with create utilities
-    handleClick = create_onclick(lambda e: setName(name.upper()))
-    handleIncrement = create_onclick(lambda e: setCount(count + 1))
+
     
+    handleIncrement = create_onclick(lambda e: setCount(count + 1))
+    handleClick = create_onclick(lambda e: setName(name.upper()))
+    handletext = create_onclick(lambda e: setMe(me + ['6'])) 
+        
     # Client-side data fetching
     def fetch_data():
         setLoading(True)
@@ -29,7 +34,7 @@ def Home(props=None):
         <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
             <div className="text-center text-black max-w-4xl mx-auto p-8">
                 <h1 className="mb-4 text-5xl font-bold">{title}</h1>
-                <p className="text-xl mb-8">{message} {name}</p>
+                <p className="text-xl mb-8">{message} {name} {me} {user}</p>
                 
                 {/* Interactive Section */}
                 <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg p-6">
@@ -41,20 +46,18 @@ def Home(props=None):
                             Increment: {count}
                         </button>
                         
-                        <button onclick={handleClick} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg font-medium">
-                            Uppercase Name
+                        <button create_onclick={handleClick} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg font-medium">
+                            Uppercase Name {name}
                         </button>
                         
-                        <button onclick={lambda e: setCount(0)} className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-medium">
-                            Reset
-                        </button>
+                       
                     </div>
                 </div>
                 
                 {/* Component Nesting Demo */}
                 <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg p-6">
                     <h2 className="text-2xl font-bold mb-4">Component Nesting</h2>
-                    <button onclick={lambda e: print("Nested button clicked!")} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium">
+                    <button create_onclick={handletext} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium">
                         Nested Button Component
                     </button>
                 </div>
@@ -72,7 +75,7 @@ def Home(props=None):
                     
                     {/* For loop */}
                     <div className="mt-4">
-                        {for i in range(3):
+                        {for i in range(5):
                             <div key={i} className="mb-2 p-2 bg-white bg-opacity-20 rounded">
                                 Item {i}: {name} {i + 1}
                             </div>

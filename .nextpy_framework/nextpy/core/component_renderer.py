@@ -243,7 +243,7 @@ class ComponentRenderer:
             elif has_interactive_decorator and not hasattr(component, '__wrapped__'):
                 # The original file had @interactive_component but the decorator wasn't applied
                 # This means we need to apply the decorator to the rendered HTML
-                html = self._apply_interactive_component_to_rendered_html(rendered, original_content, page_props)
+                html = self._apply_interactive_component_to_rendered_html(file_path, rendered, original_content, page_props)
             else:
                 # Convert to HTML, passing page props as context for {expressions}
                 # Check if this is a PSX component and handle Server/Client components
@@ -320,9 +320,20 @@ class ComponentRenderer:
 
         # 🔥 Inject Dev Tools (only in dev mode)
         dev_scripts = ""
+
+        # Ensure the Action runtime is always available on the page.
+        # Your button onclick handlers expect window.NextPyActionRuntime.
+        action_runtime_script = ""
+        try:
+            from ..psx.runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+            action_runtime_script = f"<script>{JS_ACTION_RUNTIME_SCRIPT}</script>\n"
+        except ImportError:
+            action_runtime_script = ""
+
         if dev_mode:
             dev_scripts = """
     <script>
+
     /* ===============================
     NextPy Live Error Overlay
     ================================ */
@@ -581,14 +592,7 @@ class ComponentRenderer:
 
     <link rel="stylesheet" href="./public/tailwind.css">
 
-    <style>
-    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-
-    body {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      
-    }}
-    </style>
+    
 
     </head>
 
@@ -598,11 +602,12 @@ class ComponentRenderer:
     {content}
     </div>
 
-    {dev_scripts}
+    {action_runtime_script}{dev_scripts}
 
     </body>
     </html>
     """
+
         
    
 
@@ -957,7 +962,7 @@ class ComponentRenderer:
             
             # Generate scripts
             full_script = engine.generate_hydration_script()
-            handler_script = generate_handler_registration_script(handlers, component_id, state_keys=state_keys)
+            handler_script = generate_handler_registration_script(handlers, component_id, state_keys=state_keys, html=html_with_handlers)
             hydrator = get_component_hydrator()
             hydration_script = hydrator.generate_hydration_script()
             

@@ -7,13 +7,12 @@ import sys
 from pathlib import Path
 import subprocess
 
-print(f"DEBUG: Current working directory: {Path.cwd()}")
-print(f"DEBUG: sys.path before modification: {sys.path}")
+
 
 # Add framework to path
 sys.path.insert(0, str(Path(__file__).parent / ".nextpy_framework"))
 
-print(f"DEBUG: sys.path after modification: {sys.path}")
+
 
 # Compile Tailwind CSS using framework's npm script; this keeps paths consistent regardless
 # of where the user runs the server from.

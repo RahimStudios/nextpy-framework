@@ -88,10 +88,11 @@ def _get_python_call_placeholder_from_ast(arg: ast.expr) -> str:
         try:
             lambda_src = ast.unparse(arg).strip()
             normalized = re.sub(r'\s+', ' ', lambda_src)
+            # Use SHA256 to match _create_python_call_placeholder in component.py
             digest = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
             return f"python_call_lambda_{digest}"
         except Exception:
-            return f"python_call_lambda_{hash(ast.dump(arg))}"
+            return f"python_call_lambda_{hashlib.sha256(ast.dump(arg).encode()).hexdigest()[:16]}"
 
     return "python_call_handler"
 
@@ -106,7 +107,9 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
 
     try:
         source = inspect.getsource(component_func)
-    except (OSError, TypeError):
+        print(f"DEBUG extract_create_handler_assignments: Got source, length={len(source)}")
+    except (OSError, TypeError) as e:
+        print(f"DEBUG extract_create_handler_assignments: Could not get source: {e}")
         return handlers, event_types
 
     # Only parse the component body before the return statement
@@ -123,6 +126,7 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
 
     try:
         tree = ast.parse('\n'.join(body_lines))
+        print(f"DEBUG extract_create_handler_assignments: AST parsed successfully")
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
                 if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
@@ -133,9 +137,11 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
 
                 if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
                     func_name = value.func.id
+                    print(f"DEBUG extract_create_handler_assignments: Found call to {func_name}")
                     if func_name.startswith('create_on') and value.args:
                         event_name = func_name[len('create_on'):].lower()
                         arg = value.args[0]
+                        print(f"DEBUG extract_create_handler_assignments: Processing {func_name} with arg type {type(arg).__name__}")
 
                         if isinstance(arg, ast.Lambda):
                             try:
@@ -146,7 +152,9 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
                                     handlers[placeholder] = handler_body
                                     event_types[target_name] = event_name
                                     event_types[placeholder] = event_name
-                            except Exception:
+                                    print(f"DEBUG extract_create_handler_assignments: Added placeholder {placeholder} for {target_name}")
+                            except Exception as e:
+                                print(f"DEBUG extract_create_handler_assignments: Lambda extraction failed: {e}")
                                 continue
                         elif isinstance(arg, ast.Name):
                             # The handler function is defined elsewhere
@@ -155,7 +163,9 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
                             event_types[placeholder] = event_name
                             if existing_handlers and arg.id in existing_handlers:
                                 handlers[placeholder] = existing_handlers[arg.id]
-    except Exception:
+                                print(f"DEBUG extract_create_handler_assignments: Added placeholder {placeholder} for named handler {arg.id}")
+    except Exception as e:
+        print(f"DEBUG extract_create_handler_assignments: AST parsing failed: {e}")
         pass
 
     return handlers, event_types
@@ -227,69 +237,20 @@ def python_code_to_js(python_code: str, state_keys: Optional[List[str]] = None) 
     # Pattern 1: Replace setXxxx(expression) with stateManager.set patterns
     def replace_setter(match):
         setter_name = match.group(1)  # "Count" from "setCount"
-        expression = match.group(2)   # The argument (may contain nested parens)
+        expression = match.group(2)   # The argument
         state_key = setter_name[0].lower() + setter_name[1:]  # "count"
         
-        # IMPROVED: Handle nested function calls better
-        expression = expression.strip()
-        
-        # Replace state variables with stateManager.get calls
-        # Handle patterns like: count + 1 -> this.stateManager.get('count') + 1
-        
-        # Handle enhanced nested patterns
-        expr_js = expression
+        # SAFER: Only do basic state variable replacement
+        # Do NOT try to parse full expressions with regex
+        expr_js = expression.strip()
         expr_js = replace_state_variables(expr_js, state_keys)
-        
-        # Enhanced string method conversions
-        string_conversions = [
-            (r'\.upper\s*\(\s*\)', '.toUpperCase()'),
-            (r'\.lower\s*\(\s*\)', '.toLowerCase()'),
-            (r'\.strip\s*\(\s*\)', '.trim()'),
-            (r'\.title\s*\(\s*\)', '.charAt(0).toUpperCase() + this.slice(1).toLowerCase()'),
-            (r'\.replace\s*\(([^,]+),\s*([^)]+)\)', r'.replace($1, $2)'),
-            (r'\.split\s*\(', '.split('),
-            (r'\.join\s*\(', '.join('),
-            (r'\.startswith\s*\(', '.startsWith('),
-            (r'\.endswith\s*\(', '.endsWith('),
-        ]
-        
-        # Enhanced list/array method conversions
-        list_conversions = [
-            (r'\.append\s*\(', '.push('),
-            (r'\.extend\s*\(', '.concat('),
-            (r'\.pop\s*\(', '.pop('),
-            (r'\.remove\s*\(', '.filter(item => item !== '),  # Simplified
-            (r'\.sort\s*\(', '.sort('),
-            (r'\.reverse\s*\(', '.reverse('),
-            (r'\.clear\s*\(', '.length = 0'),  # Simplified
-        ]
-        
-        # Enhanced built-in function conversions
-        builtin_conversions = [
-            (r'\blen\s*\(\s*(\w+)\s*\)', r'$1.length'),
-            (r'\bstr\s*\(', 'String('),
-            (r'\bint\s*\(', 'parseInt('),
-            (r'\bfloat\s*\(', 'parseFloat('),
-            (r'\bbool\s*\(', 'Boolean('),
-            (r'\btype\s*\(', 'typeof '),
-            (r'\babs\s*\(', 'Math.abs('),
-            (r'\bround\s*\(', 'Math.round('),
-            (r'\bmin\s*\(', 'Math.min('),
-            (r'\bmax\s*\(', 'Math.max('),
-            (r'\bsum\s*\(', '.reduce((a, b) => a + b, 0)'),
-        ]
-        
-        # Apply all conversions
-        all_conversions = string_conversions + list_conversions + builtin_conversions
-        for pattern, replacement in all_conversions:
-            expr_js = re.sub(pattern, replacement, expr_js)
         
         return f"this.stateManager.set('{state_key}', {expr_js})"
     
-    # Find all setXxxx(...) calls - IMPROVED regex to handle nested parens
-    # This pattern matches setName(arg) where arg can contain balanced parens
+    # Find all setXxxx(...) calls - SAFER regex without nested parens
+    # This pattern matches setName(arg) where arg is a simple expression
     js_code = re.sub(
-        r'set([A-Z]\w*)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)',
+        r'set([A-Z]\w*)\s*\(([^)]+)\)',
         replace_setter,
         js_code
     )
@@ -332,7 +293,8 @@ def generate_handler_registration_script(
     handlers: Dict[str, str], 
     component_id: str,
     event_types: Optional[Dict[str, str]] = None,
-    state_keys: Optional[List[str]] = None
+    state_keys: Optional[List[str]] = None,
+    html: Optional[str] = None
 ) -> str:
     """
     Generate JavaScript to register all handlers for a component.
@@ -344,33 +306,92 @@ def generate_handler_registration_script(
         component_id: Component ID for scoping
         event_types: Optional {handler_name: 'click'|'change'|'submit'...}
         state_keys: Optional list of state variable names for better conversion
+        html: Optional HTML string to extract python_call_lambda_* placeholders from
     """
     if not handlers:
         return ""
+    
+    # DEBUG: Log all handlers being registered
+    print(f"DEBUG generate_handler_registration_script: handlers keys = {list(handlers.keys())}")
+    
+    # Extract placeholders from HTML - these are the correct ones from PSX rendering
+    import re
+    html_placeholders = re.findall(r'python_call_lambda_[a-f0-9]+', html)
+    # Deduplicate while preserving order
+    seen = set()
+    html_placeholders = [x for x in html_placeholders if not (x in seen or seen.add(x))]
+    print(f"DEBUG: Extracted placeholders from HTML: {html_placeholders}")
+    
+    # Convert list-based handlers to JavaScript strings and build a code->handler mapping
+    handlers_with_js = {}
+    code_to_handler = {}  # Map normalized code to handler name
+    
+    for handler_name, handler_code in handlers.items():
+        handler_str = None
+        if isinstance(handler_code, str):
+            handler_str = handler_code
+            # Create a normalized version for matching
+            normalized_code = re.sub(r'\s+', ' ', handler_code).strip()
+            code_to_handler[normalized_code] = handler_name
+        elif isinstance(handler_code, list) and handler_code:
+            if hasattr(handler_code[0], 'to_dict'):
+                # New AST-based structured Action objects
+                serialized_actions = [action.to_dict() for action in handler_code]
+                handler_str = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId)"
+            else:
+                # Plain dict actions
+                handler_str = f"executeNextPyActions({json.dumps(handler_code)}, componentId)"
+        
+        if handler_str:
+            handlers_with_js[handler_name] = handler_str
+    
+    # If we have HTML placeholders but handler keys don't match them,
+    # we need to map them using position-based matching as fallback
+    # This will be fixed by ensuring PSX renderer passes handler info
+    handler_keys_set = set(handlers_with_js.keys())
+    html_placeholders_set = set(html_placeholders)
+    
+    if html_placeholders and not handler_keys_set.issubset(html_placeholders_set):
+        print(f"DEBUG: Handler keys don't match HTML placeholders, using position-based matching")
+        print(f"DEBUG: Handler keys: {list(handler_keys_set)}")
+        print(f"DEBUG: HTML placeholders: {html_placeholders}")
+        handler_names = list(handlers_with_js.keys())
+        handlers_remapped = {}
+        for i, placeholder in enumerate(html_placeholders):
+            if i < len(handler_names):
+                handlers_remapped[placeholder] = handlers_with_js[handler_names[i]]
+                print(f"DEBUG: Mapped {placeholder} to {handler_names[i]}")
+        handlers_with_js = handlers_remapped
+    
+    print(f"DEBUG: Final handlers dict keys: {list(handlers_with_js.keys())}")
+    
+    # Use the handlers with JavaScript strings
+    handlers = handlers_with_js
     
     # Default event type is 'click'
     if event_types is None:
         event_types = {name: 'click' for name in handlers}
     
     script = f"""
+
 // Handler registration for component: {component_id}
 (function() {{
-    // Safety check: Ensure NextPyActionRuntime exists
-    if (typeof window.NextPyActionRuntime === 'undefined') {{
-        console.error('NextPyActionRuntime not found. Skipping handler registration for component: {component_id}');
-        return;
-    }}
-    
-    const componentId = '{component_id}';
-    const component = window.nextpyComponents?.[componentId];
-    
-    if (!component) {{
-        console.warn('Component not found: ' + componentId);
-        return;
-    }}
-    
     // Store handlers on the component
-    component._handlers = {{}};
+    window.nextpyComponents = window.nextpyComponents || {{}};
+    const componentId = '{component_id}';
+    
+    // Wait for component to be registered (polling approach)
+    function registerHandlers() {{
+        const component = window.nextpyComponents[componentId];
+        
+        if (!component) {{
+            // Component not yet registered, retry after short delay
+            setTimeout(registerHandlers, 50);
+            return;
+        }}
+        
+        // Component found, register handlers
+        component._handlers = component._handlers || {{}};
 """
     
     for handler_name, handler_body in handlers.items():
@@ -394,23 +415,142 @@ def generate_handler_registration_script(
             js_body = python_code_to_js(handler_body, state_keys)
             event_type = event_types.get(handler_name, 'click')
         
+        # Wrap js_body in IIFE for safety to prevent broken injection
+        safe_js_body = f"""
+(() => {{
+    try {{
+        {js_body}
+    }} catch (innerError) {{
+        console.error('Inner error in handler {handler_name}:', innerError);
+        throw innerError;
+    }}
+}})();
+"""
+        
         # Create the handler function with error handling
         script += f"""
     // Handler: {handler_name} (event: {event_type})
     component._handlers['{handler_name}'] = function(e) {{
+        console.log('Handler called: {handler_name}');
         try {{
-            {js_body}
+            {safe_js_body}
         }} catch (error) {{
             console.error('Error in handler {handler_name}:', error);
             console.error('Event:', e);
         }}
     }};
+"""
     
-    // IMPROVED: Register with all matching elements using data-handler
-    // Supports multiple event types: data-handler-click, data-handler-change, etc.
-    document.querySelectorAll('[data-handler="{handler_name}"], [data-handler-{event_type}="{handler_name}"]').forEach(el => {{
-        el.addEventListener('{event_type}', component._handlers['{handler_name}'].bind(component));
-    }});
+    
+    # Add global event delegation system
+    script += """
+    // Global event delegation system - handles all events dynamically
+    function setupEventDelegation() {
+        // Delegate click events
+        document.addEventListener('click', function(e) {
+            console.log('Click detected on:', e.target);
+            const el = e.target.closest('[data-handler-click]');
+            console.log('Found data-handler-click element:', el);
+            if (!el) return;
+
+            const handlerName = el.getAttribute('data-handler-click');
+            console.log('Handler name:', handlerName);
+            
+            // Fallback component ID lookup - try multiple sources
+            let componentId = el.closest('[data-component-id]')?.getAttribute('data-component-id');
+            console.log('Component ID from element:', componentId);
+            if (!componentId) {
+                componentId = document.body.getAttribute('data-component-id');
+                console.log('Component ID from body:', componentId);
+            }
+            if (!componentId) {
+                const componentIds = Object.keys(window.nextpyComponents || {});
+                console.log('Available component IDs:', componentIds);
+                if (componentIds.length > 0) {
+                    componentId = componentIds[0];
+                }
+            }
+            
+            if (!componentId) return;
+
+            const component = window.nextpyComponents?.[componentId];
+            console.log('Component found:', component);
+            if (!component) return;
+
+            const handler = component._handlers?.[handlerName];
+            console.log('Handler found:', handler);
+            if (handler) handler.call(component, e);
+        });
+
+        // Delegate change events
+        document.addEventListener('change', function(e) {
+            const el = e.target.closest('[data-handler-change]');
+            if (!el) return;
+
+            const handlerName = el.getAttribute('data-handler-change');
+            
+            // Fallback component ID lookup
+            let componentId = el.closest('[data-component-id]')?.getAttribute('data-component-id');
+            if (!componentId) {
+                componentId = document.body.getAttribute('data-component-id');
+            }
+            if (!componentId) {
+                const componentIds = Object.keys(window.nextpyComponents || {});
+                if (componentIds.length > 0) {
+                    componentId = componentIds[0];
+                }
+            }
+            
+            if (!componentId) return;
+
+            const component = window.nextpyComponents?.[componentId];
+            if (!component) return;
+
+            const handler = component._handlers?.[handlerName];
+            if (handler) handler.call(component, e);
+        });
+
+        // Delegate submit events
+        document.addEventListener('submit', function(e) {
+            const el = e.target.closest('[data-handler-submit]');
+            if (!el) return;
+
+            const handlerName = el.getAttribute('data-handler-submit');
+            
+            // Fallback component ID lookup
+            let componentId = el.closest('[data-component-id]')?.getAttribute('data-component-id');
+            if (!componentId) {
+                componentId = document.body.getAttribute('data-component-id');
+            }
+            if (!componentId) {
+                const componentIds = Object.keys(window.nextpyComponents || {});
+                if (componentIds.length > 0) {
+                    componentId = componentIds[0];
+                }
+            }
+            
+            if (!componentId) return;
+
+            const component = window.nextpyComponents?.[componentId];
+            if (!component) return;
+
+            const handler = component._handlers?.[handlerName];
+            if (handler) {
+                e.preventDefault();
+                handler.call(component, e);
+            }
+        });
+    }
+
+    // Setup event delegation once
+    if (!window.__nextpyEventDelegationSetup) {
+        setupEventDelegation();
+        window.__nextpyEventDelegationSetup = true;
+    }
+    }
+    
+    // Start polling for component registration
+    registerHandlers();
 """
     
     script += """
@@ -419,7 +559,7 @@ def generate_handler_registration_script(
     return script
 
 
-def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], state_keys: Optional[List[str]] = None) -> str:
+def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], state_keys: Optional[List[str]] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
     """
     Convert onClick/onChange/etc. attributes from JSX to data-handler format.
     
@@ -434,6 +574,24 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
     - on{EventName}={handler} -> data-handler-{eventname}="handler"
     - {variable} -> data-bind="textContent:state_key"
     """
+    print(f"DEBUG convert_handler_attributes_in_html: Input HTML length={len(html)}, handlers={list(handlers.keys())}, state_keys={state_keys}")
+    
+    # DEBUG: Show sample of HTML with create_on attributes
+    import re
+    create_on_samples = re.findall(r'create_on\w+\s*=\s*[^>]+', html[:1000])
+    print(f"DEBUG: Found create_on patterns in HTML: {create_on_samples}")
+    
+    # DEBUG: Show actual button HTML
+    button_samples = re.findall(r'<button[^>]*create_on[^>]*>.*?</button>', html[:1000], re.DOTALL)
+    print(f"DEBUG: Button HTML samples: {button_samples[:2] if button_samples else 'None'}")
+    
+    # DEBUG: Show state variable patterns in HTML
+    state_var_samples = re.findall(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}', html[:1000])
+    print(f"DEBUG: Found state variable patterns: {state_var_samples}")
+
+    # DEBUG: Show actual HTML content around state variables
+    count_samples = re.findall(r'[^>]*count[^<]*', html[:1000], re.IGNORECASE)
+    print(f"DEBUG: HTML samples with 'count': {count_samples[:3] if count_samples else 'None'}")
         
     # Pattern 1: onClick={handler_name} (JSX format)
     # Matches: onClick, onChange, onSubmit, onFocus, onBlur, onMouseEnter, onclick, onchange, etc.
@@ -445,8 +603,8 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
         
         # Only replace if it's a known handler
         if handler_name in handlers:
-            # Return data-handler attribute with event type and default onclick behavior
-            return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+            # Return ONLY data-handler attribute - NO onclick
+            return f'data-handler-{event_name}="{handler_name}"'
         return match.group(0)
     
     html = re.sub(jsx_pattern, replace_jsx_event_handler, html)
@@ -461,24 +619,30 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
         
         # Only replace if it's a known handler
         if handler_name in handlers:
-            # Return data-handler attribute with event type and default onclick behavior
-            return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+            # Return ONLY data-handler attribute - NO onclick
+            return f'data-handler-{event_name}="{handler_name}"'
         return match.group(0)
     
     html = re.sub(html_pattern, replace_html_event_handler, html)
     
     # Pattern 1c: create_onclick="python_call_..." or onclick="python_call_..." in rendered HTML
-    python_call_pattern = r'\b(?:create_on|on)([A-Za-z][a-zA-Z0-9]*)\s*=\s*"([^"]*python_[^"]*)"'
+    # ALWAYS convert these to data-handler format regardless of handlers dict
+    python_call_pattern = r'(?:create_on|on)([A-Za-z][a-zA-Z0-9]*)\s*=\s*"([^"]*python_call_lambda_[^"]*)"'
     
     def replace_python_call_handler(match):
         event_name = match.group(1).lower()
         handler_value = html_module.unescape(match.group(2))
         
-        if handler_value in handlers:
-            return f'data-handler-{event_name}="{handler_value}" on{event_name.capitalize()}="return false;"'
-        return match.group(0)
+        replacement = f'data-handler-{event_name}="{handler_value}"'
+        print(f"DEBUG: python_call pattern matched: event={event_name}, handler={handler_value}, replacement={replacement}")
+        
+        # ALWAYS convert to data-handler - don't check if in handlers dict
+        # The python_call_lambda_* placeholders will be resolved at runtime
+        return replacement
     
     html = re.sub(python_call_pattern, replace_python_call_handler, html)
+    print(f"DEBUG: After python_call pattern, HTML contains create_on: {'create_on' in html}")
+    
     # Matches: create_onclick, create_onchange, create_onsubmit, etc.
     create_on_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(\w+)\}'
     
@@ -486,13 +650,64 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
         event_name = match.group(1)  # "click", "change", etc.
         handler_name = match.group(2)
         
+        print(f"DEBUG: create_on pattern matched: event={event_name}, handler={handler_name}")
+        
         # Only replace if it's a known handler
         if handler_name in handlers:
-            # Return data-handler attribute with event type and default onclick behavior
-            return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+            # Return ONLY data-handler attribute - NO onclick
+            return f'data-handler-{event_name}="{handler_name}"'
         return match.group(0)
     
     html = re.sub(create_on_pattern, replace_create_on_handler, html)
+    print(f"DEBUG: After create_on pattern, HTML contains create_on: {'create_on' in html}")
+    
+    # Pattern 2b: create_onclick={lambda ...} (inline lambda with create_on)
+    create_lambda_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(lambda[^}]+)\}'
+    
+    def replace_create_lambda_handler(match):
+        event_name = match.group(1)  # "click", "change", etc.
+        lambda_code = match.group(2).strip()
+        
+        print(f"DEBUG: create_on lambda pattern matched: event={event_name}, lambda={lambda_code[:50]}")
+        
+        # Generate stable handler name using SHA256 to match component.py
+        handler_name = "create_lambda_" + hashlib.sha256(lambda_code.encode()).hexdigest()[:10]
+        
+        # Convert lambda to JavaScript if not already in handlers
+        if handler_name not in handlers:
+            try:
+                js_code = python_code_to_js(lambda_code, state_keys)
+                handlers[handler_name] = js_code
+                print(f"DEBUG: Added create_lambda handler: {handler_name}")
+            except Exception as e:
+                # If conversion fails, keep original
+                print(f"DEBUG: create_lambda conversion failed: {e}")
+                return match.group(0)
+        
+        # Return ONLY data-handler attribute - NO onclick
+        return f'data-handler-{event_name}="{handler_name}"'
+    
+    html = re.sub(create_lambda_pattern, replace_create_lambda_handler, html)
+    print(f"DEBUG: After create_lambda pattern, HTML contains create_on: {'create_on' in html}")
+    
+    # Pattern 2c: create_onclick="&lt;lambda&gt;" (HTML-escaped lambda)
+    # This handles the case where _create_python_call_placeholder returns "<lambda>" which gets HTML-escaped
+    create_on_lambda_escaped_pattern = r'\bcreate_on([a-z]+)\s*=\s*"&lt;lambda&gt;"'
+    
+    def replace_create_on_lambda_escaped(match):
+        event_name = match.group(1)  # "click", "change", etc.
+        
+        print(f"DEBUG: create_on lambda escaped pattern matched: event={event_name}")
+        
+        # Generate a unique placeholder for this lambda
+        # Since we don't have the lambda code, we'll use a counter
+        handler_name = f"python_call_lambda_{hashlib.sha256(event_name.encode()).hexdigest()[:10]}"
+        
+        # Return data-handler attribute
+        return f'data-handler-{event_name}="{handler_name}"'
+    
+    html = re.sub(create_on_lambda_escaped_pattern, replace_create_on_lambda_escaped, html)
+    print(f"DEBUG: After create_on lambda escaped pattern, HTML contains create_on: {'create_on' in html}")
     
     # Pattern 3: onClick={lambda ...} (inline lambda handlers)
     # Matches: onClick={lambda e: ...}, onclick={lambda e: ...}, etc.
@@ -502,8 +717,8 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
         event_name = match.group(1).lower()  # "Click" -> "click", "click" -> "click"
         lambda_code = match.group(2).strip()
         
-        # Generate unique handler name
-        handler_name = f"lambda_handler_{abs(hash(lambda_code))}"
+        # Generate stable handler name using SHA256 to match component.py
+        handler_name = "lambda_" + hashlib.sha256(lambda_code.encode()).hexdigest()[:10]
         
         # Convert lambda to JavaScript if not already in handlers
         if handler_name not in handlers:
@@ -514,8 +729,8 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
                 # If conversion fails, keep original
                 return match.group(0)
         
-        # Return data-handler attribute
-        return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+        # Return ONLY data-handler attribute - NO onclick
+        return f'data-handler-{event_name}="{handler_name}"'
     
     html = re.sub(lambda_pattern, replace_lambda_handler, html)
     
@@ -526,8 +741,8 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
         event_name = match.group(1)  # "click", "change", etc.
         lambda_code = match.group(2).strip()
         
-        # Generate unique handler name
-        handler_name = f"create_lambda_handler_{abs(hash(lambda_code))}"
+        # Generate stable handler name using SHA256 to match component.py
+        handler_name = "create_lambda_" + hashlib.sha256(lambda_code.encode()).hexdigest()[:10]
         
         # Convert lambda to JavaScript if not already in handlers
         if handler_name not in handlers:
@@ -538,32 +753,79 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
                 # If conversion fails, keep original
                 return match.group(0)
         
-        # Return data-handler attribute
-        return f'data-handler-{event_name}="{handler_name}" on{event_name.capitalize()}="return false;"'
+        # Return ONLY data-handler attribute - NO onclick
+        return f'data-handler-{event_name}="{handler_name}"'
     
     html = re.sub(create_lambda_pattern, replace_create_lambda_handler, html)
     
-    # Pattern 5: Add data bindings for state variables
-    if state_keys:
+    # Pattern 5: Add data-bind attributes to state values in HTML
+    # Replace state values with spans containing data-bind attributes
+    # This preserves surrounding static text
+    if state_keys and initial_state:
+        # First, protect all HTML attribute values to prevent wrapping inside attributes
+        # Store them in a dictionary with unique placeholders
+        protected_attrs = {}
+        attr_placeholder_counter = 0
+
+        def protect_attr_values(match):
+            nonlocal attr_placeholder_counter
+            attr_value = match.group(0)
+            placeholder = f"__ATTR_PLACEHOLDER_{attr_placeholder_counter}__"
+            protected_attrs[placeholder] = attr_value
+            attr_placeholder_counter += 1
+            return placeholder
+
+        # Protect all attribute values (anything between quotes after =)
+        html = re.sub(r'=\s*["\'][^"\']*["\']', protect_attr_values, html)
+
+        # Now apply data-binding wrapping to the remaining content (which is not inside attributes)
         for state_key in state_keys:
-            # Find {state_key} patterns and add data binding
-            pattern = rf'\{{\s*{state_key}\s*\}}'
-            def add_binding(match):
-                # Generate unique ID for this binding
-                binding_id = f"bind_{state_key}_{abs(hash(match.group(0)))}"
-                return f'<span id="{binding_id}" data-bind="textContent:{state_key}">{{{state_key}}}</span>'
-            
-            html = re.sub(pattern, add_binding, html)
+            state_value = initial_state.get(state_key, '')
+            if state_value is None or state_value == '':
+                continue
+
+            # Handle different value types appropriately
+            if isinstance(state_value, (list, dict)):
+                # For complex types, use JSON serialization for the pattern
+                import json
+                state_value_str = json.dumps(state_value)
+                binding_type = 'innerHTML'  # Use innerHTML for complex types
+            else:
+                state_value_str = str(state_value)
+                binding_type = 'textContent'
+
+            # Replace the state value with a span containing data-bind attribute
+            pattern = rf'\b{re.escape(state_value_str)}\b'
+
+            def wrap_value_with_binding(match):
+                value = match.group(0)
+                return f'<span data-bind="{binding_type}:{state_key}">{value}</span>'
+
+            html = re.sub(pattern, wrap_value_with_binding, html)
+            print(f"DEBUG: Wrapped state value '{state_value_str}' with data-bind for key '{state_key}' (type: {binding_type})")
+
+        # Restore the protected attribute values
+        for placeholder, original_attr in protected_attrs.items():
+            html = html.replace(placeholder, original_attr)
     
     # Pattern 6: data-event="click:handler_name" format (alternative syntax)
     # This allows more flexible specification if developer uses this pattern
     
+    # FINAL CLEANUP: Remove any remaining create_on attributes that weren't converted
+    html = re.sub(r'\s*create_on\w+\s*=\s*"[^"]*"', '', html)
+    print(f"DEBUG: After final cleanup, HTML contains create_on: {'create_on' in html}")
+    
+    # DEBUG: Check if data-bind attributes are in HTML
+    data_bind_count = len(re.findall(r'data-bind=', html))
+    print(f"DEBUG: HTML contains {data_bind_count} data-bind attributes")
+    
+    print(f"DEBUG convert_handler_attributes_in_html: Final HTML contains create_on: {'create_on' in html}, contains data-handler: {'data-handler' in html}")
     return html
 
 
 # Import after defining helper functions
 from ..components.component import component as base_component
-from .integration import hydrate_component, get_component_hydrator
+from .integration import get_component_hydrator
 
 
 def interactive_component(func: Callable) -> Callable:
@@ -647,7 +909,6 @@ def interactive_component(func: Callable) -> Callable:
                     else:
                         i += 1
             
-            print(f"DEBUG: Found {len(handlers)} handlers: {list(handlers.keys())}")
         except Exception as e:
             print(f"DEBUG: Exception in handler extraction: {e}")
             handlers = {}
@@ -655,28 +916,28 @@ def interactive_component(func: Callable) -> Callable:
         if not handlers:
             try:
                 handlers = extract_handler_functions(func)
-                print(f"DEBUG: Fallback found {len(handlers)} handlers: {list(handlers.keys())}")
             except Exception as e:
                 print(f"DEBUG: Fallback exception in handler extraction: {e}")
                 handlers = {}
+        
+        # Extract create_on handlers FIRST to get python_call_lambda_* placeholders
+        try:
+            create_handlers, _ = extract_create_handler_assignments(func, handlers)
+            if create_handlers:
+                print(f"DEBUG: create_handlers keys: {list(create_handlers.keys())}")
+                handlers.update(create_handlers)
+        except Exception as e:
+            print(f"DEBUG: create_on handler extraction failed: {e}")
         
         # Extract handlers using new AST-based compiler
         try:
             from ..compiler.handler_compiler import extract_handlers_compiled
             ast_handlers = extract_handlers_compiled(func, func.__name__)
             if ast_handlers:
+                print(f"DEBUG: AST handlers keys: {list(ast_handlers.keys())}")
                 handlers.update(ast_handlers)
-                print(f"DEBUG: Added AST-based handlers: {list(ast_handlers.keys())}")
         except Exception as e:
             print(f"DEBUG: Failed AST-based handler extraction: {e}")
-            # Fallback to old method
-            try:
-                create_handlers, _ = extract_create_handler_assignments(func, handlers)
-                if create_handlers:
-                    handlers.update(create_handlers)
-                    print(f"DEBUG: Fallback added create_on handlers: {list(create_handlers.keys())}")
-            except Exception as e2:
-                print(f"DEBUG: Fallback handler extraction failed: {e2}")
         
         # Get the HTML output with interactive handler context
         if hasattr(base_component_result, 'to_html'):
@@ -691,28 +952,62 @@ def interactive_component(func: Callable) -> Callable:
             html = str(base_component_result)
         
         # Extract state keys from the component for better conversion
+        import re
         try:
+            # Try to get source from function first
             source = inspect.getsource(func)
             # Match useState patterns to get state variable names
             state_pattern = r'\[(\w+),\s*set\w+\]\s*=\s*useState'
             state_keys = re.findall(state_pattern, source)
-        except (OSError, TypeError):
-            state_keys = []
+            print(f"DEBUG: Extracted state_keys from source: {state_keys}")
+        except (OSError, TypeError) as e:
+            print(f"DEBUG: Could not extract state_keys from source: {e}")
+            # Fallback: try to read from PSX file using the same logic as EnhancedHandlerExtractor
+            try:
+                # Get the module name from the function
+                module = inspect.getmodule(func)
+                if module and module.__name__:
+                    module_name = module.__name__.split('.')[-1]
+                    # Try to find the PSX file in pages directory
+                    import os
+                    pages_path = os.path.join(os.getcwd(), 'pages')
+                    psx_file = os.path.join(pages_path, f'{module_name}.psx')
+                    
+                    if os.path.exists(psx_file):
+                        with open(psx_file, 'r') as f:
+                            source = f.read()
+                            state_pattern = r'\[(\w+),\s*set\w+\]\s*=\s*useState'
+                            state_keys = re.findall(state_pattern, source)
+                            print(f"DEBUG: Extracted state_keys from PSX file: {state_keys}")
+                    else:
+                        print(f"DEBUG: PSX file not found: {psx_file}")
+                        state_keys = []
+                else:
+                    state_keys = []
+            except Exception as e:
+                print(f"DEBUG: Could not extract state_keys from file: {e}")
+                state_keys = []
+        
+        print(f"DEBUG: state_keys passed to convert_handler_attributes_in_html: {state_keys}")
+        
+        # Register component with the generated ID
+        from .integration import get_component_hydrator
+        hydrator = get_component_hydrator()
+        
+        # Get initial state for data-bind pattern matching
+        metadata = hydrator.extract_component_metadata(func)
+        print(f"DEBUG: Extracted metadata state: {metadata['state']}")
+        initial_state = metadata['state']
         
         # Convert handler attributes to data-handler attributes with dynamic targeting
-        html = convert_handler_attributes_in_html(html, handlers, state_keys)
+        html = convert_handler_attributes_in_html(html, handlers, state_keys, initial_state)
         
         # Get engine first to generate consistent component ID
         from .engine import get_hydration_engine
         engine = get_hydration_engine()
         component_id = engine.generate_component_id()
         
-        # Register component with the generated ID
-        from .integration import get_component_hydrator
-        hydrator = get_component_hydrator()
-        
         # Manually register component to ensure consistent ID
-        metadata = hydrator.extract_component_metadata(func)
         component_data = {
             'name': metadata['name'],
             'state': metadata['state'],
@@ -720,6 +1015,7 @@ def interactive_component(func: Callable) -> Callable:
             'effects': metadata['effects'],
             'props': props or {},
         }
+        print(f"DEBUG: Component data state: {component_data['state']}")
         # Override the generated ID with our consistent one
         original_id = engine.register_component(component_data)
         engine.contexts[component_id] = engine.contexts[original_id]
@@ -727,11 +1023,12 @@ def interactive_component(func: Callable) -> Callable:
         
         # Wrap HTML with hydration data using consistent ID
         state = metadata['state']
+        print(f"DEBUG: State passed to generate_html_wrapper: {state}")
         hydrated_html = engine.generate_html_wrapper(component_id, html, state)
         
         # Generate scripts
         full_script = engine.generate_hydration_script()
-        handler_script = generate_handler_registration_script(handlers, component_id, state_keys=state_keys)
+        handler_script = generate_handler_registration_script(handlers, component_id, state_keys=state_keys, html=html)
         hydration_script = hydrator.generate_hydration_script()
         
         # Combine all scripts in correct order

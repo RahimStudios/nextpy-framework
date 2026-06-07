@@ -60,14 +60,18 @@ class ActionExecutor:
         """Execute a structured action"""
         action_type = action.get("type")
         data = action.get("data", {})
-        
+
         try:
             if action_type == "SET_STATE":
                 return self._execute_set_state(data, component_id)
+            elif action_type == "SET_STATE_BATCH":
+                return self._execute_set_state_batch(data, component_id)
             elif action_type == "GET_STATE":
                 return self._execute_get_state(data, component_id)
             elif action_type == "CALL_FUNCTION":
                 return self._execute_call_function(data)
+            elif action_type == "CALL_METHOD":
+                return self._execute_call_method(data, component_id)
             elif action_type == "BINARY_OP":
                 return self._execute_binary_op(data)
             elif action_type == "UNARY_OP":
@@ -90,6 +94,22 @@ class ActionExecutor:
                 return self._execute_index(data)
             elif action_type == "ATTRIBUTE":
                 return self._execute_attribute(data)
+            elif action_type == "FOR_LOOP":
+                return self._execute_for_loop(data, component_id)
+            elif action_type == "WHILE_LOOP":
+                return self._execute_while_loop(data, component_id)
+            elif action_type == "BREAK":
+                return self._execute_break()
+            elif action_type == "CONTINUE":
+                return self._execute_continue()
+            elif action_type == "TRY":
+                return self._execute_try(data, component_id)
+            elif action_type == "RETURN":
+                return self._execute_return(data)
+            elif action_type == "LAMBDA":
+                return self._execute_lambda(data)
+            elif action_type == "JSX_UPDATE":
+                return self._execute_jsx_update(data, component_id)
             else:
                 return None
         except Exception as e:
@@ -101,12 +121,51 @@ class ActionExecutor:
         """Execute SET_STATE action"""
         key = data.get("key")
         value = self._evaluate_expression(data.get("value"))
-        
+
         if component_id and component_id in self.components:
             self.components[component_id].set(key, value)
         else:
             # Fallback to global state
             self.global_state[key] = value
+
+    def _execute_set_state_batch(self, data: Dict[str, Any], component_id: Optional[str] = None) -> None:
+        """Execute SET_STATE_BATCH action"""
+        updates = data.get("updates", [])
+
+        if component_id and component_id in self.components:
+            component = self.components[component_id]
+            for update in updates:
+                key = update.get("key")
+                value = self._evaluate_expression(update.get("value"))
+                component.set(key, value)
+        else:
+            for update in updates:
+                key = update.get("key")
+                value = self._evaluate_expression(update.get("value"))
+                self.global_state[key] = value
+
+    def _execute_call_method(self, data: Dict[str, Any], component_id: Optional[str] = None) -> Any:
+        """Execute CALL_METHOD action"""
+        object_name = data.get("object")
+        method = data.get("method")
+        args = [self._evaluate_expression(arg) for arg in data.get("args", [])]
+        kwargs = {k: self._evaluate_expression(v) for k, v in data.get("kwargs", {}).items()}
+
+        # Get the object from state
+        if component_id and component_id in self.components:
+            obj = self.components[component_id].get(object_name)
+        else:
+            obj = self.global_state.get(object_name)
+
+        if obj is None:
+            raise ValueError(f"Object '{object_name}' not found")
+
+        # Call the method
+        if hasattr(obj, method):
+            method_func = getattr(obj, method)
+            return method_func(*args, **kwargs)
+        else:
+            raise ValueError(f"Method '{method}' not found on object '{object_name}'")
     
     def _execute_get_state(self, data: Dict[str, Any], component_id: Optional[str] = None) -> Any:
         """Execute GET_STATE action"""
@@ -204,9 +263,11 @@ class ActionExecutor:
         left = self._evaluate_expression(data.get("left"))
         ops = data.get("ops", [])
         comparators = [self._evaluate_expression(c) for c in data.get("comparators", [])]
-        
+
         result = True
         for i, (op, comparator) in enumerate(zip(ops, comparators)):
+            left_val = left if i == 0 else comparators[i - 1]
+
             if i == 0:
                 if op == "==":
                     result = left == comparator
@@ -231,9 +292,20 @@ class ActionExecutor:
                 else:
                     raise ValueError(f"Unknown comparison operator: {op}")
             else:
-                # Chain comparisons (not fully implemented)
-                pass
-        
+                # Chain comparisons
+                if op == "<":
+                    result = result and left_val < comparator
+                elif op == "<=":
+                    result = result and left_val <= comparator
+                elif op == ">":
+                    result = result and left_val > comparator
+                elif op == ">=":
+                    result = result and left_val >= comparator
+                elif op == "==":
+                    result = result and left_val == comparator
+                elif op == "!=":
+                    result = result and left_val != comparator
+
         return result
     
     def _execute_boolean_op(self, data: Dict[str, Any]) -> bool:
@@ -257,11 +329,17 @@ class ActionExecutor:
         """Execute CONSTANT action"""
         return data.get("value")
     
-    def _execute_variable(self, data: Dict[str, Any]) -> Any:
+    def _execute_variable(self, data: Dict[str, Any], component_id: Optional[str] = None) -> Any:
         """Execute VARIABLE action"""
         name = data.get("name")
-        # Check component state first, then global state
-        # This would need component_id context in real implementation
+
+        # Check component state first
+        if component_id and component_id in self.components:
+            value = self.components[component_id].get(name)
+            if value is not None:
+                return value
+
+        # Check global state
         return self.global_state.get(name)
     
     def _execute_list(self, data: Dict[str, Any]) -> List[Any]:
@@ -273,11 +351,13 @@ class ActionExecutor:
         """Execute DICT action"""
         keys = data.get("keys", [])
         values = [self._evaluate_expression(v) for v in data.get("values", [])]
-        
+
         result = {}
         for i, (key, value) in enumerate(zip(keys, values)):
             if key is not None:
-                result[self._evaluate_expression(key)] = value
+                # Key is already an Action, evaluate it
+                evaluated_key = self._evaluate_expression(key)
+                result[evaluated_key] = value
             else:
                 # Handle **kwargs (not implemented)
                 pass
@@ -312,6 +392,72 @@ class ActionExecutor:
             "console_log": print,
             "alert": lambda msg: print(f"ALERT: {msg}"),
         })
+
+    def _execute_for_loop(self, data: Dict[str, Any], component_id: Optional[str] = None) -> Any:
+        """Execute FOR_LOOP action"""
+        # Placeholder implementation
+        # For loops require more complex execution context
+        pass
+
+    def _execute_while_loop(self, data: Dict[str, Any], component_id: Optional[str] = None) -> Any:
+        """Execute WHILE_LOOP action"""
+        # Placeholder implementation
+        # While loops require more complex execution context
+        pass
+
+    def _execute_break(self) -> None:
+        """Execute BREAK action"""
+        # Placeholder implementation
+        # Break requires loop context
+        raise BreakException()
+
+    def _execute_continue(self) -> None:
+        """Execute CONTINUE action"""
+        # Placeholder implementation
+        # Continue requires loop context
+        raise ContinueException()
+
+    def _execute_try(self, data: Dict[str, Any], component_id: Optional[str] = None) -> Any:
+        """Execute TRY action"""
+        # Placeholder implementation
+        # Try/except requires exception handling context
+        pass
+
+    def _execute_return(self, data: Dict[str, Any]) -> Any:
+        """Execute RETURN action"""
+        value = self._evaluate_expression(data.get("value"))
+        raise ReturnException(value)
+
+    def _execute_lambda(self, data: Dict[str, Any]) -> Any:
+        """Execute LAMBDA action"""
+        # Placeholder implementation
+        # Lambdas require function creation context
+        args = data.get("args", [])
+        body = data.get("body")
+        return lambda *args: self._evaluate_expression(body)
+
+    def _execute_jsx_update(self, data: Dict[str, Any], component_id: Optional[str] = None) -> None:
+        """Execute JSX_UPDATE action"""
+        # Placeholder implementation
+        # JSX updates require DOM manipulation context
+        pass
+
+
+class BreakException(Exception):
+    """Exception raised for break statements"""
+    pass
+
+
+class ContinueException(Exception):
+    """Exception raised for continue statements"""
+    pass
+
+
+class ReturnException(Exception):
+    """Exception raised for return statements"""
+    def __init__(self, value):
+        self.value = value
+        super().__init__()
 
 
 # Global executor instance

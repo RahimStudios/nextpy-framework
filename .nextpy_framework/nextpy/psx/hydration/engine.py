@@ -86,8 +86,12 @@ class HydrationEngine:
         set(key, value) {{
             const oldValue = this.state[key];
             this.state[key] = value;
+            console.log('StateManager.set:', key, '=', value, '(old:', oldValue, ')');
+            
+            // CRITICAL: ONLY ONE UPDATE PATH - notify subscribers which triggers updateBindings
             this.notifySubscribers(key, value, oldValue);
         }}
+
         
         subscribe(callback) {{
             this.subscribers.push(callback);
@@ -100,6 +104,7 @@ class HydrationEngine:
         }}
         
         notifySubscribers(key, newValue, oldValue) {{
+            // Notify all subscribers of state change
             this.subscribers.forEach(callback => {{
                 try {{
                     callback(key, newValue, oldValue);
@@ -107,6 +112,11 @@ class HydrationEngine:
                     console.error('State subscriber error:', error);
                 }}
             }});
+            
+            // CRITICAL: Auto-trigger component binding updates after state changes
+            if (this.component && this.component.updateBindings) {{
+                this.component.updateBindings();
+            }}
         }}
     }}
     
@@ -116,6 +126,7 @@ class HydrationEngine:
             this.id = id;
             this.element = document.getElementById(id);
             this.stateManager = new StateManager(initialState);
+            this.stateManager.component = this;  // CRITICAL: Set component reference
             this.unsubscribers = [];
             this.bindings = new Map();
             
@@ -127,6 +138,11 @@ class HydrationEngine:
             this.setupDataBindings();
             this.setupEventHandlers();
             this.setupEffects();
+            
+            // Register with global action runtime so _executeVariable resolves state
+            if (window.NextPyActionRuntime) {{
+                window.NextPyActionRuntime.registerComponent(id, {{ ...initialState }});
+            }}
         }}
         
         setupDataBindings() {{
@@ -234,6 +250,48 @@ class HydrationEngine:
             console.log('Effects setup for component:', this.id);
         }}
         
+        updateBindings() {{
+            // Update all DOM elements with data-bind attributes
+            if (!this.element) {{
+                console.error('updateBindings: No element found for component:', this.id);
+                return;
+            }}
+            
+            console.log('updateBindings: Starting for component:', this.id, 'with state:', this.stateManager.state);
+            
+            const boundElements = this.element.querySelectorAll('[data-bind]');
+            console.log('updateBindings: Found', boundElements.length, 'elements with data-bind');
+            
+            boundElements.forEach(el => {{
+                const binding = el.getAttribute('data-bind');
+                if (!binding) return;
+                
+                const [property, stateKey] = binding.split(':');
+                const value = this.stateManager.get(stateKey);
+
+                console.log('updateBindings: Updating element with binding:', binding, 'value:', value);
+
+                try {{
+                    if (property === 'textContent') {{
+                        el.textContent = String(value);
+                    }} else if (property === 'innerHTML') {{
+                        // For innerHTML, convert arrays/objects to JSON for proper display
+                        if (Array.isArray(value) || typeof value === 'object') {{
+                            el.innerHTML = JSON.stringify(value);
+                        }} else {{
+                            el.innerHTML = String(value);
+                        }}
+                    }} else if (property in el) {{
+                        el[property] = value;
+                    }}
+                }} catch (error) {{
+                    console.error('Binding update error:', error);
+                }}
+            }});
+            
+            console.log('Updated', boundElements.length, 'data bindings');
+        }}
+        
         destroy() {{
             // Cleanup all subscriptions
             this.unsubscribers.forEach(unsub => {{
@@ -327,7 +385,7 @@ class HydrationEngine:
         hydration_script = self.generate_hydration_script(component_id)
         
         return f"""
-<div id="{component_id}" class="nextpy-component">
+<div id="{component_id}" data-component-id="{component_id}" class="nextpy-component">
     {html_content}
 </div>
 <script>

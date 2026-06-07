@@ -1461,16 +1461,28 @@ def dict_to_query_string(params: Dict[str, Any]) -> str:
 
 def _create_python_call_placeholder(handler_func: Callable, prefix: str = 'python_call') -> str:
     func_name = getattr(handler_func, '__name__', 'handler')
+    
     if func_name == '<lambda>':
+        # Use SHA256 hash of lambda source code for deterministic placeholder generation
+        # This matches the handler compiler's placeholder generation logic
+        import ast
+        import hashlib
+        import re
         try:
-            source = inspect.getsource(handler_func)
-            match = re.search(r'lambda\b.*', source)
-            lambda_text = match.group(0).strip() if match else source.strip()
-            normalized = re.sub(r'\s+', ' ', lambda_text)
+            lambda_src = ast.unparse(handler_func).strip()
+            normalized = re.sub(r'\s+', ' ', lambda_src)
             digest = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
+            print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={digest}")
             return f"{prefix}_lambda_{digest}"
-        except (OSError, TypeError):
-            return f"{prefix}_lambda_{id(handler_func)}"
+        except Exception as e:
+            # Fallback to UUID if AST parsing fails
+            import uuid
+            handler_id = uuid.uuid4().hex[:16]
+            print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={handler_id}")
+            return f"{prefix}_lambda_{handler_id}"
+    
+    handler_id = abs(id(handler_func))
+    print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={handler_id}")
     return f"{prefix}_{func_name}"
 
 

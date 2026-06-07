@@ -4,6 +4,7 @@ Replacing regex-based compilation with AST-based action generation
 """
 
 import ast
+import re
 from typing import Dict, List, Any, Union, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -12,8 +13,10 @@ from enum import Enum
 class ActionType(Enum):
     """Structured action types"""
     SET_STATE = "SET_STATE"
+    SET_STATE_BATCH = "SET_STATE_BATCH"
     GET_STATE = "GET_STATE"
     CALL_FUNCTION = "CALL_FUNCTION"
+    CALL_METHOD = "CALL_METHOD"
     BINARY_OP = "BINARY_OP"
     UNARY_OP = "UNARY_OP"
     COMPARE_OP = "COMPARE_OP"
@@ -28,6 +31,15 @@ class ActionType(Enum):
     ATTRIBUTE = "ATTRIBUTE"
     CONSTANT = "CONSTANT"
     VARIABLE = "VARIABLE"
+    FOR_LOOP = "FOR_LOOP"
+    WHILE_LOOP = "WHILE_LOOP"
+    BREAK = "BREAK"
+    CONTINUE = "CONTINUE"
+    TRY = "TRY"
+    EXCEPT = "EXCEPT"
+    AWAIT = "AWAIT"
+    ASYNC_CALL = "ASYNC_CALL"
+    JSX_UPDATE = "JSX_UPDATE"
 
 
 @dataclass
@@ -63,7 +75,36 @@ class Action:
 
 class ActionCompiler:
     """AST-based action compiler replacing regex-based compilation"""
-    
+
+    # Built-in function mappings
+    python_builtins = {
+        'len': '__len__',
+        'str': 'String',
+        'int': 'parseInt',
+        'float': 'parseFloat',
+        'bool': 'Boolean',
+        'list': 'Array.from',
+        'dict': '__dict__',
+        'set': '__set__',
+        'tuple': '__tuple__',
+        'range': '__range__',
+        'enumerate': '__enumerate__',
+        'zip': '__zip__',
+        'sum': '__sum__',
+        'min': 'Math.min',
+        'max': 'Math.max',
+        'abs': 'Math.abs',
+        'round': 'Math.round',
+        'pow': 'Math.pow',
+        'sorted': '__sorted__',
+        'reversed': '__reversed__',
+        'any': '__any__',
+        'all': '__all__',
+        'map': '__map__',
+        'filter': '__filter__',
+        'print': 'console.log',
+    }
+
     def __init__(self):
         self.current_scope = {}
         self.handler_context = {}
@@ -147,43 +188,197 @@ class ActionCompiler:
     
     def _compile_call(self, node: ast.Call) -> Action:
         """Compile function call to action"""
-        func_name = self._get_function_name(node.func)
         args = [self._compile_expression(arg) for arg in node.args]
         kwargs = {kw.arg: self._compile_expression(kw.value) for kw in node.keywords if kw.arg}
-        
-        # Special handling for common functions
-        if func_name == 'setCount':
+
+        # Check if this is a method call using AST structure
+        if isinstance(node.func, ast.Attribute):
+            # This is a method call (e.g., name.upper)
+            object_expr = self._compile_expression(node.func.value)
+            method_name = node.func.attr
+
+            # Convert object expression to string representation
+            if isinstance(node.func.value, ast.Name):
+                object_name = node.func.value.id
+            else:
+                object_name = self._get_function_name(node.func.value)
+
+            # Convert Python method names to JavaScript equivalents
+            python_to_js_methods = {
+                # STRINGS
+                'upper': 'toUpperCase',
+                'lower': 'toLowerCase',
+                'casefold': 'toLowerCase',
+                'strip': 'trim',
+                'lstrip': 'trimStart',
+                'rstrip': 'trimEnd',
+                'split': 'split',
+                'join': 'join',
+                'replace': 'replace',
+                'find': 'indexOf',
+                'rfind': 'lastIndexOf',
+                'startswith': 'startsWith',
+                'endswith': 'endsWith',
+
+                # ARRAYS
+                'append': 'push',
+                'pop': 'pop',
+                'sort': 'sort',
+                'reverse': 'reverse',
+
+                # OBJECTS
+                'keys': 'keys',
+                'values': 'values',
+                'items': 'entries',
+                'get': 'get',
+
+                # MATH
+                'abs': 'abs',
+                'round': 'round',
+
+                # DATE
+                'timestamp': 'getTime',
+
+                # JSON
+                'loads': 'parse',
+                'dumps': 'stringify',
+
+                # SETS
+                'add': 'add',
+                'remove': 'delete',
+            }
+
+            # Special methods that require complex transformations
+            SPECIAL_METHODS = {
+                # String methods needing complex transforms
+                "capitalize": "_transform_capitalize",
+                "title": "_transform_title",
+                "swapcase": "__swapcase__",
+                "rsplit": "__rsplit__",
+                "splitlines": "__splitlines__",
+                "index": "__index__",
+                "rindex": "__rindex__",
+                "count": "__count__",
+                "isalnum": "__isalnum__",
+                "isalpha": "__isalpha__",
+                "isascii": "__isascii__",
+                "isdigit": "__isdigit__",
+                "isdecimal": "__isdecimal__",
+                "isnumeric": "__isnumeric__",
+                "islower": "__islower__",
+                "isupper": "__isupper__",
+                "isspace": "__isspace__",
+                "istitle": "__istitle__",
+                "center": "__center__",
+                "ljust": "__ljust__",
+                "rjust": "__rjust__",
+                "zfill": "__zfill__",
+                "partition": "__partition__",
+                "rpartition": "__rpartition__",
+                "encode": "__encode__",
+                "expandtabs": "__expandtabs__",
+                "removeprefix": "__removeprefix__",
+                "removesuffix": "__removesuffix__",
+
+                # List methods needing complex transforms
+                "extend": "__extend__",
+                "insert": "_transform_insert",
+                "remove": "_transform_remove",
+                "clear": "_transform_clear",
+                "index": "__list_index__",
+                "count": "__list_count__",
+                "copy": "__copy__",
+
+                # Dict methods needing complex transforms
+                "update": "__update__",
+                "pop": "__dict_pop__",
+                "popitem": "__popitem__",
+                "setdefault": "__setdefault__",
+                "clear": "__clear__",
+                "copy": "__dict_copy__",
+
+                # Set methods needing complex transforms
+                "discard": "__discard__",
+                "clear": "__set_clear__",
+                "union": "__union__",
+                "intersection": "__intersection__",
+                "difference": "__difference__",
+                "symmetric_difference": "__symmetric_difference__",
+                "issubset": "__issubset__",
+                "issuperset": "__issuperset__",
+                "isdisjoint": "__isdisjoint__",
+            }
+
+            # Handle special methods with complex transformations
+            if method_name in SPECIAL_METHODS:
+                transform_method = getattr(self, SPECIAL_METHODS[method_name])
+                return transform_method(object_name, args, kwargs)
+
+            # Convert method name if it's in the mapping
+            if method_name in python_to_js_methods:
+                method_name = python_to_js_methods[method_name]
+
             return Action(
-                type=ActionType.SET_STATE,
+                type=ActionType.CALL_METHOD,
                 data={
-                    "key": "count",
-                    "value": args[0] if args else {"type": "CONSTANT", "data": {"value": None}}
+                    "object": object_name,
+                    "method": method_name,
+                    "args": args,
+                    "kwargs": kwargs
                 }
             )
-        elif func_name == 'setName':
-            return Action(
-                type=ActionType.SET_STATE,
-                data={
-                    "key": "name", 
-                    "value": args[0] if args else {"type": "CONSTANT", "data": {"value": None}}
-                }
-            )
-        elif func_name == 'setLoading':
-            return Action(
-                type=ActionType.SET_STATE,
-                data={
-                    "key": "loading",
-                    "value": args[0] if args else {"type": "CONSTANT", "data": {"value": None}}
-                }
-            )
-        elif func_name == 'print':
-            return Action(
-                type=ActionType.PRINT,
-                data={
-                    "args": args
-                }
-            )
+        elif isinstance(node.func, ast.Name):
+            # This is a simple function call
+            func_name = node.func.id
+
+            # Special handling for common functions
+            setter_match = re.match(r'^set([A-Z]\w*)$', func_name)
+            if setter_match:
+                state_key = (
+                    setter_match.group(1)[0].lower() +
+                    setter_match.group(1)[1:]
+                )
+                return Action(
+                    type=ActionType.SET_STATE,
+                    data={
+                        "key": state_key,
+                        "value": args[0] if args else {
+                            "type": "CONSTANT",
+                            "data": {"value": None}
+                        }
+                    }
+                )
+            elif func_name in self.python_builtins:
+                # Handle built-in functions
+                js_func = self.python_builtins[func_name]
+                if func_name == 'print':
+                    return Action(
+                        type=ActionType.PRINT,
+                        data={
+                            "args": args
+                        }
+                    )
+                else:
+                    return Action(
+                        type=ActionType.CALL_FUNCTION,
+                        data={
+                            "function": js_func,
+                            "args": args,
+                            "kwargs": kwargs
+                        }
+                    )
+            else:
+                return Action(
+                    type=ActionType.CALL_FUNCTION,
+                    data={
+                        "function": func_name,
+                        "args": args,
+                        "kwargs": kwargs
+                    }
+                )
         else:
+            # Fallback for other function types
+            func_name = self._get_function_name(node.func)
             return Action(
                 type=ActionType.CALL_FUNCTION,
                 data={
@@ -411,6 +606,258 @@ class ActionCompiler:
             }
         )
     
+    def _transform_remove(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform list.remove() to splice with indexOf"""
+        # Python: items.remove("apple") -> JavaScript: items.splice(items.indexOf("apple"), 1)
+        return Action(
+            type=ActionType.CALL_METHOD,
+            data={
+                "object": object_name,
+                "method": "splice",
+                "args": [
+                    Action(
+                        type=ActionType.CALL_METHOD,
+                        data={
+                            "object": object_name,
+                            "method": "indexOf",
+                            "args": [args[0]] if args else [],
+                            "kwargs": {}
+                        }
+                    ),
+                    Action(
+                        type=ActionType.CONSTANT,
+                        data={"value": 1, "type": "int"}
+                    )
+                ],
+                "kwargs": kwargs
+            }
+        )
+
+    def _transform_insert(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform list.insert() to splice"""
+        # Python: items.insert(0, "first") -> JavaScript: items.splice(0, 0, "first")
+        if len(args) >= 2:
+            return Action(
+                type=ActionType.CALL_METHOD,
+                data={
+                    "object": object_name,
+                    "method": "splice",
+                    "args": [
+                        args[0],  # index
+                        Action(
+                            type=ActionType.CONSTANT,
+                            data={"value": 0, "type": "int"}
+                        ),  # delete count
+                        args[1]  # element to insert
+                    ],
+                    "kwargs": kwargs
+                }
+            )
+        return Action(
+            type=ActionType.CALL_METHOD,
+            data={
+                "object": object_name,
+                "method": "splice",
+                "args": args,
+                "kwargs": kwargs
+            }
+        )
+
+    def _transform_clear(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform list.clear() to length = 0"""
+        # Python: items.clear() -> JavaScript: items.length = 0
+        return Action(
+            type=ActionType.BINARY_OP,
+            data={
+                "left": Action(
+                    type=ActionType.ATTRIBUTE,
+                    data={
+                        "object": Action(
+                            type=ActionType.VARIABLE,
+                            data={"name": object_name}
+                        ),
+                        "attr": "length"
+                    }
+                ).to_dict(),
+                "op": "=",
+                "right": Action(
+                    type=ActionType.CONSTANT,
+                    data={"value": 0, "type": "int"}
+                ).to_dict()
+            }
+        )
+
+    def _transform_count(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform list.count() to filter().length"""
+        # Python: items.count("apple") -> JavaScript: items.filter(x => x === "apple").length
+        if args:
+            return Action(
+                type=ActionType.ATTRIBUTE,
+                data={
+                    "object": Action(
+                        type=ActionType.CALL_METHOD,
+                        data={
+                            "object": object_name,
+                            "method": "filter",
+                            "args": [
+                                Action(
+                                    type=ActionType.LAMBDA,
+                                    data={
+                                        "args": ["x"],
+                                        "body": Action(
+                                            type=ActionType.COMPARE_OP,
+                                            data={
+                                                "left": Action(
+                                                    type=ActionType.VARIABLE,
+                                                    data={"name": "x"}
+                                                ).to_dict(),
+                                                "ops": ["==="],
+                                                "comparators": [args[0].to_dict()]
+                                            }
+                                        ).to_dict()
+                                    }
+                                )
+                            ],
+                            "kwargs": {}
+                        }
+                    ),
+                    "attr": "length"
+                }
+            )
+        return Action(
+            type=ActionType.ATTRIBUTE,
+            data={
+                "object": Action(
+                    type=ActionType.VARIABLE,
+                    data={"name": object_name}
+                ).to_dict(),
+                "attr": "length"
+            }
+        )
+
+    def _transform_copy(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform list.copy() to spread operator"""
+        # Python: items.copy() -> JavaScript: [...items]
+        return Action(
+            type=ActionType.LIST,
+            data={
+                "elements": [
+                    Action(
+                        type=ActionType.VARIABLE,
+                        data={"name": object_name}
+                    )
+                ]
+            }
+        )
+
+    def _transform_capitalize(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform str.capitalize() to charAt(0).toUpperCase() + slice(1)"""
+        # Python: text.capitalize() -> JavaScript: text.charAt(0).toUpperCase() + text.slice(1)
+        return Action(
+            type=ActionType.BINARY_OP,
+            data={
+                "left": Action(
+                    type=ActionType.CALL_METHOD,
+                    data={
+                        "object": f"{object_name}.charAt(0)",
+                        "method": "toUpperCase",
+                        "args": [],
+                        "kwargs": {}
+                    }
+                ).to_dict(),
+                "op": "+",
+                "right": Action(
+                    type=ActionType.CALL_METHOD,
+                    data={
+                        "object": object_name,
+                        "method": "slice",
+                        "args": [
+                            Action(
+                                type=ActionType.CONSTANT,
+                                data={"value": 1, "type": "int"}
+                            )
+                        ],
+                        "kwargs": {}
+                    }
+                ).to_dict()
+            }
+        )
+
+    def _transform_title(self, object_name: str, args: List[Action], kwargs: Dict[str, Action]) -> Action:
+        """Transform str.title() to split().map().join()"""
+        # Python: text.title() -> JavaScript: text.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+        return Action(
+            type=ActionType.CALL_METHOD,
+            data={
+                "object": Action(
+                    type=ActionType.CALL_METHOD,
+                    data={
+                        "object": Action(
+                            type=ActionType.CALL_METHOD,
+                            data={
+                                "object": object_name,
+                                "method": "split",
+                                "args": [
+                                    Action(
+                                        type=ActionType.CONSTANT,
+                                        data={"value": " ", "type": "str"}
+                                    )
+                                ],
+                                "kwargs": {}
+                            }
+                        ),
+                        "method": "map",
+                        "args": [
+                            Action(
+                                type=ActionType.LAMBDA,
+                                data={
+                                    "args": ["word"],
+                                    "body": Action(
+                                        type=ActionType.BINARY_OP,
+                                        data={
+                                            "left": Action(
+                                                type=ActionType.CALL_METHOD,
+                                                data={
+                                                    "object": "word.charAt(0)",
+                                                    "method": "toUpperCase",
+                                                    "args": [],
+                                                    "kwargs": {}
+                                                }
+                                            ).to_dict(),
+                                            "op": "+",
+                                            "right": Action(
+                                                type=ActionType.CALL_METHOD,
+                                                data={
+                                                    "object": "word",
+                                                    "method": "slice",
+                                                    "args": [
+                                                        Action(
+                                                            type=ActionType.CONSTANT,
+                                                            data={"value": 1, "type": "int"}
+                                                        )
+                                                    ],
+                                                    "kwargs": {}
+                                                }
+                                            ).to_dict()
+                                        }
+                                    ).to_dict()
+                                }
+                            )
+                        ],
+                        "kwargs": {}
+                    }
+                ),
+                "method": "join",
+                "args": [
+                    Action(
+                        type=ActionType.CONSTANT,
+                        data={"value": " ", "type": "str"}
+                    )
+                ],
+                "kwargs": {}
+            }
+        )
+
     def _get_function_name(self, node: ast.AST) -> str:
         """Extract function name from AST node"""
         if isinstance(node, ast.Name):
