@@ -311,7 +311,9 @@ class PSXRuntime:
         attr_str = " " + " ".join(attrs) if attrs else ""
         
         if node.self_closing:
-            return f'<{node.tag}{attr_str} />'
+            # Ensure tag name is not empty
+            tag = node.tag if node.tag else 'div'
+            return f'<{tag}{attr_str} />'
             
         html_content = f'<{node.tag}{attr_str}>'
         html_content += self._render_node_list(node.children)

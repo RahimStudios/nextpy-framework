@@ -53,7 +53,8 @@ class PSXElement:
             key=self.key,
             self_closing=self.tag in {
                 'img', 'br', 'hr', 'input', 'meta', 'link', 'area', 'base', 'col',
-                'embed', 'source', 'track', 'wbr', 'command', 'keygen', 'menuitem', 'param'
+                'embed', 'source', 'track', 'wbr', 'command', 'keygen', 'menuitem', 'param',
+                'svg', 'path', 'rect', 'circle', 'ellipse', 'line', 'polygon', 'polyline'
             }
         )
     
@@ -111,6 +112,8 @@ class PSXParser:
     
     def parse_psx(self, psx_str: str, context: Dict[str, Any] = None) -> PSXNodeUnion:
         """Parse PSX string to production-grade AST node"""
+        import signal
+        
         context = context or {}
         
         # Update runtime context with new variables
@@ -122,23 +125,40 @@ class PSXParser:
         # Normalize whitespace for parsing while preserving original content if needed
         psx_str_stripped = psx_str.strip()
         
-        # Try to parse as fragment first, since fragments use special shorthand syntax
-        ast_node = self._parse_fragment(psx_str_stripped, context)
-        if ast_node:
-            return self.optimizer.optimize_node(ast_node)
-
-        # Try to parse as component next
-        ast_node = self._parse_component(psx_str_stripped, context)
-        if ast_node:
-            return self.optimizer.optimize_node(ast_node)
-
-        # Try to parse as element last
-        ast_node = self._parse_element(psx_str_stripped, context)
-        if ast_node:
-            return self.optimizer.optimize_node(ast_node)
+        # Add timeout to prevent infinite loops
+        def timeout_handler(signum, frame):
+            raise TimeoutError("PSX parsing timeout")
         
-        # Default to text node
-        return TextNode(content=psx_str)
+        # Set a 5-second timeout for parsing
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(5)
+        
+        try:
+            # Try to parse as fragment first, since fragments use special shorthand syntax
+            ast_node = self._parse_fragment(psx_str_stripped, context)
+            if ast_node:
+                return self.optimizer.optimize_node(ast_node)
+
+            # Try to parse as component next
+            ast_node = self._parse_component(psx_str_stripped, context)
+            if ast_node:
+                return self.optimizer.optimize_node(ast_node)
+
+            # Try to parse as element last
+            ast_node = self._parse_element(psx_str_stripped, context)
+            if ast_node:
+                return self.optimizer.optimize_node(ast_node)
+            
+            # Default to text node
+            return TextNode(content=psx_str)
+        except TimeoutError:
+            print(f"Warning: PSX parsing timeout for content starting with: {psx_str_stripped[:100]}...")
+            # Return text node as fallback
+            return TextNode(content=psx_str)
+        finally:
+            # Restore old signal handler
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
     
     def _parse_element(self, psx_str: str, context: Dict[str, Any]) -> Optional[ElementNode]:
         """Robust recursive element parser for minified JSX"""
@@ -148,12 +168,14 @@ class PSXParser:
         if not psx_str_stripped.startswith('<'):
             return None
         
+        # Always use recursive descent parser - regex fallback causes infinite loops
         try:
             element_node, final_index = self._parse_element_recursive(psx_str_stripped, 0, context)
             return element_node
         except Exception as e:
-            # Fallback to original method if recursive parsing fails
-            return self._parse_element_fallback(psx_str_stripped, context)
+            # Return None instead of fallback to prevent infinite loops
+            print(f"Parse error for element: {e}")
+            return None
     
     def _parse_element_recursive(self, code: str, index: int, context: Dict[str, Any]):
         """Recursive descent parser for JSX elements"""
@@ -168,10 +190,31 @@ class PSXParser:
         # Read attributes until closing '>' or '/>'
         attributes, events, spread_props, index = self._read_attributes(code, index, context)
         
-        # Check if self-closing
-        if index < len(code) and code[index-2:index] == '/>':
+        # Check if self-closing - look for '/>' before the closing '>'
+        # Also check if tag name is in self-closing list
+        self_closing_tags = {
+            'img', 'br', 'hr', 'input', 'meta', 'link', 'area', 'base', 'col',
+            'embed', 'source', 'track', 'wbr', 'command', 'keygen', 'menuitem', 'param'
+        }
+        
+        is_self_closing = False
+        # Check if the current position is after '/>'
+        if index >= 2 and code[index-2:index] == '/>':
+            is_self_closing = True
+        # Check if the next characters are '/>'
+        elif index + 1 < len(code) and code[index:index+2] == '/>':
+            is_self_closing = True
+            index += 2  # Skip the '/>'
+        elif tag_name.lower() in self_closing_tags:
+            # For self-closing tags, treat them as self-closing even if they don't have />
+            is_self_closing = True
+        
+        if is_self_closing:
+            # Debug: print tag name for self-closing tags
+            if not tag_name:
+                print(f"Warning: Empty tag name for self-closing element at index {index}")
             return ElementNode(
-                tag=tag_name,
+                tag=tag_name if tag_name else 'div',  # Fallback to div if empty
                 attributes=attributes,
                 events=events,
                 children=[],
@@ -179,16 +222,33 @@ class PSXParser:
                 spread_props=spread_props
             ), index
         
-        # Parse children recursively
+        # Parse children recursively with infinite loop protection
         children = []
+        max_iterations = 10000  # Prevent infinite loops
+        iterations = 0
+        start_index = index
+        
         while index < len(code) and not code.startswith(f"</{tag_name}>", index):
+            iterations += 1
+            if iterations > max_iterations:
+                print(f"Warning: Max iterations reached while parsing children for tag '{tag_name}'")
+                break
+            
             # Process Python logic for the current segment of code before parsing nodes
             # This ensures nested control flow is handled correctly
             remaining_code = code[index:]
             # Find next tag or expression to limit processing scope if possible, 
             # but for now, we process the logic which is safe as it uses brace matching.
             
-            child, index = self._parse_node(code, index, context)
+            child, new_index = self._parse_node(code, index, context)
+            
+            # Prevent infinite loop - if index doesn't advance, break
+            if new_index <= index:
+                print(f"Warning: Parser stuck at index {index} for tag '{tag_name}'")
+                break
+            
+            index = new_index
+            
             if child:
                 if isinstance(child, TextNode):
                     # Re-process text nodes for any missed logic
@@ -285,6 +345,10 @@ class PSXParser:
             else:
                 # Boolean attribute
                 attributes[key] = True
+        
+        # Skip the closing '>' character
+        if index < len(code) and code[index] == '>':
+            index += 1
         
         return attributes, events, spread_props, index
     
@@ -574,21 +638,39 @@ class PSXParser:
         return children
     
     def _find_matching_tag(self, text: str, tag_name: str, start_pos: int) -> int:
-        """Find the position of the matching closing tag"""
+        """Find the position of the matching closing tag - simplified without regex"""
+        # List of self-closing tags that don't need closing tags
+        self_closing_tags = {
+            'img', 'br', 'hr', 'input', 'meta', 'link', 'area', 'base', 'col',
+            'embed', 'source', 'track', 'wbr', 'command', 'keygen', 'menuitem', 'param'
+        }
+        
+        # If it's a self-closing tag, return -1 immediately
+        if tag_name.lower() in self_closing_tags:
+            return -1
+        
         depth = 1
         i = start_pos
         n = len(text)
+        max_iterations = 10000
+        iterations = 0
+        open_tag = f'<{tag_name}'
+        close_tag = f'</{tag_name}>'
         
         while i < n and depth > 0:
-            # Look for opening tag
-            open_tag = f'<{tag_name}'
-            close_tag = f'</{tag_name}>'
+            iterations += 1
+            if iterations > max_iterations:
+                print(f"Warning: Max iterations reached in _find_matching_tag for '{tag_name}'")
+                return -1
             
+            # Find next opening or closing tag using simple string search
             next_open = text.find(open_tag, i)
             next_close = text.find(close_tag, i)
             
             if next_close == -1:
-                return -1  # No matching closing tag
+                # No closing tag found - treat as self-closing to prevent infinite loop
+                print(f"Warning: No closing tag found for '{tag_name}', treating as self-closing")
+                return -1
             
             if next_open == -1 or next_close < next_open:
                 # Found closing tag
@@ -597,8 +679,13 @@ class PSXParser:
                     return next_close
                 i = next_close + len(close_tag)
             else:
-                # Found opening tag
-                depth += 1
+                # Found opening tag - check if it's actually a full tag match
+                # Make sure it's not a partial match (e.g., "section" matching "subsection")
+                char_index = next_open + len(open_tag)
+                if char_index < len(text):
+                    next_char = text[char_index]
+                    if next_char in ['>', ' ', '\t', '\n', '/']:
+                        depth += 1
                 i = next_open + len(open_tag)
         
         return -1  # No match found

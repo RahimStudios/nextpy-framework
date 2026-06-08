@@ -43,7 +43,7 @@ def Home(props=None):
                     
                     <div className="flex flex-wrap gap-4 justify-center">
                         <button create_onclick={handleIncrement} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium">
-                            Increment: {count}
+                            Increment number: {count}
                         </button>
                         
                         <button create_onclick={handleClick} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg font-medium">

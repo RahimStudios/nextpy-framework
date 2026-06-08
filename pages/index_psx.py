@@ -1,266 +1,265 @@
-"""
-Homepage - PSX Version with Server & Client Components
-NextPy Demo following Next.js App Router pattern
-"""
-
-
+from nextpy.psx import component
 
 @component
-def Index(props = None):
-    props= props or {}
-    
+def Home(props=None):
+    props = props or {}
+    title = props.get("title", "NextPy - The Python Framework")
+    description = props.get(
+        "description",
+        "NextPy is a modern Python web framework that combines the power of FastAPI with the elegance of server‑side rendering and file‑based routing."
+    )
+
     return (
-<div>
-
-<section class="relative min-h-screen pt-0 pb-24 overflow-hidden bg-white place-content-center">
-    <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,#000_70%,transparent_100%)]"></div>
-    <div class="relative px-4 mx-auto max-w-7xl lg:px-8">
-        <div class="max-w-4xl mx-auto text-center">
-            <h1 class="text-6xl font-extrabold tracking-tight text-black sm:text-8xl animate-fadeIn">
-                Build Your Next Idea <br />
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-gray-700 to-gray-500">Faster With Python</span>
-            </h1>
-            
-            <p class="max-w-2xl mx-auto mt-8 text-xl leading-8 text-gray-600">
-                {description}
-            </p>
-            
-            <div class="flex flex-col items-center justify-center mt-12 gap-y-4 sm:flex-row sm:gap-x-6">
-                <a href="/documentation" class="w-full px-8 py-4 text-sm font-bold text-white transition-all bg-black rounded-full shadow-xl sm:w-auto hover:bg-gray-800 shadow-gray-200" hx-get="/documentation" hx-target="#main-content" hx-push-url="true">
-                    Get Started 
-                </a>
-                <a href="/features" class="w-full px-8 py-4 text-sm font-bold text-black transition-all bg-white border border-gray-200 rounded-full sm:w-auto hover:bg-gray-50" hx-get="/features" hx-target="#main-content" hx-push-url="true">
-                    Explore Components
-                </a>
-            </div>
-        </div>
-    </div>
-</section>
-
-
-<section class="py-32 overflow-hidden bg-white">
-    <div class="relative z-10 px-8 mx-auto max-w-7xl lg:px-8">
-        <div class="grid max-w-2xl grid-cols-1 mx-auto gap-x-12 gap-y-24 sm:gap-y-28 lg:mx-0 lg:max-w-none lg:grid-cols-3">
-            
-            
-            <div class="lg:pr-16">
-                <div class="p-10 transition-all duration-700 border border-gray-200 shadow-2xl backdrop-blur-lg bg-white/60 rounded-3xl hover:shadow-3xl hover:bg-white/70 hover:scale-105">
-                    <h2 class="text-base font-semibold leading-7 text-transparent transition-all duration-500 bg-gradient-to-r from-gray-900 to-gray-300 bg-clip-text">Performance First</h2>
-                    <p class="mt-4 text-4xl font-bold tracking-tight text-gray-900 transition-all duration-500 sm:text-5xl hover:text-gray-700">Everything you need</p>
-                    <p class="mt-8 text-lg leading-8 text-gray-700 transition-all duration-500 hover:text-gray-600">
-                        NextPy provides a comprehensive suite of tools to build production-ready applications without boilerplate.
-                    </p>
-                </div>
-            </div>
-
-            <dl class="grid grid-cols-1 col-span-2 gap-x-12 gap-y-12 sm:grid-cols-2 lg:gap-y-16">
-                
-                
-                {for feature in features:
-                <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
-                    <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
-                        <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
-                            <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 22.5 12 13.5H3.75z" />
-                            </svg>
+        <div class="font-sans antialiased">
+            {/* Hero Section */}
+            <section class="relative min-h-screen pt-0 pb-24 overflow-hidden bg-white place-content-center">
+                <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,#000_70%,transparent_100%)]"></div>
+                <div class="relative px-4 mx-auto max-w-7xl lg:px-8">
+                    <div class="max-w-4xl mx-auto text-center">
+                        <h1 class="text-6xl font-extrabold tracking-tight text-black sm:text-8xl animate-fadeIn">
+                            Build Your Next Idea <br />
+                            <span class="text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-gray-700 to-gray-500">Faster With Python</span>
+                        </h1>
+                        
+                        <p class="max-w-2xl mx-auto mt-8 text-xl leading-8 text-gray-600">
+                            {description}
+                        </p>
+                        
+                        <div class="flex flex-col items-center justify-center mt-12 gap-y-4 sm:flex-row sm:gap-x-6">
+                            <a href="/documentation" class="w-full px-8 py-4 text-sm font-bold text-white transition-all bg-black rounded-full shadow-xl sm:w-auto hover:bg-gray-800 shadow-gray-200">
+                                Get Started →
+                            </a>
+                            <a href="/features" class="w-full px-8 py-4 text-sm font-bold text-black transition-all bg-white border border-gray-200 rounded-full sm:w-auto hover:bg-gray-50">
+                                Explore Components
+                            </a>
                         </div>
-                        <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">{feature['title']}</span>
-                    </dt>
-                    <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">{feature['description']}</dd>
+                    </div>
                 </div>
-                }
-            </dl>
-        </div>
-    </div>
-</section>
+            </section>
 
-# Tech Stack Section
-<section class="py-24 border-t border-gray-100 bg-gray-50/50">
-    <div class="px-6 mx-auto max-w-7xl lg:px-8">
-        <div class="max-w-2xl mx-auto lg:text-center">
-            <h2 class="text-base font-semibold leading-7 text-blue-600">The Modern Stack</h2>
-            <p class="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Built on Giants</p>
-        </div>
-        
-        <div class="grid max-w-lg grid-cols-1 gap-8 mx-auto mt-16 sm:max-w-none sm:grid-cols-2 lg:grid-cols-4">
-            <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                    <span class="w-2 h-2 bg-blue-600 rounded-full"></span>
-                    FastAPI
-                </div>
-                <p class="mt-4 text-sm leading-7 text-gray-600">High-performance async backend with automatic OpenAPI documentation.</p>
-            </div>
-            
-            <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                    <span class="w-2 h-2 bg-indigo-600 rounded-full"></span>
-                    Tailwind CSS
-                </div>
-                <p class="mt-4 text-sm leading-7 text-gray-600">Utility-first styling for rapid, responsive design directly in your templates.</p>
-            </div>
+            {/* Feature Grid */}
+            <section class="py-32 overflow-hidden bg-white">
+                <div class="relative z-10 px-8 mx-auto max-w-7xl lg:px-8">
+                    <div class="grid max-w-2xl grid-cols-1 mx-auto gap-x-12 gap-y-24 sm:gap-y-28 lg:mx-0 lg:max-w-none lg:grid-cols-3">
+                        {/* Left Column / Hero Text */}
+                        <div class="lg:pr-16">
+                            <div class="p-10 transition-all duration-700 border border-gray-200 shadow-2xl backdrop-blur-lg bg-white/60 rounded-3xl hover:shadow-3xl hover:bg-white/70 hover:scale-105">
+                                <h2 class="text-base font-semibold leading-7 text-transparent transition-all duration-500 bg-gradient-to-r from-gray-900 to-gray-300 bg-clip-text ">Performance First</h2>
+                                <p class="mt-4 text-4xl font-bold tracking-tight text-gray-900 transition-all duration-500 sm:text-5xl hover:text-gray-700">Everything you need</p>
+                                <p class="mt-8 text-lg leading-8 text-gray-700 transition-all duration-500 hover:text-gray-600">
+                                    NextPy provides a comprehensive suite of tools to build production-ready applications without boilerplate.
+                                </p>
+                            </div>
+                        </div>
 
-            <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                    <span class="w-2 h-2 bg-purple-600 rounded-full"></span>
-                    HTMX
-                </div>
-                <p class="mt-4 text-sm leading-7 text-gray-600">Dynamic user interfaces without the complexity of a full JS framework.</p>
-            </div>
+                        {/* Right Column / Feature List */}
+                        <dl class="grid grid-cols-1 col-span-2 gap-x-12 gap-y-12 sm:grid-cols-2 lg:gap-y-16">
+                            {/* Feature Item 1 */}
+                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
+                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
+                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
+                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 22.5 12 13.5H3.75z" />
+                                        </svg>
+                                    </div>
+                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">FastAPI Powered</span>
+                                </dt>
+                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">Lightning-fast async performance using modern FastAPI core.</dd>
+                            </div>
 
-            <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                    <span class="w-2 h-2 bg-green-600 rounded-full"></span>
-                    SQLAlchemy
-                </div>
-                <p class="mt-4 text-sm leading-7 text-gray-600">Powerful ORM supporting multiple databases with type-safe queries.</p>
-            </div>
-        </div>
-    </div>
-</section>
+                            {/* Feature Item 2 */}
+                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
+                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
+                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
+                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" />
+                                        </svg>
+                                    </div>
+                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">File-Based Routing</span>
+                                </dt>
+                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">No complex configuration. Drop a file in pages/ and it's a route.</dd>
+                            </div>
 
-# Statistics Section
-<section class="py-20 bg-white">
-    <div class="max-w-6xl px-4 mx-auto sm:px-6 lg:px-8">
-        <div class="grid gap-12 text-center md:grid-cols-4">
-            <div class="group">
-                <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text group-hover:scale-110">34+</div>
-                <p class="font-semibold text-gray-600">Python Modules</p>
-            </div>
-            
-            <div class="group">
-                <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text group-hover:scale-110">20+</div>
-                <p class="font-semibold text-gray-600">UI Components</p>
-            </div>
-            
-            <div class="group">
-                <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text group-hover:scale-110">3</div>
-                <p class="font-semibold text-gray-600">Database Options</p>
-            </div>
-            
-            <div class="group">
-                <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-green-600 to-green-700 bg-clip-text group-hover:scale-110">100%</div>
-                <p class="font-semibold text-gray-600">Python-Based</p>
-            </div>
-        </div>
-    </div>
-</section>
+                            {/* Feature Item 3 */}
+                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
+                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
+                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
+                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">SSR & HTMX</span>
+                                </dt>
+                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">SEO-friendly server rendering with htmx for smooth transitions.</dd>
+                            </div>
 
-# Quick Navigation
-<section class="py-20 bg-gray-50">
-    <div class="max-w-6xl px-4 mx-auto sm:px-6 lg:px-8">
-        <h2 class="mb-16 text-4xl font-bold text-center text-gray-900">Explore Everything</h2>
-        
-        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <a href="/documentation" class="p-8 transition-all bg-white border-t-4 border-gray-900 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1" hx-get="/documentation" hx-target="#main-content" hx-push-url="true">
-                <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-900 to-gray-700">
-                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" />
-                    </svg>
+                            {/* Feature Item 4 */}
+                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
+                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
+                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
+                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                                        </svg>
+                                    </div>
+                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">Auth Built-in</span>
+                                </dt>
+                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">Secure user management and authentication ready to go.</dd>
+                            </div>
+                        </dl>
+                    </div>
                 </div>
-                <h3 class="mb-2 text-xl font-bold text-gray-900">Documentation</h3>
-                <p class="text-sm text-gray-600">Complete guides and API reference</p>
-            </a>
-            
-            <a href="/features" class="p-8 transition-all bg-white border-t-4 border-gray-800 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1" hx-get="/features" hx-target="#main-content" hx-push-url="true">
-                <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-800 to-gray-600">
-                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-                    </svg>
-                </div>
-                <h3 class="mb-2 text-xl font-bold text-gray-900">Features</h3>
-                <p class="text-sm text-gray-600">All framework capabilities</p>
-            </a>
-            
-            <a href="/examples" class="p-8 transition-all bg-white border-t-4 border-gray-700 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1" hx-get="/examples" hx-target="#main-content" hx-push-url="true">
-                <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-700 to-gray-500">
-                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
-                    </svg>
-                </div>
-                <h3 class="mb-2 text-xl font-bold text-gray-900">Components</h3>
-                <p class="text-sm text-gray-600">UI components showcase</p>
-            </a>
-            
-            <a href="/blog" class="p-8 transition-all bg-white border-t-4 border-gray-600 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1" hx-get="/blog" hx-target="#main-content" hx-push-url="true">
-                <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-600 to-gray-400">
-                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                </div>
-                <h3 class="mb-2 text-xl font-bold text-gray-900">Blog</h3>
-                <p class="text-sm text-gray-600">Tutorials and best practices</p>
-            </a>
-        </div>
-    </div>
-</section>
+            </section>
 
-# CTA Section
-<section class="relative px-6 py-24 overflow-hidden border-t border-gray-100 bg-gradient-to-br from-gray-50 to-white isolate sm:py-32 lg:px-8">
-    <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] opacity-30"></div>
-    <div class="relative max-w-2xl mx-auto text-center">
-        <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Ready to build?</h2>
-        <p class="max-w-xl mx-auto mt-6 text-lg leading-8 text-gray-600">
-            Join thousands of developers building modern web applications with the simplicity of Python.
-        </p>
-        <div class="flex items-center justify-center mt-10 gap-x-6">
-            <a href="/documentation" class="rounded-full bg-black px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black transition-all hover:shadow-lg" hx-get="/documentation" hx-target="#main-content" hx-push-url="true">Get Started</a>
-            <a href="https://github.com" class="flex items-center gap-2 text-sm font-semibold leading-6 text-gray-900 transition-colors hover:text-blue-600">
-                View on GitHub 
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-            </a>
+            {/* Tech Stack Section */}
+            <section class="py-24 border-t border-gray-100 bg-gray-50/50">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="max-w-2xl mx-auto lg:text-center">
+                        <h2 class="text-base font-semibold leading-7 text-blue-600">The Modern Stack</h2>
+                        <p class="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Built on Giants</p>
+                    </div>
+                    
+                    <div class="grid max-w-lg grid-cols-1 gap-8 mx-auto mt-16 sm:max-w-none sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
+                                <span class="w-2 h-2 bg-blue-600 rounded-full"></span>
+                                FastAPI and more
+                            </div>
+                            <p class="mt-4 text-sm leading-7 text-gray-600">High-performance async backend with automatic OpenAPI documentation.</p>
+                        </div>
+                        
+                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
+                                <span class="w-2 h-2 bg-indigo-600 rounded-full"></span>
+                                Tailwind CSS
+                            </div>
+                            <p class="mt-4 text-sm leading-7 text-gray-600">Utility-first styling for rapid, responsive design directly in your templates.</p>
+                        </div>
+
+                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
+                                <span class="w-2 h-2 bg-purple-600 rounded-full"></span>
+                                HTMX
+                            </div>
+                            <p class="mt-4 text-sm leading-7 text-gray-600">Dynamic user interfaces without the complexity of a full JS framework.</p>
+                        </div>
+
+                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
+                                <span class="w-2 h-2 bg-green-600 rounded-full"></span>
+                                SQLAlchemy
+                            </div>
+                            <p class="mt-4 text-sm leading-7 text-gray-600">Powerful ORM supporting multiple databases with type-safe queries.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Statistics Section */}
+            <section class="py-20 bg-white">
+                <div class="max-w-6xl px-4 mx-auto sm:px-6 lg:px-8">
+                    <div class="grid gap-12 text-center md:grid-cols-4">
+                        <div class="group">
+                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text group-hover:scale-110">34+</div>
+                            <p class="font-semibold text-gray-600">Python Modules</p>
+                        </div>
+                        
+                        <div class="group">
+                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text group-hover:scale-110">20+</div>
+                            <p class="font-semibold text-gray-600">UI Components</p>
+                        </div>
+                        
+                        <div class="group">
+                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text group-hover:scale-110">3</div>
+                            <p class="font-semibold text-gray-600">Database Options</p>
+                        </div>
+                        
+                        <div class="group">
+                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-green-600 to-green-700 bg-clip-text group-hover:scale-110">100%</div>
+                            <p class="font-semibold text-gray-600">Python-Based</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Quick Navigation */}
+            <section class="py-20 bg-gray-50">
+                <div class="max-w-6xl px-4 mx-auto sm:px-6 lg:px-8">
+                    <h2 class="mb-16 text-4xl font-bold text-center text-gray-900">Explore Everything</h2>
+                    
+                    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                        <a href="/documentation" class="p-8 transition-all bg-white border-t-4 border-gray-900 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-900 to-gray-700">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" />
+                                </svg>
+                            </div>
+                            <h3 class="mb-2 text-xl font-bold text-gray-900">Documentation</h3>
+                            <p class="text-sm text-gray-600">Complete guides and API reference</p>
+                        </a>
+                        
+                        <a href="/features" class="p-8 transition-all bg-white border-t-4 border-gray-800 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-800 to-gray-600">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                                </svg>
+                            </div>
+                            <h3 class="mb-2 text-xl font-bold text-gray-900">Features</h3>
+                            <p class="text-sm text-gray-600">All framework capabilities</p>
+                        </a>
+                        
+                        <a href="/examples" class="p-8 transition-all bg-white border-t-4 border-gray-700 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-700 to-gray-500">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                                </svg>
+                            </div>
+                            <h3 class="mb-2 text-xl font-bold text-gray-900">Components</h3>
+                            <p class="text-sm text-gray-600">UI components showcase</p>
+                        </a>
+                        
+                        <a href="/blog" class="p-8 transition-all bg-white border-t-4 border-gray-600 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
+                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-600 to-gray-400">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                            </div>
+                            <h3 class="mb-2 text-xl font-bold text-gray-900">Blog</h3>
+                            <p class="text-sm text-gray-600">Tutorials and best practices</p>
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            {/* CTA Section */}
+            <section class="relative px-6 py-24 overflow-hidden border-t border-gray-100 bg-gradient-to-br from-gray-50 to-white isolate sm:py-32 lg:px-8">
+                <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] opacity-30"></div>
+                <div class="relative max-w-2xl mx-auto text-center">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Ready to build?</h2>
+                    <p class="max-w-xl mx-auto mt-6 text-lg leading-8 text-gray-600">
+                        Join thousands of developers building modern web applications with the simplicity of Python.
+                    </p>
+                    <div class="flex items-center justify-center mt-10 gap-x-6">
+                        <a href="/documentation" class="rounded-full bg-black px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black transition-all hover:shadow-lg">Get Started</a>
+                        <a href="https://github.com" class="flex items-center gap-2 text-sm font-semibold leading-6 text-gray-900 transition-colors hover:text-blue-600">
+                            View on GitHub 
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </section>
         </div>
-    </div>
-</section>
-<div>
     )
 
 
-def get_server_side_props(context):
-    """
-    Fetch data on every request (SSR)
-    Similar to Next.js getServerSideProps
-    """
-    features = [
-        {
-            "icon": "folder",
-            "title": "File-based Routing",
-            "description": "Automatic routing based on your pages directory structure. Just like Next.js."
-        },
-        {
-            "icon": "lightning",
-            "title": "Server-Side Rendering",
-            "description": "Fast initial page loads with SSR. Data fetching happens on the server."
-        },
-        {
-            "icon": "building",
-            "title": "Static Site Generation",
-            "description": "Pre-render pages at build time for blazing fast performance."
-        },
-        {
-            "icon": "plug",
-            "title": "API Routes",
-            "description": "Build your API with FastAPI in the pages/api directory."
-        },
-        {
-            "icon": "target",
-            "title": "Type Safety",
-            "description": "Full Pydantic integration for validated, type-safe data handling."
-        },
-        {
-            "icon": "refresh",
-            "title": "HTMX Integration",
-            "description": "SPA-like experience with minimal JavaScript using HTMX."
-        },
-    ]
-    
+def getServerSideProps(context):
     return {
         "props": {
-            "title": "NextPy",
-            "description": "The Python web framework inspired by Next.js. Build modern web applications with file-based routing, SSR, SSG, and more.",
-            "features": features,
+            "title": "NextPy - The Python Framework",
+            "description": "NextPy is a modern Python web framework that combines the power of FastAPI with the elegance of server‑side rendering and file‑based routing."
         }
     }
 
-default = Index
+
+default = Home
