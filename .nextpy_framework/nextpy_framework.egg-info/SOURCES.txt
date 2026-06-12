@@ -86,6 +86,8 @@ pyproject.toml
 .nextpy_framework/nextpy/psx/tests/test_html_attribute_support.py
 .nextpy_framework/nextpy/psx/utils/helpers.py
 .nextpy_framework/nextpy/psx/vdom/vnode.py
+.nextpy_framework/nextpy/public/__init__.py
+.nextpy_framework/nextpy/public/logo.png
 .nextpy_framework/nextpy/runtime/events.py
 .nextpy_framework/nextpy/server/__init__.py
 .nextpy_framework/nextpy/server/app.py

@@ -15,26 +15,15 @@ def Home(props=None):
     title = props.get("title", "Welcome to NextPy")
     message = props.get("message", "Your Python-powered web framework with True JSX")
     
-    # Event handlers with create utilities
-
-    
     handleIncrement = create_onclick(lambda e: setCount(count + 1))
     handleClick = create_onclick(lambda e: setName(name.upper()))
     handletext = create_onclick(lambda e: setMe(me + ['6'])) 
-        
-    # Client-side data fetching
-    def fetch_data():
-        setLoading(True)
-        # Simulate API call
-        setLoading(False)
-    
-    useEffect(fetch_data, [])
-    
+             
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
+        <div className="flex items-center justify-center min-h-screen bg-slate-900">
             <div className="text-center text-black max-w-4xl mx-auto p-8">
-                <h1 className="mb-4 text-5xl font-bold">{title}</h1>
-                <p className="text-xl mb-8">{message} {name} {me} {user}</p>
+                <h1 className="mb-4 text-5xl font-bold text-white">{title}</h1>
+                <p className="text-xl mb-8 text-white">{message}</p>
                 
                 {/* Interactive Section */}
                 <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg p-6">
@@ -68,14 +57,14 @@ def Home(props=None):
                     
                     {/* Conditional rendering */}
                     {if len(name) > 5:
-                        <p className="text-green-300">✅ Long name detected!</p>
+                        <p className="text-green-300">Long name detected!</p>
                     {else:
-                        <p className="text-yellow-300">⚠️ Short name</p>
+                        <p className="text-yellow-300">Short name</p>
                     }
                     
                     {/* For loop */}
                     <div className="mt-4">
-                        {for i in range(5):
+                        {for i in range(3):
                             <div key={i} className="mb-2 p-2 bg-white bg-opacity-20 rounded">
                                 Item {i}: {name} {i + 1}
                             </div>
@@ -101,7 +90,7 @@ def Home(props=None):
 def getServerSideProps(context):
     return {
         "props": {
-            "title": "Welcome to NextPy by RAHIMSTUDIOS",
+            "title": "Welcome to NextPy",
             "message": "Your Python-powered web framework with True JSX"
         }
     }

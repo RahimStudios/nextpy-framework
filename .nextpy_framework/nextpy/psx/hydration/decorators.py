@@ -3,6 +3,7 @@ Interactive Component Decorator for NextPy PSX - PRODUCTION VERSION
 Enables client-side interactivity with proper handler registration
 """
 
+from cgitb import handler
 import sys
 import inspect
 import re
@@ -73,11 +74,17 @@ def extract_handler_functions(component_func: Callable) -> Dict[str, str]:
             
             body = '\n'.join(func_lines).rstrip()
             if body:
+                
                 handlers[func_name] = body
+                
         else:
             i += 1
-    
+            
+        
+
     return handlers
+
+
 
 
 def _get_python_call_placeholder_from_ast(arg: ast.expr) -> str:
@@ -111,6 +118,7 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
     except (OSError, TypeError) as e:
         print(f"DEBUG extract_create_handler_assignments: Could not get source: {e}")
         return handlers, event_types
+    print(f"first handler code {handlers}")
 
     # Only parse the component body before the return statement
     lines = source.split('\n')
@@ -169,12 +177,15 @@ def extract_create_handler_assignments(component_func: Callable, existing_handle
         pass
 
     return handlers, event_types
+    
 
 
 def replace_state_variables(expr: str, state_keys: Optional[List[str]] = None) -> str:
     """
     Replace state variables with stateManager.get calls in complex expressions
+    
     """
+    
     import re
     
     # Use provided state keys or fall back to common ones
@@ -192,10 +203,13 @@ def replace_state_variables(expr: str, state_keys: Optional[List[str]] = None) -
             (rf'(?<![\'"])\b{potential_key}\b(?=\s*\.)(?![\'"])', f'this.stateManager.get(\'{potential_key}\')'),
             # Array access: items[0] -> this.stateManager.get('items')[0]
             (rf'(?<![\'"])\b{potential_key}\b(?=\s*\[)(?![\'"])', f'this.stateManager.get(\'{potential_key}\')'),
+            
         ]
         
         for pattern, replacement in patterns:
             expr = re.sub(pattern, replacement, expr)
+            
+            
     return expr
 
 
@@ -268,9 +282,9 @@ def python_code_to_js(python_code: str, state_keys: Optional[List[str]] = None) 
     
     # Pattern 3: Enhanced logical operators (more precise patterns)
     logical_replacements = [
-        (r'(?<!\w)\s*and\s*(?!\w)', ' && '),        # and -> &&
-        (r'(?<!\w)\s*or\s*(?!\w)', ' || '),         # or -> ||
-        (r'(?<!\w)\s*not\s*(?!\w)', '!'),            # not -> !
+        (r'(?<!\w)\s*and\s*(?!\w)', ' and '),        # and -> &&
+        (r'(?<!\w)\s*or\s*(?!\w)', ' or '),         # or -> ||
+        (r'(?<!\w)\s*not\s*(?!\w)', 'not'),            # not -> !
         (r'\s+is\s+None\s*', ' === null '),          # is None -> === null
         (r'\s+is\s+not\s+None\s*', ' !== null '),    # is not None -> !== null
         (r'\s+in\s+', ' in '),                       # in operator (preserved)
@@ -285,6 +299,7 @@ def python_code_to_js(python_code: str, state_keys: Optional[List[str]] = None) 
     # Pattern 5: Final cleanup and normalization
     js_code = re.sub(r'\s+', ' ', js_code)  # Normalize whitespace
     js_code = js_code.strip()
+    print(f"main js code {js_code}")
     
     return js_code
 
@@ -311,8 +326,11 @@ def generate_handler_registration_script(
     if not handlers:
         return ""
     
+    print(f"handler code {handlers}")
+    
     # DEBUG: Log all handlers being registered
     print(f"DEBUG generate_handler_registration_script: handlers keys = {list(handlers.keys())}")
+    print(f"log all stae keys, {state_keys}")
     
     # Extract placeholders from HTML - these are the correct ones from PSX rendering
     import re
@@ -326,6 +344,8 @@ def generate_handler_registration_script(
     handlers_with_js = {}
     code_to_handler = {}  # Map normalized code to handler name
     
+    
+    
     for handler_name, handler_code in handlers.items():
         handler_str = None
         if isinstance(handler_code, str):
@@ -334,6 +354,7 @@ def generate_handler_registration_script(
             normalized_code = re.sub(r'\s+', ' ', handler_code).strip()
             code_to_handler[normalized_code] = handler_name
         elif isinstance(handler_code, list) and handler_code:
+            print(f" new handler code {handler_code}")
             if hasattr(handler_code[0], 'to_dict'):
                 # New AST-based structured Action objects
                 serialized_actions = [action.to_dict() for action in handler_code]
@@ -400,7 +421,7 @@ def generate_handler_registration_script(
             if hasattr(handler_body[0], 'to_dict'):
                 # New AST-based structured Action objects
                 serialized_actions = [action.to_dict() for action in handler_body]
-                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId)"
+                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId"
                 event_type = event_types.get(handler_name, 'click')
             elif isinstance(handler_body[0], dict):
                 # Already serialized actions
@@ -971,7 +992,9 @@ def interactive_component(func: Callable) -> Callable:
                     # Try to find the PSX file in pages directory
                     import os
                     pages_path = os.path.join(os.getcwd(), 'pages')
+                    
                     psx_file = os.path.join(pages_path, f'{module_name}.psx')
+                    
                     
                     if os.path.exists(psx_file):
                         with open(psx_file, 'r') as f:
@@ -980,7 +1003,7 @@ def interactive_component(func: Callable) -> Callable:
                             state_keys = re.findall(state_pattern, source)
                             print(f"DEBUG: Extracted state_keys from PSX file: {state_keys}")
                     else:
-                        print(f"DEBUG: PSX file not found: {psx_file}")
+                        print(f"DEBUG: file not found: {psx_file} ")
                         state_keys = []
                 else:
                     state_keys = []
@@ -1024,11 +1047,15 @@ def interactive_component(func: Callable) -> Callable:
         # Wrap HTML with hydration data using consistent ID
         state = metadata['state']
         print(f"DEBUG: State passed to generate_html_wrapper: {state}")
+        print(f"DEBUG: State data passed to generate_html_wrapper: {state_keys}")
         hydrated_html = engine.generate_html_wrapper(component_id, html, state)
+        
         
         # Generate scripts
         full_script = engine.generate_hydration_script()
+        
         handler_script = generate_handler_registration_script(handlers, component_id, state_keys=state_keys, html=html)
+        print('main handler', handler_script)
         hydration_script = hydrator.generate_hydration_script()
         
         # Combine all scripts in correct order

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: nextpy-framework
-Version: 3.7.3
+Version: 3.9.1
 Summary: The Python Web Framework introducing file-based routing, SSR, and SSG and more
 Author: NextPy Team
 License: MIT
@@ -160,7 +160,7 @@ Everything in one framework.
 ## Example
 
 ```python
-from nextpy import component, useState
+from nextpy import interactive_component as component, useState, create_onclick
 
 @component
 def Home():
@@ -170,7 +170,7 @@ def Home():
         <div>
             <h1>Welcome to NextPy</h1>
 
-            <button onclick={lambda e: setCount(count + 1)}>
+            <button create_onclick={create_onclick(lambda e: setCount(count + 1))}>
                 Count: {count}
             </button>
         </div>

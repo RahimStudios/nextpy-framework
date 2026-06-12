@@ -377,6 +377,7 @@ class HydrationEngine:
             })
             # Update the component ID to match the registered one
             registered_id = list(self.contexts.keys())[-1]
+            print('this is is', registered_id)
             if registered_id != component_id:
                 # Move the context to the correct ID
                 self.contexts[component_id] = self.contexts.pop(registered_id)

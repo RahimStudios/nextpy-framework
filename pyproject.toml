@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextpy-framework"
-version = "3.7.3"
+version = "3.9.1"
 description = "The Python Web Framework introducing file-based routing, SSR, and SSG and more"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -72,3 +72,4 @@ include = ["nextpy*"]
 
 [tool.setuptools.package-data]
 nextpy = ["py.typed"]
+"nextpy.public" = ["*.png"]

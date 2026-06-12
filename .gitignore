@@ -1,6 +1,9 @@
 # Byte-code files
 *.pyc
 
+#vscode count
+.VSCodeCounter/
+
 
 # NextPy
 

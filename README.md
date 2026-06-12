@@ -119,7 +119,7 @@ Everything in one framework.
 ## Example
 
 ```python
-from nextpy import component, useState
+from nextpy import interactive_component as component, useState, create_onclick
 
 @component
 def Home():
@@ -129,7 +129,7 @@ def Home():
         <div>
             <h1>Welcome to NextPy</h1>
 
-            <button onclick={lambda e: setCount(count + 1)}>
+            <button create_onclick={create_onclick(lambda e: setCount(count + 1))}>
                 Count: {count}
             </button>
         </div>

@@ -900,6 +900,8 @@ class ComponentRenderer:
             # Extract handlers from the original content
             handlers = extract_handler_functions(lambda: None)  # We'll parse the content directly
             
+            print(f"new keys {handlers}")
+            
             # Parse the original content to find handler functions
             import re
             handler_pattern = r'def\s+(\w+)\s*\([^)]*\)\s*:'
@@ -938,6 +940,7 @@ class ComponentRenderer:
             # Extract state keys
             state_pattern = r'\[(\w+),\s*set\w+\]\s*=\s*useState'
             state_keys = re.findall(state_pattern, original_content)
+            print(f"here new keys {state_keys}")
             
             # Convert handler attributes in HTML
             html_with_handlers = convert_handler_attributes_in_html(rendered_html, handlers, state_keys)
