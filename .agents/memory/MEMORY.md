@@ -1,0 +1,1 @@
+- [Evaluator eager to_html bug](evaluator-to-html.md) — SafeExpressionEngine._evaluate_node must NOT call to_html(); return the object for callers to handle.

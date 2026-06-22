@@ -1110,6 +1110,10 @@ def process_python_logic(psx_str: str, context: Dict[str, Any]) -> str:
 
             if isinstance(evaluated, str):
                 replacement = evaluated
+            elif hasattr(evaluated, 'to_html'):
+                # PSX element / component result — skip text substitution here.
+                # The AST renderer will call to_html() at the right time via _render_node.
+                continue
             elif hasattr(evaluated, '__iter__') and not isinstance(evaluated, (str, bytes)):
                 replacement = ''.join(str(x) for x in evaluated)
             else:

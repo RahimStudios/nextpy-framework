@@ -568,10 +568,11 @@ class ComponentRouter:
                         print(f"DEBUG: Layout function: {layout_func}")
                         if layout_func:
                             try:
-                                # Wrap the page element in a PSXElement for the layout
-                                # The layout expects children as a PSXElement, not raw AST nodes
-                                from ..psx.core.parser import PSXElement
-                                children_element = PSXElement(tag='div', props={}, children=page_element.children if hasattr(page_element, 'children') else [page_element])
+                                # Pass the page element directly as children so its _ast_node
+                                # reference is preserved and to_html() renders it correctly.
+                                # Wrapping in a new PSXElement loses the AST node references
+                                # that contain parsed expressions, logic blocks, etc.
+                                children_element = page_element
                                 
                                 # Wrap page element with layout - pass PSXElement as children
                                 # IMPORTANT: Pass the full context to the layout

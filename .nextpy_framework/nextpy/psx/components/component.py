@@ -82,12 +82,24 @@ def component(func):
     Decorator to create a PSX component from a function
     Captures local variables for expression evaluation
     """
+    # Pre-compute signature info once so every call is fast
+    try:
+        _sig = inspect.signature(func)
+        _accepted_params = set(_sig.parameters.keys())
+        _has_var_keyword = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in _sig.parameters.values()
+        )
+    except (ValueError, TypeError):
+        _accepted_params = set()
+        _has_var_keyword = True  # safe default: pass everything
+
     def wrapper(*args, **kwargs):
         # Set up component state
         reset_component_state()
         component_state = get_current_component()
         
-        # Handle props
+        # Handle props — support both positional-dict and keyword call styles
         if args:
             props = args[0] if isinstance(args[0], dict) else {}
         else:
@@ -107,11 +119,20 @@ def component(func):
         # Execute the component function and capture local variables
         # Use a more reliable method to capture locals
         
+        # Filter props to only forward what the function signature accepts.
+        # If the function declares **kwargs it gets everything; otherwise only
+        # pass the explicitly named parameters so callers can safely spread the
+        # full request context without causing TypeErrors in page components.
+        if _has_var_keyword:
+            call_props = props
+        else:
+            call_props = {k: v for k, v in props.items() if k in _accepted_params}
+
         # Create a modified globals dict that includes our function
         original_globals = func.__globals__.copy()
         
         # Execute the function and capture its locals
-        result = func(props)
+        result = func(**call_props)
         
         # Get the most recent frame from the call stack that belongs to our component function
         frame = None
