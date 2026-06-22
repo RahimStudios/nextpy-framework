@@ -1,1 +1,1 @@
-fatal: path 'Procfile copy' exists on disk, but not in 'FETCH_HEAD'
+web: uvicorn main:app --host 0.0.0.0 --port $PORT
