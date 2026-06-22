@@ -550,6 +550,9 @@ class ComponentRouter:
             context = {}
             
         if isinstance(route, ComponentRoute) and route.use_components:
+            # Import render_psx here (before the try block) so it is available in
+            # both the success path and the except/error-boundary path.
+            from ..psx import render_psx
             try:
                 # Merge layout metadata into context
                 if hasattr(route, 'special_chains') and route.special_chains:
@@ -588,7 +591,6 @@ class ComponentRouter:
                                 traceback.print_exc()
                 
                 # Now render the final composed element tree to HTML
-                from ..psx import render_psx
                 content = render_psx(page_element, context)
                 print(f"DEBUG: Rendered content length: {len(content)}")
                 
