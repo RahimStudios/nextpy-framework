@@ -197,19 +197,22 @@ class PSXParser:
         signal.alarm(5)
         
         try:
-            # Try to parse as component FIRST (before element parser)
-            ast_node = self._parse_component(psx_str_stripped, context)
-            if ast_node:
-                print(f"DEBUG: Successfully parsed as component: {ast_node.name}")
-                return self.optimizer.optimize_node(ast_node)
+            # Parse order matters: elements and fragments must be tried first.
+            # Attempting component detection first would incorrectly return an
+            # inner <ComponentName /> found via search(), dropping all surrounding markup.
 
-            # Try to parse as fragment next, since fragments use special shorthand syntax
+            # 1. Try fragment (<>...</> or <fragment>...</fragment>)
             ast_node = self._parse_fragment(psx_str_stripped, context)
             if ast_node:
                 return self.optimizer.optimize_node(ast_node)
 
-            # Try to parse as element last
+            # 2. Try element (<div>, <span>, lowercase tags, etc.)
             ast_node = self._parse_element(psx_str_stripped, context)
+            if ast_node:
+                return self.optimizer.optimize_node(ast_node)
+
+            # 3. Only if neither matched, try component (standalone <ComponentName />)
+            ast_node = self._parse_component(psx_str_stripped, context)
             if ast_node:
                 return self.optimizer.optimize_node(ast_node)
             
@@ -552,8 +555,10 @@ class PSXParser:
         # Self-closing component: <ComponentName props />
         self_closing_component_pattern = re.compile(r'<([A-Z][a-zA-Z0-9]*)\s*([^>]*)\s*/>', re.DOTALL)
         
-        # Try regular component first
-        match = component_pattern.search(psx_str)
+        # Use match() (not search()) so the component must be at the START of the string.
+        # search() would find a nested <Component /> inside surrounding markup and return it
+        # as the top-level node, silently dropping all outer HTML.
+        match = component_pattern.match(psx_str)
         if match:
             name = match.group(1)
             props_str = match.group(2).strip()
@@ -570,8 +575,8 @@ class PSXParser:
                 spread_props=props['spread_props']
             )
         
-        # Try self-closing component
-        match = self_closing_component_pattern.search(psx_str)
+        # Try self-closing component (also match(), not search())
+        match = self_closing_component_pattern.match(psx_str)
         if match:
             name = match.group(1)
             props_str = match.group(2).strip()
