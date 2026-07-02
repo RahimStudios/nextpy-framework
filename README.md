@@ -124,12 +124,13 @@ from nextpy import interactive_component as component, useState, create_onclick
 @component
 def Home():
     [count, setCount] = useState(0)
+    handle_count=create_onclick(lambda e: setCount(count + 1))
 
     return (
         <div>
             <h1>Welcome to NextPy</h1>
 
-            <button create_onclick={create_onclick(lambda e: setCount(count + 1))}>
+            <button create_onclick={handle_count}>
                 Count: {count}
             </button>
         </div>

@@ -273,6 +273,29 @@ class PSXRuntime:
         # Convert JSX attributes to HTML attributes
         attrs = []
         for key, value in node.attributes.items():
+            # Handle special bind attributes set by the parser
+            if key == '_bind_target':
+                # This is a special attribute set by the parser for bind directive
+                # Convert to data-bind attribute for runtime handling
+                bind_target = value
+                bind_type = node.attributes.get('_bind_type', 'value')
+                # Override bind_type for checkboxes regardless of attribute declaration order
+                if node.tag == 'input' and node.attributes.get('type') == 'checkbox':
+                    bind_type = 'checked'
+                attrs.append(f'data-bind="{bind_type}:{bind_target}"')
+                # Also set the initial value from the context
+                if bind_target in self.context:
+                    initial_value = self.context[bind_target]
+                    if bind_type == 'value':
+                        attrs.append(f'value="{html.escape(str(initial_value))}"')
+                    elif bind_type == 'checked':
+                        if initial_value:
+                            attrs.append('checked')
+                continue
+            elif key == '_bind_type':
+                # Skip this attribute, it's already handled above
+                continue
+            
             # JSX -> HTML attribute mapping
             if key == 'className':
                 html_key = 'class'
@@ -339,10 +362,18 @@ class PSXRuntime:
         # Try to find the component in the context
         component_fn = self.context.get(node.name)
         
+        # If not found in context, try the global component registry
+        if not callable(component_fn):
+            try:
+                from ..components.component import component_registry
+                component_fn = component_registry.get(node.name)
+            except ImportError:
+                pass
+        
         if callable(component_fn):
             try:
-                # Prepare props from node attributes
-                props = dict(node.attributes)
+                # Prepare props from node props (ComponentNode uses 'props' not 'attributes')
+                props = dict(getattr(node, 'props', {}))
                 
                 # Add events to props
                 for key, value in node.events.items():
@@ -361,6 +392,7 @@ class PSXRuntime:
                     from .parser import PSXElement
                     
                     children_element = PSXElement(tag='fragment', props={}, children=node.children)
+                    children_element._psx_context = self.context
                     props['children'] = children_element
                 
                 # Call the component function
@@ -1078,6 +1110,10 @@ def process_python_logic(psx_str: str, context: Dict[str, Any]) -> str:
 
             if isinstance(evaluated, str):
                 replacement = evaluated
+            elif hasattr(evaluated, 'to_html'):
+                # PSX element / component result — skip text substitution here.
+                # The AST renderer will call to_html() at the right time via _render_node.
+                continue
             elif hasattr(evaluated, '__iter__') and not isinstance(evaluated, (str, bytes)):
                 replacement = ''.join(str(x) for x in evaluated)
             else:

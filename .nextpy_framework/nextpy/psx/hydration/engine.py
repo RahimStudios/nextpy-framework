@@ -86,7 +86,6 @@ class HydrationEngine:
         set(key, value) {{
             const oldValue = this.state[key];
             this.state[key] = value;
-            console.log('StateManager.set:', key, '=', value, '(old:', oldValue, ')');
             
             // CRITICAL: ONLY ONE UPDATE PATH - notify subscribers which triggers updateBindings
             this.notifySubscribers(key, value, oldValue);
@@ -129,6 +128,7 @@ class HydrationEngine:
             this.stateManager.component = this;  // CRITICAL: Set component reference
             this.unsubscribers = [];
             this.bindings = new Map();
+            this.bindingCounter = 0;  // Counter for generating unique binding IDs
             
             if (!this.element) {{
                 console.error('Component element not found:', id);
@@ -166,9 +166,7 @@ class HydrationEngine:
             if (parts.length !== 2) return;
             
             const [property, stateKey] = parts;
-            const elementId = element.id || element.getAttribute('data-element-id');
-            
-            if (!elementId) return;
+            const elementId = element.id || element.getAttribute('data-element-id') || `binding_${{this.bindingCounter++}}`;
             
             // Store binding info
             this.bindings.set(elementId, {{ property, stateKey, element }});
@@ -185,6 +183,16 @@ class HydrationEngine:
             // Set initial value
             const initialValue = this.stateManager.get(stateKey);
             this.updateBinding(elementId, property, initialValue);
+            
+            // Add two-way binding for input elements
+            if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {{
+                element.addEventListener('input', (e) => {{
+                    this.stateManager.set(stateKey, e.target.value);
+                }});
+                element.addEventListener('change', (e) => {{
+                    this.stateManager.set(stateKey, e.target.value);
+                }});
+            }}
         }}
         
         updateBinding(elementId, property, value) {{
@@ -203,11 +211,13 @@ class HydrationEngine:
                     }}
                 }} else if (property === 'textContent') {{
                     element.textContent = String(value);
+                }} else if (property === 'value') {{
+                    // Special handling for input value to ensure it updates
+                    element.value = String(value);
                 }} else if (property in element) {{
                     element[property] = value;
                 }}
             }} catch (error) {{
-                console.error('Binding update error:', error);
             }}
         }}
         
@@ -250,21 +260,15 @@ class HydrationEngine:
         
         setupEffects() {{
             // Effects setup would go here
-            // For now, we'll just log that effects are being set up
-            console.log('Effects setup for component:', this.id);
         }}
         
         updateBindings() {{
             // Update all DOM elements with data-bind attributes
             if (!this.element) {{
-                console.error('updateBindings: No element found for component:', this.id);
                 return;
             }}
             
-            console.log('updateBindings: Starting for component:', this.id, 'with state:', this.stateManager.state);
-            
             const boundElements = this.element.querySelectorAll('[data-bind]');
-            console.log('updateBindings: Found', boundElements.length, 'elements with data-bind');
             
             boundElements.forEach(el => {{
                 const binding = el.getAttribute('data-bind');
@@ -272,8 +276,6 @@ class HydrationEngine:
                 
                 const [property, stateKey] = binding.split(':');
                 const value = this.stateManager.get(stateKey);
-
-                console.log('updateBindings: Updating element with binding:', binding, 'value:', value);
 
                 try {{
                     if (property === 'textContent') {{
@@ -289,11 +291,8 @@ class HydrationEngine:
                         el[property] = value;
                     }}
                 }} catch (error) {{
-                    console.error('Binding update error:', error);
                 }}
             }});
-            
-            console.log('Updated', boundElements.length, 'data bindings');
         }}
         
         destroy() {{
@@ -302,7 +301,6 @@ class HydrationEngine:
                 try {{
                     unsub();
                 }} catch (error) {{
-                    console.error('Cleanup error:', error);
                 }}
             }});
             this.unsubscribers = [];
@@ -322,7 +320,6 @@ class HydrationEngine:
     window.nextpyComponentHandlers = window.nextpyComponentHandlers || {{}};
     window.nextpyComponentHandlers[componentId] = {json.dumps(context.event_handlers)};
     
-    console.log('[NextPy] Component hydrated:', componentId);
     }}
     
     // Initialize component when DOM is ready
@@ -358,7 +355,6 @@ class HydrationEngine:
         delete window.nextpyComponentHandlers[componentId];
     }}
     
-    console.log('[NextPy] Component cleaned up:', componentId);
 }})();
         """
     

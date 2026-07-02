@@ -1,5 +1,5 @@
 # Import all necessary PSX components
-from nextpy.psx import component, psx, useState, useEffect, useCallback, useMemo, create_onclick, create_onchange, create_onsubmit, interactive_component
+from nextpy.psx import useState, useEffect, useCallback, useMemo, create_onclick, create_onchange, create_onsubmit, interactive_component
 
 @interactive_component
 def Home(props=None):

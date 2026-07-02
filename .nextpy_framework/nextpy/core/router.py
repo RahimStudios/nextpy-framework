@@ -6,6 +6,7 @@ Supports:
 - Nested routes (pages/blog/[id].py -> /blog/:id)
 - Catch-all routes (pages/[...path].py -> /*)
 - API routes (pages/api/*.py)
+- Layout system (layout.py/layout.psx for nested layouts)
 - Demo pages when no project exists
 """
 
@@ -36,6 +37,7 @@ class Route:
     is_catch_all: bool = False
     param_names: List[str] = field(default_factory=list)
     pattern: Optional[re.Pattern] = None
+    layout_chain: List[Path] = field(default_factory=list)
     
     def matches(self, url_path: str) -> Optional[Dict[str, str]]:
         """Check if this route matches the given URL path"""
@@ -85,6 +87,10 @@ class Router:
             if file_path.name.startswith("_"):
                 continue
                 
+            # Skip layout files - they're handled separately
+            if file_path.name == "layout.py":
+                continue
+                
             route = self._create_route_from_file(file_path)
             if route:
                 if route.is_api:
@@ -95,6 +101,10 @@ class Router:
         # Also scan for .psx files (PSX components)
         for file_path in self.pages_dir.rglob("*.psx"):
             if file_path.name.startswith("_"):
+                continue
+                
+            # Skip layout files - they're handled separately
+            if file_path.name == "layout.psx":
                 continue
                 
             route = self._create_route_from_file(file_path)
@@ -166,6 +176,9 @@ class Router:
                 
         handler = self._load_handler(file_path)
         
+        # Build layout chain for this route
+        layout_chain = self._build_layout_chain(file_path)
+        
         route_class = DynamicRoute if is_dynamic else Route
         return route_class(
             path=path,
@@ -176,6 +189,7 @@ class Router:
             is_catch_all=is_catch_all,
             param_names=param_names,
             pattern=pattern,
+            layout_chain=layout_chain,
         )
         
     def _load_handler(self, file_path: Path) -> Optional[Callable]:
@@ -232,6 +246,75 @@ class Router:
         except Exception as e:
             # Log error but don't crash
             print(f"Warning: Failed to load handler from {file_path}: {e}")
+                
+        return None
+    
+    def _build_layout_chain(self, page_file_path: Path) -> List[Path]:
+        """Build the layout chain for a given page file (inside-out order)"""
+        layout_chain = []
+        
+        # Start from the page's directory and work up to the root
+        current_dir = page_file_path.parent
+        
+        while current_dir != self.pages_dir.parent:
+            # Check for layout.psx first (higher priority), then layout.py
+            layout_psx = current_dir / "layout.psx"
+            layout_py = current_dir / "layout.py"
+            
+            if layout_psx.exists():
+                layout_chain.append(layout_psx)
+            elif layout_py.exists():
+                layout_chain.append(layout_py)
+            
+            # Move up one directory
+            current_dir = current_dir.parent
+        
+        # Reverse to get inside-out order (root layout last)
+        layout_chain.reverse()
+        
+        return layout_chain
+    
+    def _load_layout(self, layout_path: Path) -> Optional[Callable]:
+        """Load a layout function from a layout file"""
+        try:
+            # Try PSX loader first
+            if layout_path.suffix in ['.py', '.psx']:
+                try:
+                    from ..psx import compile_psx
+                    with open(layout_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    # Compile PSX content
+                    compiled = compile_psx(content)
+                    
+                    # Create a wrapper handler
+                    def layout_handler(children=None, **kwargs):
+                        return compiled(children=children, **kwargs)
+                    
+                    return layout_handler
+                    
+                except ImportError:
+                    pass
+                except Exception:
+                    pass
+            
+            # Fallback to regular Python import
+            spec = importlib.util.spec_from_file_location(
+                layout_path.stem, 
+                layout_path
+            )
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                # Look for Layout function
+                if hasattr(module, "Layout"):
+                    return getattr(module, "Layout")
+                elif hasattr(module, "layout"):
+                    return getattr(module, "layout")
+                        
+        except Exception as e:
+            print(f"Warning: Failed to load layout from {layout_path}: {e}")
                 
         return None
         

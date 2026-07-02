@@ -28,9 +28,9 @@ def Input(
     }
     
     if required:
-        props['required'] = True
+        props['required'] = 'True'
     if disabled:
-        props['disabled'] = True
+        props['disabled'] = 'True'
     
     return input(props)
 

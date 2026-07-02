@@ -389,6 +389,13 @@ Allow: /
         self.app.add_route("/__nextpy/debug/export", debug_export, methods=["GET"])
         self.app.add_route("/__nextpy/debug/clear", debug_clear, methods=["POST"])
             
+    def _convert_route_to_fastapi_path(self, route_path: str) -> str:
+        """Convert router path with regex patterns to FastAPI-compatible path"""
+        import re
+        # Convert (?P<name>pattern) to {name}
+        fastapi_path = re.sub(r'\(\?P<(\w+)>[^)]+\)', r'{\1}', route_path)
+        return fastapi_path
+
     def _setup_routes(self) -> None:
         """Setup page routes using the router"""
         
@@ -406,8 +413,9 @@ Allow: /
                         return await self._handle_api_request(request, route, {})
                     return api_handler
                 
+                fastapi_path = self._convert_route_to_fastapi_path(route.path)
                 self.app.add_api_route(
-                    route.path,
+                    fastapi_path,
                     create_api_handler(route),
                     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
                 )
@@ -418,8 +426,9 @@ Allow: /
                         return await self._handle_request(request, path)
                     return page_handler
                 
+                fastapi_path = self._convert_route_to_fastapi_path(route.path)
                 self.app.add_route(
-                    route.path,
+                    fastapi_path,
                     create_page_handler(route.path),
                     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
                 )
@@ -572,6 +581,19 @@ Allow: /
                         except ImportError:
                             # Fail fast - renderer is required
                             raise RuntimeError("Neither PSX nor JSX renderer available. Please install nextpy.psx module.")
+                
+                # Apply layout chain (inside-out order)
+                if hasattr(route, 'layout_chain') and route.layout_chain:
+                    for layout_path in route.layout_chain:
+                        layout_func = self.router._load_layout(layout_path)
+                        if layout_func:
+                            try:
+                                # Wrap content with layout
+                                layout_element = layout_func(children=content, **component_props)
+                                from nextpy.psx import render_psx_component
+                                content = render_psx_component(layout_element, component_props)
+                            except Exception as e:
+                                print(f"Warning: Failed to apply layout {layout_path}: {e}")
                         
             template_name = self._get_template_name(route, module)
             

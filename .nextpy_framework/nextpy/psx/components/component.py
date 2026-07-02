@@ -82,32 +82,62 @@ def component(func):
     Decorator to create a PSX component from a function
     Captures local variables for expression evaluation
     """
+    # Pre-compute signature info once so every call is fast
+    try:
+        _sig = inspect.signature(func)
+        _accepted_params = set(_sig.parameters.keys())
+        _has_var_keyword = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in _sig.parameters.values()
+        )
+    except (ValueError, TypeError):
+        _accepted_params = set()
+        _has_var_keyword = True  # safe default: pass everything
+
     def wrapper(*args, **kwargs):
         # Set up component state
         reset_component_state()
         component_state = get_current_component()
         
-        # Handle props
+        # Handle props — support both positional-dict and keyword call styles
         if args:
             props = args[0] if isinstance(args[0], dict) else {}
         else:
             props = kwargs
         
-        print(f"DEBUG: Component wrapper received props: {list(props.keys())}")
-        print(f"DEBUG: Component wrapper _component_id in props: {'_component_id' in props}")
-        if '_component_id' in props:
-            print(f"DEBUG: Component wrapper _component_id value: {props['_component_id']}")
+        # Don't render children if they're PSXElement objects - keep them as-is for composition
+        # This allows layouts to compose with page element trees before rendering
+        if 'children' in props:
+            children = props['children']
+            if hasattr(children, 'children') and children.children:
+                # It's a PSXElement - keep it as-is for composition
+                # Don't render it yet, let the final render handle it
+                pass
         
         component_state.props = props
         
         # Execute the component function and capture local variables
         # Use a more reliable method to capture locals
         
+        # Backward-compatible invocation — three calling conventions are supported:
+        #
+        #   **kwargs style  def Component(**props):         → func(**props)
+        #   Props-dict style def Component(props=None):     → func(props)
+        #   Named-param style def Component(title, count):  → func(**filtered)
+        #
+        # This preserves the dominant `props=None` convention used throughout
+        # the codebase while also supporting the newer explicit-param style.
+        if _has_var_keyword:
+            result = func(**props)
+        elif 'props' in _accepted_params:
+            # Old-style: pass the entire props dict under the 'props' parameter
+            result = func(props)
+        else:
+            call_props = {k: v for k, v in props.items() if k in _accepted_params}
+            result = func(**call_props)
+
         # Create a modified globals dict that includes our function
         original_globals = func.__globals__.copy()
-        
-        # Execute the function and capture its locals
-        result = func(props)
         
         # Get the most recent frame from the call stack that belongs to our component function
         frame = None
@@ -125,8 +155,9 @@ def component(func):
             component_locals = frame.f_locals.copy()
         
         # Create context with props and local variables (excluding internal ones)
-        context = props.copy()
-        print(f"DEBUG: Props before context creation: {list(props.keys())}")
+        # IMPORTANT: Don't reset context - props already contains the full context
+        context = props.copy() if props else {}
+        print(f"DEBUG: Props before context creation: {list(context.keys())}")
         for key, value in component_locals.items():
             if not key.startswith('_') and key not in ['func', 'props', 'result', 'execution_result', 'execute_component', 'wrapper', 'execute_with_locals', 'component_locals', 'component_frame', 'frame', 'current_frame', 'original_globals']:
                 context[key] = value
@@ -1613,50 +1644,42 @@ class EventHandlers:
     @staticmethod
     def create_onchange(handler_func: Callable) -> str:
         """Create onchange handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_change_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_onsubmit(handler_func: Callable) -> str:
         """Create onsubmit handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_submit_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_onreset(handler_func: Callable) -> str:
         """Create onreset handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_reset_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_onfocus(handler_func: Callable) -> str:
         """Create onfocus handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_focus_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_onblur(handler_func: Callable) -> str:
         """Create onblur handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_blur_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_oninput(handler_func: Callable) -> str:
         """Create oninput handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_input_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_oninvalid(handler_func: Callable) -> str:
         """Create oninvalid handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_invalid_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     @staticmethod
     def create_onselect(handler_func: Callable) -> str:
         """Create onselect handler"""
-        func_name = getattr(handler_func, '__name__', 'handler')
-        return f"python_select_{func_name}"
+        return _create_python_call_placeholder(handler_func, 'python_call')
     
     # Keyboard Events
     @staticmethod

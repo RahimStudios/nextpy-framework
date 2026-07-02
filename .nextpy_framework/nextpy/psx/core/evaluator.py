@@ -186,7 +186,11 @@ class SafeExpressionEngine:
         elif isinstance(node, ast.Name):
             # Only allow safe names from context or whitelist
             if node.id in self.context:
-                return self.context[node.id]
+                value = self.context[node.id]
+                # Return the object as-is; callers that need HTML call .to_html() themselves.
+                # Do NOT eagerly call to_html() here — that would turn a PSX/component object
+                # into an HTML string prematurely and cause it to be re-parsed by the template engine.
+                return value
             elif node.id in self.SAFE_FUNCTIONS:
                 return self.SAFE_FUNCTIONS[node.id]
             else:

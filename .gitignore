@@ -41,6 +41,8 @@ env/
 # IDEs
 .idea/
 .vscode/
+.VSCodeCounter/
+.agents/
 
 # OS
 .DS_Store

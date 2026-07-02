@@ -39,7 +39,7 @@ class HotReloadHandler:
 
         # Enhanced file patterns for better JSX detection
         self.file_patterns = {
-            "python": [".py"],
+            "python": [".py", ".psx"],
             "jsx": [".py.jsx", ".jsx"],
             "templates": [".html", ".htm", ".jinja2", ".j2"],
             "styles": [".css", ".scss", ".sass", ".less"],
@@ -281,12 +281,12 @@ def dev(port: int, host: str, reload: bool, debug: bool):
         click.echo(f"  - Watchdog: Available")
 
     if debug:
-        click.echo(f"  - Debug Icon: ✅ Auto-enabled")
-        click.echo(f"  - Console Capture: ✅ Enabled")
-        click.echo(f"  - Performance Monitoring: ✅ Enabled")
+        click.echo(f"  - Debug Icon:  Auto-enabled")
+        click.echo(f"  - Console Capture: Enabled")
+        click.echo(f"  - Performance Monitoring: Enabled")
 
-    click.echo(f"\n  ✨ Server ready at http://0.0.0.0:{port}")
-    click.echo(f"  🌐 Open http://localhost:{port} in your browser\n")
+    click.echo(f"\n   Server ready at http://0.0.0.0:{port}")
+    click.echo(f"   Open http://localhost:{port} in your browser\n")
 
     project_dir = Path(".")
     os.chdir(project_dir)
@@ -317,7 +317,7 @@ def dev(port: int, host: str, reload: bool, debug: bool):
             if dir_path.exists():
                 existing_reload_dirs.append(reload_dir)
                 if debug:
-                    click.echo(click.style(f"  📁 Watching: {reload_dir}/"))
+                    click.echo(click.style(f"  Watching: {reload_dir}/"))
 
         # Enhanced reload patterns for JSX files
         reload_includes = [
@@ -372,14 +372,14 @@ def build(out: str, clean: bool):
     try:
         from nextpy.core.builder import Builder
 
-        click.echo(f"  📂 Output directory: {out}/")
+        click.echo(f"Output directory: {out}/")
         if clean:
-            click.echo(f"  🧹 Cleaning output directory...")
+            click.echo(f"Cleaning output directory...")
 
-        click.echo(f"  ⚙️  Initializing builder...")
+        click.echo(f"Initializing builder...")
         builder = Builder(out_dir=out)
 
-        click.echo(f"  🏗️  Building static files...")
+        click.echo(f"Building static files...")
 
         async def run_build():
             manifest = await builder.build(clean=clean)
@@ -393,23 +393,23 @@ def build(out: str, clean: bool):
 
         click.echo()
         click.echo(
-            click.style(f"  ✅ Build completed successfully!", fg="green", bold=True)
+            click.style(f"Build completed successfully!", fg="green", bold=True)
         )
-        click.echo(f"  📄 Pages built: {pages_count}")
-        click.echo(f"  🎨 Assets processed: {assets_count}")
-        click.echo(f"  💾 Total size: {_format_size(total_size)}")
-        click.echo(f"  📍 Output: {out}/")
+        click.echo(f"Pages built: {pages_count}")
+        click.echo(f"Assets processed: {assets_count}")
+        click.echo(f"Total size: {_format_size(total_size)}")
+        click.echo(f"Output: {out}/")
         click.echo()
-        click.echo(click.style(f"  🚀 Ready for deployment!", fg="cyan", bold=True))
-        click.echo(f"  📖 Serve with: nextpy start --port 5000")
+        click.echo(click.style(f"Ready for deployment!", fg="cyan", bold=True))
+        click.echo(f"Serve with: nextpy start --port 5000")
         click.echo()
 
     except Exception as e:
-        click.echo(click.style(f"  ❌ Build failed: {str(e)}", fg="red"))
+        click.echo(click.style(f"Build failed: {str(e)}", fg="red"))
         if "Builder" not in str(e):
             click.echo(
                 click.style(
-                    f"  💡 Make sure you're in a NextPy project directory", fg="yellow"
+                    f"Make sure you're in a NextPy project directory", fg="yellow"
                 )
             )
 
@@ -419,18 +419,18 @@ def build(out: str, clean: bool):
 @click.option("--host", "-h", default="0.0.0.0", help="Host to bind to")
 def start(port: int, host: str):
     """Start the production server with enhanced feedback"""
-    click.echo(click.style("\n  🚀 NextPy Production Server", fg="green", bold=True))
-    click.echo(click.style("  ========================\n", fg="green"))
+    click.echo(click.style("\n🚀 NextPy Production Server", fg="green", bold=True))
+    click.echo(click.style("========================\n", fg="green"))
 
-    click.echo(f"  🏭 Mode:     Production")
-    click.echo(f"  🌐 Host:     {host} (accessible at http://localhost:{port})")
-    click.echo(f"  🔌 Port:     {port}")
-    click.echo(f"  👥 Workers:   4 (multi-process)")
-    click.echo(f"  📝 Logging:  Warning level only")
+    click.echo(f"Mode:     Production")
+    click.echo(f"Host:     {host} (accessible at http://localhost:{port})")
+    click.echo(f"Port:     {port}")
+    click.echo(f"Workers:   4 (multi-process)")
+    click.echo(f"Logging:  Warning level only")
 
-    click.echo(f"\n  ✨ Production server ready at http://0.0.0.0:{port}")
-    click.echo(f"  🌐 Open http://localhost:{port} in your browser\n")
-    click.echo(click.style(f"  💡 Press Ctrl+C to stop the server", fg="yellow"))
+    click.echo(f"\n Production server ready at http://0.0.0.0:{port}")
+    click.echo(f"Open http://localhost:{port} in your browser\n")
+    click.echo(click.style(f"Press Ctrl+C to stop the server", fg="yellow"))
     click.echo()
 
     try:
@@ -445,12 +445,12 @@ def start(port: int, host: str):
         )
 
     except KeyboardInterrupt:
-        click.echo(click.style("\n  👋 Server stopped gracefully", fg="cyan"))
+        click.echo(click.style("\nServer stopped gracefully", fg="cyan"))
     except Exception as e:
-        click.echo(click.style(f"\n  ❌ Server error: {str(e)}", fg="red"))
+        click.echo(click.style(f"\nServer error: {str(e)}", fg="red"))
         click.echo(
             click.style(
-                f"  💡 Make sure you have a main.py file with an app instance",
+                f"Make sure you have a main.py file with an app instance",
                 fg="yellow",
             )
         )
@@ -463,9 +463,9 @@ def start(port: int, host: str):
 def create(name: str, psx: bool, template: str):
     """Create a new NextPy project with True PSX support"""
     click.echo(
-        click.style(f"\n  🚀 Creating NextPy project: {name}", fg="cyan", bold=True)
+        click.style(f"\n🚀 Creating NextPy project: {name}", fg="cyan", bold=True)
     )
-    click.echo(click.style("  " + "=" * (25 + len(name)) + "\n", fg="cyan"))
+    click.echo(click.style(" " + "=" * (25 + len(name)) + "\n", fg="cyan"))
 
     if psx:
         click.echo(
@@ -481,26 +481,26 @@ def create(name: str, psx: bool, template: str):
         if any(project_dir.iterdir()):
             click.echo(
                 click.style(
-                    f"  ❌ Directory '{name}' already exists and is not empty", fg="red"
+                    f"Directory '{name}' already exists and is not empty", fg="red"
                 )
             )
             return
         else:
             click.echo(
                 click.style(
-                    f"  ⚠️  Directory '{name}' exists but is empty", fg="yellow"
+                    f" Directory '{name}' exists but is empty", fg="yellow"
                 )
             )
 
-    click.echo(f"  📁 Creating project structure...")
+    click.echo(f"Creating project structure...")
 
     try:
         _create_project_structure(project_dir, psx=psx, template=template)
 
         click.echo(
-            click.style(f"  ✅ Project successfully created!", fg="green", bold=True)
+            click.style(f"Project successfully created!", fg="green", bold=True)
         )
-        click.echo(f"\n  📍 Location: {project_dir.absolute()}")
+        click.echo(f"\nLocation: {project_dir.absolute()}")
 
         # Attempt to install Node and Python dependencies, then build Tailwind for the new project
         try:
@@ -509,7 +509,7 @@ def create(name: str, psx: bool, template: str):
                 if shutil.which("npm") is None:
                     click.echo(
                         click.style(
-                            "  ⚠️  npm not found; please install Node.js and npm to build Tailwind automatically.",
+                            " npm not found; please install Node.js and npm to build Tailwind automatically.",
                             fg="yellow",
                         )
                     )
@@ -552,14 +552,14 @@ def create(name: str, psx: bool, template: str):
                         else:
                             click.echo(
                                 click.style(
-                                    "  ⚠️  npx not found; unable to run Tailwind build automatically.",
+                                    "  npx not found; unable to run Tailwind build automatically.",
                                     fg="yellow",
                                 )
                             )
             else:
                 click.echo(
                     click.style(
-                        "  ⚠️  package.json not found; skipping Node install/build.",
+                        " package.json not found; skipping Node install/build.",
                         fg="yellow",
                     )
                 )
@@ -575,40 +575,40 @@ def create(name: str, psx: bool, template: str):
             else:
                 click.echo(
                     click.style(
-                        "  ⚠️  requirements.txt not found; skipping Python dependencies installation.",
+                        " requirements.txt not found; skipping Python dependencies installation.",
                         fg="yellow",
                     )
                 )
 
         except subprocess.CalledProcessError as e:
             click.echo(
-                click.style(f"  ❌ Automatic install/build failed: {e}", fg="red")
+                click.style(f" Automatic install/build failed: {e}", fg="red")
             )
             click.echo(
                 click.style(
-                    "  💡 You can retry manually: cd {0} && npm install && npm run build:tailwind && {1} -m pip install -r requirements.txt".format(
+                    " You can retry manually: cd {0} && npm install && npm run build:tailwind && {1} -m pip install -r requirements.txt".format(
                         name, sys.executable
                     ),
                     fg="yellow",
                 )
             )
 
-        click.echo(f"\n  🎯 Next steps:")
-        click.echo(f"    1️⃣  cd {name}")
+        click.echo(f"\nNext steps:")
+        click.echo(f"cd {name}")
         click.echo(
-            f"    2️⃣  npm install  # Install Tailwind CSS dependencies (if not already installed)"
+            f" npm install  # Install Tailwind CSS dependencies (if not already installed)"
         )
         click.echo(
-            f"    3️⃣  pip install -r requirements.txt  # Install Python dependencies (if not already installed)"
+            f" pip install -r requirements.txt  # Install Python dependencies (if not already installed)"
         )
         click.echo(
-            f"    4️⃣  npm run css:build  # Build Tailwind CSS (if you prefer manual build)"
+            f" npm run css:build  # Build Tailwind CSS (if you prefer manual build)"
         )
-        click.echo(f"    5️⃣  python3 main.py  # Start development server")
-        click.echo(f"    6️⃣  Open http://localhost:5000 in your browser")
+        click.echo(f" python3 main.py  # Start development server")
+        click.echo(f"  Open http://localhost:5000 in your browser")
 
         if psx:
-            click.echo(f"\n  🎨 PSX Development:")
+            click.echo(f"\nPSX Development:")
             click.echo(f"    • All PSX utilities, hooks & components auto-imported")
             click.echo(f"    • Use: from nextpy import component, useState, useEffect")
             click.echo(f"    • Full auto-completion & IntelliSense support")
@@ -622,23 +622,23 @@ def create(name: str, psx: bool, template: str):
         click.echo()
 
     except Exception as e:
-        click.echo(click.style(f"  ❌ Failed to create project: {str(e)}", fg="red"))
+        click.echo(click.style(f" Failed to create project: {str(e)}", fg="red"))
         click.echo(
             click.style(
-                f"  💡 Check the error message above for more details", fg="yellow"
+                f" Check the error message above for more details", fg="yellow"
             )
         )
         # Clean up partial creation
         if project_dir.exists():
             shutil.rmtree(project_dir, ignore_errors=True)
 
-        click.echo(click.style(f"  🧹 Cleaned up partial files", fg="yellow"))
+        click.echo(click.style(f" Cleaned up partial files", fg="yellow"))
 
 
 @cli.command()
 def routes():
     """Display all registered routes with detailed information"""
-    click.echo(click.style("\n  🛣️  NextPy Routes Overview", fg="cyan", bold=True))
+    click.echo(click.style("\n  NextPy Routes Overview", fg="cyan", bold=True))
     click.echo(click.style("  =====================\n", fg="cyan"))
 
     try:
@@ -652,7 +652,7 @@ def routes():
 
         click.echo(
             click.style(
-                f"  📄 Page Routes ({len(page_routes)} total)", fg="blue", bold=True
+                f" Page Routes ({len(page_routes)} total)", fg="blue", bold=True
             )
         )
         if page_routes:
@@ -661,12 +661,12 @@ def routes():
                 file_info = f"({route.file_path})"
                 click.echo(f"    {i:2d}. {dynamic} {route.path:<30} {file_info}")
         else:
-            click.echo(f"    ℹ️  No page routes found")
+            click.echo(f" No page routes found")
 
         click.echo()
         click.echo(
             click.style(
-                f"  🔌 API Routes ({len(api_routes)} total)", fg="green", bold=True
+                f"  API Routes ({len(api_routes)} total)", fg="green", bold=True
             )
         )
         if api_routes:
@@ -680,10 +680,10 @@ def routes():
                     f"    {i:2d}. {dynamic} {route.path:<30} {methods:<20} {file_info}"
                 )
         else:
-            click.echo(f"    ℹ️  No API routes found")
+            click.echo(f"No API routes found")
 
         click.echo()
-        click.echo(click.style(f"  📊 Summary:", fg="yellow", bold=True))
+        click.echo(click.style(f"Summary:", fg="yellow", bold=True))
         click.echo(f"    Total Routes: {len(page_routes + api_routes)}")
         click.echo(
             f"    Dynamic Routes: {len([r for r in page_routes + api_routes if r.is_dynamic])}"
@@ -701,18 +701,18 @@ def routes():
 @click.option("--out", "-o", default="out", help="Output directory for static files")
 def export(out: str):
     """Export static files with enhanced feedback"""
-    click.echo(click.style("\n  📦 NextPy Export", fg="green", bold=True))
+    click.echo(click.style("\nNextPy Export", fg="green", bold=True))
     click.echo(click.style("  =============\n", fg="green"))
 
     try:
         from nextpy.core.builder import Builder
 
-        click.echo(f"  📂 Output directory: {out}/")
-        click.echo(f"  ⚙️  Initializing exporter...")
+        click.echo(f"Output directory: {out}/")
+        click.echo(f" Initializing exporter...")
 
         builder = Builder(out_dir=out)
 
-        click.echo(f"  📤 Exporting static files...")
+        click.echo(f"Exporting static files...")
 
         async def run_export():
             manifest = await builder.export_static()
@@ -725,17 +725,17 @@ def export(out: str):
 
         click.echo()
         click.echo(
-            click.style(f"  ✅ Export completed successfully!", fg="green", bold=True)
+            click.style(f"Export completed successfully!", fg="green", bold=True)
         )
-        click.echo(f"  📁 Files exported: {files_count}")
-        click.echo(f"  💾 Total size: {_format_size(total_size)}")
-        click.echo(f"  📍 Output: {out}/")
+        click.echo(f"Files exported: {files_count}")
+        click.echo(f"Total size: {_format_size(total_size)}")
+        click.echo(f"Output: {out}/")
         click.echo()
-        click.echo(click.style(f"  🚀 Ready for static hosting!", fg="cyan", bold=True))
+        click.echo(click.style(f"Ready for static hosting!", fg="cyan", bold=True))
         click.echo()
 
     except Exception as e:
-        click.echo(click.style(f"  ❌ Export failed: {str(e)}", fg="red"))
+        click.echo(click.style(f"Export failed: {str(e)}", fg="red"))
         click.echo(
             click.style(
                 f"  💡 Make sure you're in a NextPy project directory", fg="yellow"
@@ -746,25 +746,25 @@ def export(out: str):
 @cli.command()
 def version():
     """Show version and system information"""
-    click.echo(click.style("\n  📋 NextPy Framework Info", fg="cyan", bold=True))
+    click.echo(click.style("\nNextPy Framework Info", fg="cyan", bold=True))
     click.echo(click.style("  ===================\n", fg="cyan"))
 
-    click.echo(f"  🏷️  Version: 3.9.0 ")
-    click.echo(f"  🐍 Python: {sys.version.split()[0]}")
-    click.echo(f"  ⚡ Framework: NextPy")
-    click.echo(f"  🎨 Architecture: True JSX")
-    click.echo(f"  🖥️  Development Server: uvicorn")
-    click.echo(f"  🔄 Hot Reload: Available")
-    click.echo(f"  📁 Static Files: Available")
-    click.echo(f"  🔌 API Routes: Available")
-    click.echo(f"  📄 Page Routes: Available")
-    click.echo(f"  🧩 Component Routes: Available")
-    click.echo(f"  📚 Component Library: Available")
-    click.echo(f"  👨‍💻 Developer: RAHIMSTUDIOS")
-    click.echo(f"  📜 License: MIT")
-    click.echo(f"  🐙 GitHub: https://github.com/IRAHIMSTUDIOS/nextpy-framework")
-    click.echo(f"  📖 Documentation: https://nextpy.org/docs")
-    click.echo(f"  🆘 Support: https://github.com/RAHIMSTUDIOS/nextpy-framework/issues")
+    click.echo(f"Version: 4.0.0 ")
+    click.echo(f"Python: {sys.version.split()[0]}")
+    click.echo(f"Framework: NextPy")
+    click.echo(f"Architecture: True JSX")
+    click.echo(f"Development Server: uvicorn")
+    click.echo(f"Hot Reload: Available")
+    click.echo(f"Static Files: Available")
+    click.echo(f"API Routes: Available")
+    click.echo(f"Page Routes: Available")
+    click.echo(f"Component Routes: Available")
+    click.echo(f"Component Library: Available")
+    click.echo(f"Developer: RAHIMSTUDIOS")
+    click.echo(f"License: MIT")
+    click.echo(f"GitHub: https://github.com/IRAHIMSTUDIOS/nextpy-framework")
+    click.echo(f"Documentation: https://nextpy.org/docs")
+    click.echo(f"Support: https://github.com/RAHIMSTUDIOS/nextpy-framework/issues")
 
     click.echo()
 
@@ -772,11 +772,11 @@ def version():
 @cli.command()
 def info():
     """Show comprehensive framework and system information"""
-    click.echo(click.style("\n  🖥️  NextPy System Information", fg="cyan", bold=True))
+    click.echo(click.style("\n NextPy System Information", fg="cyan", bold=True))
     click.echo(click.style("  ==========================\n", fg="cyan"))
 
     # Framework info
-    click.echo(click.style("  📦 Framework Details:", fg="blue", bold=True))
+    click.echo(click.style("Framework Details:", fg="blue", bold=True))
     click.echo(f"    Version: 2.4.4")
     click.echo(f"    Architecture: True JSX")
     click.echo(f"    Python: {sys.version.split()[0]}")
@@ -784,18 +784,18 @@ def info():
     # Feature status
     click.echo(click.style("\n  ⚡ Feature Status:", fg="green", bold=True))
     watchdog_status = (
-        "✅ Available"
+        "Available"
         if WATCHDOG_AVAILABLE
         else "❌ Not Available (pip install watchdog)"
     )
     click.echo(f"    Hot Reload: {watchdog_status}")
-    click.echo(f"    Static Files: ✅ Available")
-    click.echo(f"    API Routes: ✅ Available")
-    click.echo(f"    Page Routes: ✅ Available")
-    click.echo(f"    Component Library: ✅ Available")
+    click.echo(f"    Static Files:  Available")
+    click.echo(f"    API Routes: Available")
+    click.echo(f"    Page Routes: Available")
+    click.echo(f"    Component Library: Available")
 
     # Project structure check
-    click.echo(click.style("\n  📁 Project Structure:", fg="yellow", bold=True))
+    click.echo(click.style("\n Project Structure:", fg="yellow", bold=True))
     required_dirs = ["pages", "components", "templates", "public"]
     for dir_name in required_dirs:
         status = "✅" if Path(dir_name).exists() else "❌"
@@ -1362,7 +1362,29 @@ module.exports = {
     else:
         _create_traditional_homepage(project_dir)
 
-    (project_dir / "pages" / "index.py").write_text('''"""Interactive Homepage """
+    (project_dir / "pages" / "layout.psx").write_text('''
+from nextpy.psx import component
+"""App Layout"""
+@component
+def Layout(children, **props):
+    return (
+        <html>
+            <head>
+                <title>{{props.get('title', 'My App')</title>
+                
+                <link href="/tailwind.css" rel="stylesheet">
+            </head>
+            <body>
+                {children}  
+            </body>
+        </html>
+    )
+
+    ''')
+    click.echo("  Created: pages/layout.psx ")
+
+    (project_dir / "pages" / "index.psx").write_text('''
+"""Interactive Homepage """
 
 from nextpy.psx import interactive_component as component
 
@@ -1500,11 +1522,12 @@ default = Home
 
 
 ''')
-    click.echo("  Created: pages/index.py ")
+    click.echo("  Created: pages/index.psx ")
 
 
-    (project_dir / "components" / "ui" / "Button.py").write_text(
-        '''"""Button component"""
+    (project_dir / "components" / "ui" / "Button.psx").write_text(
+        '''
+"""Button component"""
 from nextpy.psx import psx
 
 
@@ -1542,55 +1565,12 @@ def Button(props = None):
 default = Button
 '''
     )
-    click.echo("  Created: components/ui/Button.py (enhanced interactive)")
-
-    # Create a Layout component
-    (project_dir / "components" / "layout" / "Layout.py").write_text(
-        '''"""Layout component"""
-
-from nextpy.psx import component
-
-@component
-def Layout(props = None):
-    """Layout component wrapper"""
-    props = props or {}
-    
-    title = props.get("title", "NextPy App")
-    children = props.get("children", "")
-    
-    return (
-        <div class="flex flex-col min-h-screen">
-            <header class="bg-white shadow-sm">
-                <div class="px-4 py-4 mx-auto max-w-7xl">
-                    <div class="flex items-center justify-between">
-                        <h1 class="text-2xl font-bold text-gray-900">{title}</h1>
-                        <nav class="flex space-x-4">
-                            <a href="/" class="text-gray-600 hover:text-gray-900">Home</a>
-                            <a href="/about" class="text-gray-600 hover:text-gray-900">About</a>
-                        </nav>
-                    </div>
-                </div>
-            </header>
-            <main class="flex-1">
-                {children}
-            </main>
-            <footer class="mt-auto bg-gray-100">
-                <div class="px-4 py-6 mx-auto text-center text-gray-600 max-w-7xl">
-                    <p>&copy; 2025 NextPy Framework. All rights reserved.</p>
-                </div>
-            </footer>
-        </div>
-    )
-
-default = Layout
-'''
-    )
-    click.echo("  Created: components/layout/Layout.py")
-
+    click.echo("  Created: components/ui/Button.psx(enhanced interactive)")
     
     # Create comprehensive API examples
-    (project_dir / "pages" / "api" / "hello.py").write_text(
-        '''"""API example - Hello endpoint"""
+    (project_dir / "pages" / "api" / "hello.psx").write_text(
+        '''
+"""API example - Hello endpoint"""
 
 from fastapi import Request
 
@@ -1604,7 +1584,7 @@ async def post(request: Request):
     return {"message": "POST request received", "data": data, "status": "success"}
 '''
     )
-    click.echo("  Created: pages/api/hello.py")
+    click.echo("  Created: pages/api/hello.psx")
 
     (project_dir / "pages" / "api" / "users" / "index.py").write_text(
         '''"""API example - Users index"""
@@ -1634,7 +1614,8 @@ async def post(request: Request):
     click.echo("  Created: pages/api/users/index.py")
 
     (project_dir / "pages" / "api" / "users" / "[id].py").write_text(
-        '''"""API example - Dynamic user route"""
+        '''
+"""API example - Dynamic user route"""
 
 from fastapi import Request
 
@@ -1687,10 +1668,9 @@ class User(Base):
 
     # Blog listing page
     (project_dir / "pages" / "blog" / "index.py").write_text('''
-    """Blog listing page"""
+"""Blog listing page"""
 
 from nextpy.psx import component
-
 
 @component
 def BlogIndex(props=None):
@@ -1698,58 +1678,96 @@ def BlogIndex(props=None):
     posts = props.get("posts", [])
 
     return (
-        <div class="min-h-screen py-12 bg-gray-50">
-            <div class="max-w-4xl px-4 mx-auto sm:px-6 lg:px-8">
-                <h1 class="mb-10 text-4xl font-extrabold text-gray-900">Blog</h1>
-                <div class="grid gap-8">
-                    {[
-                        <article class="overflow-hidden transition-shadow bg-white shadow-md rounded-xl hover:shadow-lg">
-                            <div class="p-6">
-                                <h2 class="mb-2 text-2xl font-bold text-gray-900">
-                                    <a href={f"/blog/{post['slug']}"} class="transition-colors hover:text-blue-600">
-                                        {post["title"]}
-                                    </a>
-                                </h2>
-                                <p class="mb-4 text-gray-600">{post["excerpt"]}</p>
-                                <div class="flex items-center text-sm text-gray-500">
-                                    <span>{post["date"]}</span>
-                                    <span class="mx-2">·</span>
-                                    <span>{post["author"]}</span>
+        <div class="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30">
+            {/* Hero Section */}
+            <div class="relative overflow-hidden bg-white shadow-sm">
+                <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10"></div>
+                <div class="relative max-w-6xl px-4 py-16 mx-auto text-center sm:py-24 sm:px-6 lg:px-8">
+                    <h1 class="text-5xl font-extrabold tracking-tight text-gray-900 sm:text-6xl">
+                        <span class="text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text">
+                            Our Blog
+                        </span>
+                    </h1>
+                    <p class="max-w-2xl mx-auto mt-4 text-xl text-gray-600">
+                        Stories, insights, and updates from the team
+                    </p>
+                </div>
+            </div>
+
+            {/* Posts Grid */}
+            <div class="max-w-6xl px-4 py-12 mx-auto sm:px-6 lg:px-8">
+                <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+                    {if len(posts) > 0:
+                        {for post in posts:
+                            <article class="relative flex flex-col overflow-hidden transition-all duration-300 bg-white shadow-md group rounded-2xl hover:shadow-2xl hover:-translate-y-1">
+                                {/* Card Image Placeholder */}
+                                <div class="relative h-48 overflow-hidden bg-gradient-to-br from-indigo-200 to-purple-200">
+                                    <div class="absolute inset-0 flex items-center justify-center text-4xl text-indigo-400/50">
+                                        📖
+                                    </div>
+                                    <div class="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white/80 to-transparent"></div>
                                 </div>
-                            </div>
-                        </article>
-                        for post in posts
-                    ]}
-                    if posts else (
-                        <p class="text-gray-600">No posts yet. Check back soon!</p>
-                    )
+
+                                <div class="flex flex-col flex-1 p-6">
+                                    <h2 class="text-xl font-bold text-gray-900 line-clamp-2">
+                                        <a href="blog/{post['slug']}" class="transition-colors rounded hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                            {post["title"]}
+                                        </a>
+                                    </h2>
+                                    <p class="mt-2 text-sm text-gray-600 line-clamp-3">{post["excerpt"]}</p>
+
+                                    <div class="flex items-center justify-between mt-4 text-xs text-gray-500">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                                Article
+                                            </span>
+                                            <span>·</span>
+                                            <span>{post["date"]}</span>
+                                        </div>
+                                        <span class="font-medium text-gray-700">{post["author"]}</span>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <a href="blog/{post['slug']}" class="inline-flex items-center text-sm font-semibold text-indigo-600 transition-colors hover:text-indigo-800 group-hover:underline">
+                                            Read more
+                                            <svg class="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                        </a>
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    {else:
+                        <div class="py-20 text-center col-span-full">
+                            <div class="mb-4 text-6xl">📭</div>
+                            <p class="text-xl text-gray-600">No posts yet. Check back soon!</p>
+                            <p class="text-sm text-gray-400">We're cooking up something great.</p>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
     )
 
-
 def getServerSideProps(context):
-    # In a real app, fetch posts from a database or CMS
     posts = [
         {
             "slug": "hello-world",
             "title": "Hello World",
-            "excerpt": "Welcome to our blog built with NextPy!",
+            "excerpt": "Welcome to our blog built with NextPy! This is a modern way to build web apps with Python.",
             "date": "2025-01-15",
             "author": "Team NextPy",
         },
         {
             "slug": "why-python-web",
             "title": "Why Python for Web Apps",
-            "excerpt": "Discover how Python is changing front-end development.",
+            "excerpt": "Discover how Python is changing front-end development and why you should care.",
             "date": "2025-02-20",
             "author": "Jane Doe",
         },
     ]
-
     return {"props": {"posts": posts}}
-
 
 default = BlogIndex
     ''')
@@ -1759,11 +1777,10 @@ default = BlogIndex
     (project_dir / "pages" / "blog" / "[slug].py").write_text('''
     """Dynamic blog post page – accessed via /blog/{slug}"""
 
-from nextpy.psx import component
+from nextpy.psx import interactive_component
 
-
-@component
-def BlogPost(props=None):
+@interactive_component
+def BlogPost(props):
     props = props or {}
     post = props.get("post", {})
 
@@ -1802,33 +1819,31 @@ def BlogPost(props=None):
         </div>
     )
 
-
 def getServerSideProps(context):
     slug = context.get("params", {}).get("slug", "")
 
-    # Simulated database lookup
     posts = {
         "hello-world": {
             "slug": "hello-world",
             "title": "Hello World",
             "date": "2025-01-15",
             "author": "Team NextPy",
-            "content": "This is the full content of the Hello World post. You can use **Markdown** or plain HTML.",
+            "content": "This is the full content of the Hello World post.",
         },
         "why-python-web": {
             "slug": "why-python-web",
             "title": "Why Python for Web Apps",
             "date": "2025-02-20",
             "author": "Jane Doe",
-            "content": "Python has evolved far beyond scripting. With frameworks like NextPy, you can build modern, reactive web apps entirely in Python.",
+            "content": "Python has evolved far beyond scripting.",
         },
     }
 
-    post = posts.get(slug)
+    post = posts.get(slug, {})
     return {"props": {"post": post}}
 
-
 default = BlogPost
+
     ''')
     click.echo("  Created: pages/blog/[slug].py")
 

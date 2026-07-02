@@ -1,0 +1,20 @@
+from nextpy.psx import interactive_component, create_onsubmit, useState
+
+
+@interactive_component
+def ContactForm(props):
+    [name, setName] = useState("")
+    [email, setEmail] = useState("")
+    [submitted, setSubmitted] = useState(False)
+
+    # Create the submit handler
+    handleSubmit = create_onsubmit(lambda e: setSubmitted(True))
+
+    return (
+        <form create_onsubmit={handleSubmit}>
+            <input bind={name} placeholder="Name" />
+            <input bind={email} placeholder="Email" />
+            <button type="submit">Submit</button>
+        </form>
+    )
+default = ContactForm

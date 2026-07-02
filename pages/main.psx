@@ -1,0 +1,251 @@
+from nextpy.psx import useState, interactive_component, create_onclick
+
+@interactive_component
+def DashboardCard(props):
+    props = props or {}
+
+    # ---------- State ----------
+    [sidebarOpen, setSidebarOpen] = useState(True)
+    [darkMode, setDarkMode] = useState(False)
+    [activeMenu, setActiveMenu] = useState("dashboard")
+
+    [notifications, setNotifications] = useState([
+        {"id": "1", "title": "New user registered", "time": "2 min ago", "read": False},
+        {"id": "2", "title": "Server update completed", "time": "1 hour ago", "read": False},
+        {"id": "3", "title": "Monthly report ready", "time": "3 hours ago", "read": True},
+    ])
+
+    unreadCount = len([n for n in notifications if not n["read"]])
+
+    handleSetActive = create_onclick(lambda e: setActiveMenu("dashboard"))
+    handleToggleSidebar = create_onclick(lambda e: setSidebarOpen(not sidebarOpen))
+    handleToggleDarkMode = create_onclick(lambda e: setDarkMode(not darkMode))
+    handleClearAll = create_onclick(lambda e: setNotifications.clear())
+    
+
+    # ---------- Menu items ----------
+    menu_items = [
+        {"name": "dashboard", "label": "Dashboard", "icon": "🏠"},
+        {"name": "analytics", "label": "Analytics", "icon": "📊"},
+        {"name": "users", "label": "Users", "icon": "👥"},
+        {"name": "settings", "label": "Settings", "icon": "⚙️"},
+    ]
+
+    # ---------- Main container class ----------
+    main_class = "min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300 flex"
+    if darkMode:
+        main_class += " dark"
+
+    return (
+        <div class={main_class}>
+
+            {/* ========== SIDEBAR ========== */}
+            {if sidebarOpen:
+                <!-- EXPANDED SIDEBAR -->
+                <div class="fixed inset-y-0 left-0 z-30 flex flex-col w-64 bg-white border-r border-gray-200 shadow-xl dark:bg-gray-900 dark:border-gray-800">
+                    <div class="flex items-center h-16 px-6 border-b border-gray-200 dark:border-gray-800">
+                        <div class="flex items-center space-x-2">
+                            <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600">
+                                <span class="text-lg font-bold text-white">N</span>
+                            </div>
+                            <span class="text-xl font-bold text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text">NextPy</span>
+                        </div>
+                    </div>
+                    <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+                        {for item in menu_items:
+                            <a key={item["name"]}
+                               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" create_onclick={handleSetActive}>
+                                <span class="text-xl">{item["icon"]}</span>
+                                <span class="font-medium">{item["label"]}</span>
+                            </a>
+                        }
+                    </nav>
+                    <div class="p-4 border-t border-gray-200 dark:border-gray-800">
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center justify-center w-10 h-10 font-semibold text-white rounded-full bg-gradient-to-tr from-blue-500 to-purple-600">JD</div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate dark:text-white">John Doe</p>
+                                <p class="text-xs text-gray-500 truncate dark:text-gray-400">john@nextpy.dev</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {else:
+                <div class="fixed inset-y-0 left-0 z-30 flex flex-col items-center w-20 py-4 bg-white border-r border-gray-200 shadow-xl dark:bg-gray-900 dark:border-gray-800">
+                    <div class="flex items-center justify-center w-10 h-10 mb-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl">
+                        <span class="text-xl font-bold text-white">N</span>
+                    </div>
+                    <nav class="flex flex-col items-center flex-1 space-y-6">
+                        {for item in menu_items:
+                            <a key={item["name"]}
+                               class="relative flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 cursor-pointer text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                               create_onclick={handleSetActive}
+                               title={item["label"]}>
+                                <span class="text-2xl">{item["icon"]}</span>
+                            </a>
+                        }
+                    </nav>
+                    <div class="flex items-center justify-center w-10 h-10 mt-auto mb-4 font-semibold text-white transition rounded-full cursor-pointer bg-gradient-to-tr from-blue-500 to-purple-600 hover:scale-105">
+                        JD
+                    </div>
+                </div>
+            }
+
+            {/* ========== MAIN CONTENT ========== */}
+            <div class="flex-1 transition-all duration-300 ml-64">
+
+                {/* Header */}
+                <header class="sticky top-0 z-20 border-b border-gray-200 shadow-sm bg-white/80 dark:bg-gray-900/80 backdrop-blur-md dark:border-gray-800">
+                    <div class="flex items-center justify-between px-6 py-3">
+                        <div class="flex items-center space-x-4">
+                            <button class="p-2 text-gray-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" create_onclick={handleToggleSidebar}>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                                </svg>
+                            </button>
+                            <h1 class="text-xl font-semibold text-gray-800 capitalize dark:text-white">{activeMenu}</h1>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <button class="p-2 text-gray-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" create_onclick={handleToggleDarkMode}>
+                                {if darkMode:
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                    </svg>
+                                {else:
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                                    </svg>
+                                }
+                            </button>
+                            <div class="relative">
+                                <button class="relative p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                                    </svg>
+                                    {if unreadCount > 0:
+                                        <span class="absolute flex items-center justify-center w-5 h-5 text-xs text-white bg-red-500 rounded-full shadow-sm -top-1 -right-1">{unreadCount}</span>
+                                    }
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-center w-8 h-8 text-sm font-medium text-white rounded-full bg-gradient-to-tr from-blue-500 to-purple-600">
+                                IF
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                {/* Main content */}
+                <main class="p-6 md:p-8">
+
+                    {/* Stats Cards */}
+                    <div class="grid grid-cols-1 gap-6 mb-8 sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="p-6 transition-all bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800 hover:shadow-lg">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Total Revenue</p>
+                                    <p class="mt-1 text-2xl font-bold text-gray-800 dark:text-white">$48,295</p>
+                                    <span class="inline-flex items-center mt-2 text-xs text-green-600 dark:text-green-400">↑ 12.5%</span>
+                                </div>
+                                <div class="flex items-center justify-center w-12 h-12 text-xl text-blue-600 bg-blue-100 dark:bg-blue-900/30 rounded-xl dark:text-blue-400">💰</div>
+                            </div>
+                        </div>
+                        <div class="p-6 bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Active Users</p>
+                                    <p class="mt-1 text-2xl font-bold text-gray-800 dark:text-white">2,847</p>
+                                    <span class="text-xs text-green-600 dark:text-green-400">↑ 8.2%</span>
+                                </div>
+                                <div class="flex items-center justify-center w-12 h-12 text-xl text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl dark:text-indigo-400">👥</div>
+                            </div>
+                        </div>
+                        <div class="p-6 bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Conversion Rate</p>
+                                    <p class="mt-1 text-2xl font-bold text-gray-800 dark:text-white">24.8%</p>
+                                    <span class="text-xs text-red-600 dark:text-red-400">↓ 2.1%</span>
+                                </div>
+                                <div class="flex items-center justify-center w-12 h-12 text-xl text-purple-600 bg-purple-100 dark:bg-purple-900/30 rounded-xl dark:text-purple-400">📈</div>
+                            </div>
+                        </div>
+                        <div class="p-6 bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Projects</p>
+                                    <p class="mt-1 text-2xl font-bold text-gray-800 dark:text-white">142</p>
+                                    <span class="text-xs text-green-600 dark:text-green-400">+23 new</span>
+                                </div>
+                                <div class="flex items-center justify-center w-12 h-12 text-xl bg-emerald-100 dark:bg-emerald-900/30 rounded-xl text-emerald-600 dark:text-emerald-400">🚀</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Notifications Panel */}
+                    <div class="mb-8 overflow-hidden bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800">
+                        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+                            <h3 class="font-semibold text-gray-800 dark:text-white">Notifications</h3>
+                            {if len(notifications) > 0:
+                                <button class="text-xs font-medium text-red-500 transition hover:text-red-700 dark:text-red-400"
+                                        create_onclick={handleClearAll}>Clear all</button>
+                            }
+                        </div>
+                        <div class="overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 max-h-80">
+                            {for n in notifications:
+                                <div class="flex items-start justify-between px-6 py-4 transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2">
+                                            {if not n["read"]:
+                                                <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+                                            }
+                                            <p class="text-sm text-gray-800 dark:text-white font-medium">
+                                                {n["title"]}
+                                            </p>
+                                        </div>
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{n["time"]}</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <button class="text-gray-400 transition hover:text-red-500"
+                                                create_onclick={handleClearAll}>
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    {/* Simple Chart + Sidebar State */}
+                    <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div class="p-6 bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-semibold text-gray-800 dark:text-white">Weekly Overview</h3>
+                                <span class="text-xs text-gray-400 dark:text-gray-500">Last 7 days</span>
+                            </div>
+                            <div class="flex items-end h-40 gap-3">
+                                <div class="flex-1 h-24 bg-blue-200 rounded-lg dark:bg-blue-900/30"></div>
+                                <div class="flex-1 h-32 bg-blue-300 rounded-lg dark:bg-blue-800/40"></div>
+                                <div class="flex-1 h-40 bg-blue-500 rounded-lg dark:bg-blue-600"></div>
+                                <div class="flex-1 bg-blue-300 rounded-lg dark:bg-blue-800/40 h-28"></div>
+                                <div class="flex-1 h-20 bg-blue-200 rounded-lg dark:bg-blue-900/30"></div>
+                                <div class="flex-1 bg-blue-400 rounded-lg dark:bg-blue-700/40 h-36"></div>
+                                <div class="flex-1 bg-blue-300 rounded-lg dark:bg-blue-800/40 h-26"></div>
+                            </div>
+                            <div class="flex justify-between mt-3 text-xs text-gray-500 dark:text-gray-400">
+                                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                            </div>
+                        </div>
+                        <div class="p-6 bg-white border border-gray-100 shadow-md dark:bg-gray-900 rounded-2xl dark:border-gray-800">
+                            <h3 class="mb-4 font-semibold text-gray-800 dark:text-white">Sidebar State</h3>
+                            
+                        </div>
+                    </div>
+
+                </main>
+            </div>
+        </div>
+    )
+
+default = DashboardCard

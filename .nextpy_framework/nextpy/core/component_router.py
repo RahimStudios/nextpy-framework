@@ -20,13 +20,21 @@ class ComponentRoute(Route):
     """A route that renders components instead of templates"""
     use_components: bool = True
     renderer: ComponentRenderer = field(default_factory=ComponentRenderer)
+    special_chains: Dict[str, List[Path]] = field(default_factory=dict)
 
 
 class ComponentRouter:
     """
     Enhanced router that supports both template-based and component-based pages
     Automatically detects which rendering system to use based on file content
+    Supports Next.js-style special files: layout, page, loading, error, not-found, etc.
     """
+    
+    # Special file names (Next.js-style)
+    SPECIAL_FILES = {
+        'layout', 'page', 'loading', 'error', 'not-found', 
+        'template', 'middleware', 'head', 'route'
+    }
     
     def __init__(self, pages_dir: str = "pages", templates_dir: str = "templates"):
         self.pages_dir = Path(pages_dir)
@@ -46,6 +54,11 @@ class ComponentRouter:
         for ext in extensions:
             for file_path in self.pages_dir.rglob(ext):
                 if file_path.name.startswith("_"):
+                    continue
+                
+                # Skip special files - they're handled separately
+                stem = file_path.stem
+                if stem in self.SPECIAL_FILES:
                     continue
                     
                 route = self._create_route_from_file(file_path)
@@ -123,6 +136,10 @@ class ComponentRouter:
         
         handler = self._load_handler(file_path, use_components)
         
+        # Build special file chains for this route
+        special_chains = self._build_special_files_chain(file_path)
+        layout_chain = special_chains['layout']
+        
         route_class = ComponentRoute if use_components else (DynamicRoute if is_dynamic else Route)
         
         route = route_class(
@@ -132,13 +149,15 @@ class ComponentRouter:
             is_api=is_api,
             is_dynamic=is_dynamic,
             param_names=param_names,
-            pattern=pattern
+            pattern=pattern,
+            layout_chain=layout_chain
         )
         
         # Add component-specific attributes
         if use_components:
             route.use_components = True
             route.renderer = self.renderer
+            route.special_chains = special_chains
         
         return route
         
@@ -365,6 +384,132 @@ class ComponentRouter:
                 pass  # Silently fail if both methods fail
                 
         return None
+    
+    def _find_special_file(self, directory: Path, file_name: str) -> Optional[Path]:
+        """Find a special file (layout, loading, error, etc.) in a directory with .psx priority"""
+        # Check .psx first (higher priority), then .py
+        psx_file = directory / f"{file_name}.psx"
+        py_file = directory / f"{file_name}.py"
+        
+        if psx_file.exists():
+            return psx_file
+        elif py_file.exists():
+            return py_file
+        return None
+    
+    def _build_special_files_chain(self, page_file_path: Path) -> Dict[str, List[Path]]:
+        """Build chains for all special files (layout, loading, error, etc.) for a route"""
+        special_chains = {
+            'layout': [],
+            'loading': [],
+            'error': [],
+            'not-found': [],
+            'template': []
+        }
+        
+        # Start from the page's directory and work up to the root
+        current_dir = page_file_path.parent
+        
+        while current_dir != self.pages_dir.parent:
+            # Check for each special file type
+            for file_type in special_chains.keys():
+                special_file = self._find_special_file(current_dir, file_type)
+                if special_file:
+                    special_chains[file_type].append(special_file)
+            
+            # Move up one directory
+            current_dir = current_dir.parent
+        
+        # Reverse all chains to get inside-out order (root last)
+        for file_type in special_chains:
+            special_chains[file_type].reverse()
+        
+        return special_chains
+    
+    def _build_layout_chain(self, page_file_path: Path) -> List[Path]:
+        """Build the layout chain for a given page file (inside-out order)"""
+        special_chains = self._build_special_files_chain(page_file_path)
+        return special_chains['layout']
+    
+    def _load_layout(self, layout_path: Path) -> Optional[Callable]:
+        """Load a layout function from a layout file"""
+        try:
+            # For .psx files, use JSX transformer to compile first
+            if layout_path.suffix == '.psx':
+                try:
+                    from ..jsx_transformer import JSXTransformer
+                    transformer = JSXTransformer()
+                    module = transformer.load_jsx_module(layout_path, layout_path.stem)
+                    
+                    if module:
+                        if hasattr(module, "Layout"):
+                            return getattr(module, "Layout")
+                        elif hasattr(module, "layout"):
+                            return getattr(module, "layout")
+                except Exception as e:
+                    print(f"Warning: Failed to load .psx layout with JSX transformer: {e}")
+            
+            # For .py files, import normally
+            spec = importlib.util.spec_from_file_location(
+                layout_path.stem, 
+                layout_path
+            )
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                # Look for Layout function
+                if hasattr(module, "Layout"):
+                    return getattr(module, "Layout")
+                elif hasattr(module, "layout"):
+                    return getattr(module, "layout")
+                        
+        except Exception as e:
+            print(f"Warning: Failed to load layout from {layout_path}: {e}")
+            import traceback
+            traceback.print_exc()
+                
+        return None
+    
+    def _extract_layout_metadata(self, layout_path: Path) -> Dict[str, Any]:
+        """Extract metadata from a layout file (title, description, theme, etc.)"""
+        metadata = {}
+        try:
+            # For .py files, check for metadata variables
+            if layout_path.suffix == '.py':
+                spec = importlib.util.spec_from_file_location(
+                    layout_path.stem, 
+                    layout_path
+                )
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    # Check for common metadata variables
+                    if hasattr(module, 'metadata'):
+                        metadata.update(module.metadata)
+                    if hasattr(module, 'title'):
+                        metadata['title'] = module.title
+                    if hasattr(module, 'description'):
+                        metadata['description'] = module.description
+                    if hasattr(module, 'theme'):
+                        metadata['theme'] = module.theme
+        except Exception as e:
+            print(f"Warning: Failed to extract metadata from {layout_path}: {e}")
+        
+        return metadata
+    
+    def _merge_route_metadata(self, special_chains: Dict[str, List[Path]]) -> Dict[str, Any]:
+        """Merge metadata from all layout chains (parent layouts override child layouts)"""
+        merged_metadata = {}
+        
+        # Merge metadata from layout chain (root to leaf, so leaf overrides root)
+        layout_chain = special_chains.get('layout', [])
+        for layout_path in layout_chain:
+            metadata = self._extract_layout_metadata(layout_path)
+            merged_metadata.update(metadata)
+        
+        return merged_metadata
         
     def _sort_routes(self) -> None:
         """Sort routes so static routes come before dynamic ones"""
@@ -400,12 +545,77 @@ class ComponentRouter:
         return None
         
     def render_route(self, route: Route, context: Dict[str, Any] = None) -> str:
-        """Render a route using the appropriate renderer"""
+        """Render a route using the appropriate renderer with support for loading/error states"""
         if context is None:
             context = {}
             
         if isinstance(route, ComponentRoute) and route.use_components:
-            return route.renderer.render_page(route.file_path, context)
+            # Import render_psx here (before the try block) so it is available in
+            # both the success path and the except/error-boundary path.
+            from ..psx import render_psx
+            try:
+                # Merge layout metadata into context
+                if hasattr(route, 'special_chains') and route.special_chains:
+                    metadata = self._merge_route_metadata(route.special_chains)
+                    context.update(metadata)
+                    print(f"DEBUG: Merged metadata: {metadata}")
+                
+                # Get the page component (not rendered HTML)
+                page_element = route.renderer.get_page_element(route.file_path, context)
+                print(f"DEBUG: Page element type: {type(page_element)}, value: {page_element}")
+                
+                # Apply layout chain innermost-first so the root layout wraps everything.
+                # layout_chain is stored [root, ..., inner] (reversed from collection order).
+                # Iterating reversed() gives [inner, ..., root], so each iteration wraps
+                # the current page_element — final result is root(inner(...(page))).
+                if hasattr(route, 'layout_chain') and route.layout_chain:
+                    for layout_path in reversed(route.layout_chain):
+                        layout_func = self._load_layout(layout_path)
+                        print(f"DEBUG: Layout function: {layout_func}")
+                        if layout_func:
+                            try:
+                                # Pass the page element directly as children so its _ast_node
+                                # reference is preserved and to_html() renders it correctly.
+                                # Wrapping in a new PSXElement loses the AST node references
+                                # that contain parsed expressions, logic blocks, etc.
+                                children_element = page_element
+                                
+                                # Wrap page element with layout - pass PSXElement as children
+                                # IMPORTANT: Pass the full context to the layout
+                                print(f"DEBUG: Calling layout with context keys: {list(context.keys())}")
+                                # Add props to context for layout components
+                                layout_context = {**context, 'props': context}
+                                page_element = layout_func(children=children_element, **layout_context)
+                                print(f"DEBUG: After layout, element type: {type(page_element)}")
+                            except Exception as e:
+                                print(f"Warning: Failed to apply layout {layout_path}: {e}")
+                                import traceback
+                                traceback.print_exc()
+                
+                # Now render the final composed element tree to HTML
+                content = render_psx(page_element, context)
+                print(f"DEBUG: Rendered content length: {len(content)}")
+                
+                return content
+            except Exception as e:
+                print(f"ERROR: Failed to render route: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Try to render error boundary if available
+                if hasattr(route, 'special_chains') and route.special_chains.get('error'):
+                    error_chain = route.special_chains['error']
+                    if error_chain:
+                        try:
+                            error_func = self._load_layout(error_chain[-1])  # Use closest error boundary
+                            if error_func:
+                                from ..psx.core.parser import PSXElement
+                                error_element = error_func(error=str(e), **context)
+                                return render_psx(error_element, context)
+                        except Exception as error_error:
+                            print(f"ERROR: Failed to render error boundary: {error_error}")
+                
+                return f"<h1>Error rendering route: {e}</h1>"
         elif route.handler and callable(route.handler):
             return route.handler(context)
         else:

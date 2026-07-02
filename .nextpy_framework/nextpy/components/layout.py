@@ -45,7 +45,7 @@ def Grid(
 
 
 def Flex(
-    children: List = None,
+    children: List = [],
     direction: str = "row",
     justify: str = "justify-start",
     align: str = "items-start",

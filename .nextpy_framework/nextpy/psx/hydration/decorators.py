@@ -441,7 +441,7 @@ def generate_handler_registration_script(
             if hasattr(handler_body[0], 'to_dict'):
                 # New AST-based structured Action objects
                 serialized_actions = [action.to_dict() for action in handler_body]
-                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId"
+                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId)"
                 event_type = event_types.get(handler_name, 'click')
             elif isinstance(handler_body[0], dict):
                 # Already serialized actions
@@ -472,7 +472,6 @@ def generate_handler_registration_script(
         script += f"""
     // Handler: {handler_name} (event: {event_type})
     component._handlers['{handler_name}'] = function(e) {{
-        console.log('Handler called: {handler_name}');
         try {{
             {safe_js_body}
         }} catch (error) {{
@@ -618,7 +617,6 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
     print(f"DEBUG convert_handler_attributes_in_html: Input HTML length={len(html)}, handlers={list(handlers.keys())}, state_keys={state_keys}")
     
     # DEBUG: Show sample of HTML with create_on attributes
-    import re
     create_on_samples = re.findall(r'create_on\w+\s*=\s*[^>]+', html[:1000])
     print(f"DEBUG: Found create_on patterns in HTML: {create_on_samples}")
     
@@ -685,7 +683,8 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
     print(f"DEBUG: After python_call pattern, HTML contains create_on: {'create_on' in html}")
     
     # Matches: create_onclick, create_onchange, create_onsubmit, etc.
-    create_on_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(\w+)\}'
+    # Updated to handle placeholder names like python_call_handleSubmit
+    create_on_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{([a-zA-Z0-9_]+)\}'
     
     def replace_create_on_handler(match):
         event_name = match.group(1)  # "click", "change", etc.
@@ -693,17 +692,16 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
         
         print(f"DEBUG: create_on pattern matched: event={event_name}, handler={handler_name}")
         
-        # Only replace if it's a known handler
-        if handler_name in handlers:
-            # Return ONLY data-handler attribute - NO onclick
-            return f'data-handler-{event_name}="{handler_name}"'
-        return match.group(0)
+        # Return data-handler attribute - the handler will be registered separately
+        return f'data-handler-{event_name}="{handler_name}"'
     
     html = re.sub(create_on_pattern, replace_create_on_handler, html)
     print(f"DEBUG: After create_on pattern, HTML contains create_on: {'create_on' in html}")
     
     # Pattern 2b: create_onclick={lambda ...} (inline lambda with create_on)
-    create_lambda_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(lambda[^}]+)\}'
+    # This pattern should NOT match if the lambda has already been converted to a placeholder
+    # Only match actual lambda code, not placeholder names
+    create_lambda_pattern = r'\bcreate_on([a-z]+)\s*=\s*\{(lambda\s+[^}]+)\}'
     
     def replace_create_lambda_handler(match):
         event_name = match.group(1)  # "click", "change", etc.
@@ -810,14 +808,16 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
 
         def protect_attr_values(match):
             nonlocal attr_placeholder_counter
-            attr_value = match.group(0)
+            attr_value = match.group(1)  # Get the captured value inside quotes
             placeholder = f"__ATTR_PLACEHOLDER_{attr_placeholder_counter}__"
             protected_attrs[placeholder] = attr_value
             attr_placeholder_counter += 1
             return placeholder
 
         # Protect all attribute values (anything between quotes after =)
-        html = re.sub(r'=\s*["\'][^"\']*["\']', protect_attr_values, html)
+        # Use separate patterns for double and single quotes to handle them correctly
+        html = re.sub(r'=\s*"([^"]*)"', lambda m: '="' + protect_attr_values(m) + '"', html)
+        html = re.sub(r"=\s*'([^']*)'", lambda m: "='" + protect_attr_values(m) + "'", html)
 
         # Now apply data-binding wrapping to the remaining content (which is not inside attributes)
         for state_key in state_keys:
@@ -1042,7 +1042,6 @@ def interactive_component(func: Callable) -> Callable:
             html = str(base_component_result)
         
         # Extract state keys from the component for better conversion
-        import re
         try:
             # Try to get source from function first
             source = inspect.getsource(func)
@@ -1118,11 +1117,19 @@ def interactive_component(func: Callable) -> Callable:
         print('main handler', handler_script)
         hydration_script = hydrator.generate_hydration_script()
         
+        # Load JS action runtime script for executeNextPyActions
+        try:
+            from ..runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+            action_runtime_script = JS_ACTION_RUNTIME_SCRIPT
+        except ImportError:
+            action_runtime_script = ""
+        
         # Combine all scripts in correct order
-        # 1. Full runtime script (defines NextPyRuntime)
-        # 2. Hydration script (initializes components)
-        # 3. Handler registration script (uses NextPyRuntime)
-        complete_script = f"{full_script}\n\n{hydration_script}\n\n{handler_script}"
+        # 1. JS action runtime script (defines executeNextPyActions)
+        # 2. Full runtime script (defines NextPyRuntime)
+        # 3. Hydration script (initializes components)
+        # 4. Handler registration script (uses executeNextPyActions)
+        complete_script = f"{action_runtime_script}\n\n{full_script}\n\n{hydration_script}\n\n{handler_script}"
         
         # Create a wrapped result that includes hydration data
         class InteractiveComponentResult:

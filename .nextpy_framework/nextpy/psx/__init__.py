@@ -50,7 +50,19 @@ from .hydration import (
 # Convenience functions
 def render_psx_component(element, context=None):
     """Render PSX component using the clean renderer"""
-    return renderer.render(element, context)
+    html = renderer.render(element, context)
+    
+    # Inject JavaScript runtime script for interactive components and full HTML documents
+    try:
+        from .runtime.js_actions_runtime import JS_ACTION_RUNTIME_SCRIPT
+        # Always inject for interactive components or full HTML documents
+        if 'data-handler-' in html or 'data-bind' in html or '<html' in html:
+            # Insert script at the very beginning to ensure it loads first
+            html = f"<script>{JS_ACTION_RUNTIME_SCRIPT}</script>{html}"
+    except ImportError:
+        pass
+    
+    return html
 
 # Auto-export all PSX features
 __all__ = [

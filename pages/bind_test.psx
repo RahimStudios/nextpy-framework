@@ -1,0 +1,56 @@
+from nextpy.psx import useState, interactive_component
+
+
+@interactive_component
+def BindTest(props):
+    props = props or {}
+
+    [name, setName] = useState("")
+    [email, setEmail] = useState("")
+
+    return (
+        <div class="max-w-lg mx-auto p-6">
+
+            <h1 class="text-2xl font-bold mb-4">
+                Bind Attribute Test
+            </h1>
+
+            <div class="space-y-4">
+
+                <div>
+                    <label class="block mb-2">
+                        Name:
+                    </label>
+                    <input
+                        bind={name}
+                        placeholder="Enter your name"
+                        class="border p-3 w-full rounded"
+                    />
+                </div>
+
+                <div>
+                    <label class="block mb-2">
+                        Email:
+                    </label>
+                    <input
+                        bind={email}
+                        placeholder="Enter your email"
+                        class="border p-3 w-full rounded"
+                    />
+                </div>
+
+                <div class="bg-gray-100 p-4 rounded">
+                    <p>
+                        Name: {name}
+                    </p>
+                    <p>
+                        Email: {email}
+                    </p>
+                </div>
+
+            </div>
+
+        </div>
+    )
+
+default = BindTest

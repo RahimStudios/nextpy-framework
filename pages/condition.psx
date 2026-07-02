@@ -31,9 +31,9 @@ def DashboardCard(props):
 
                     <div class="flex-1 p-4 space-y-2">
 
-                        <div class="p-3 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer">
+                        <a href="/bind_test" class="p-3 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer">
                             🏠 Dashboard
-                        </div>
+                        </a>
 
                         <div class="p-3 rounded-lg hover:bg-slate-800 cursor-pointer">
                             📊 Analytics

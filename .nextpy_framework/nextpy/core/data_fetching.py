@@ -38,6 +38,34 @@ class PageContext:
     preview_data: Optional[Dict[str, Any]] = None
     locale: Optional[str] = None
 
+    def get(self, key: str, default: Any = None) -> Any:
+        """Support dict-style access for existing page modules."""
+        if key == "params":
+            return self.params
+        if key == "query":
+            return self.query
+        if key == "req" or key == "request":
+            return self.req
+        if key == "res":
+            return self.res
+        if key == "preview":
+            return self.preview
+        if key == "preview_data":
+            return self.preview_data
+        if key == "locale":
+            return self.locale
+        return default
+
+    def __getitem__(self, key: str) -> Any:
+        if key in {"params", "query", "req", "request", "res", "preview", "preview_data", "locale"}:
+            return self.get(key)
+        raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
+        return key in {"params", "query", "req", "request", "res", "preview", "preview_data", "locale"}
+
 
 T = TypeVar("T", bound=Callable)
 
@@ -176,6 +204,13 @@ async def execute_data_fetching(
                     )
                 props.update(result.props)
             elif isinstance(result, dict):
+                if result.get("not_found"):
+                    raise PageNotFoundError()
+                if result.get("redirect"):
+                    raise RedirectError(
+                        result["redirect"].get("destination", "/"),
+                        result["redirect"].get("permanent", False)
+                    )
                 if "props" in result:
                     props.update(result["props"])
                 else:

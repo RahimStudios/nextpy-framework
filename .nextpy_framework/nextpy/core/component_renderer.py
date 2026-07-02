@@ -140,6 +140,81 @@ class ComponentRenderer:
                 del self.cache[str(file_path)]
             raise e
     
+    def get_page_element(self, file_path: Path, context: Dict[str, Any] = None):
+        """
+        Get the page component as a PSX element (not rendered HTML)
+        This allows layouts to compose with the page element tree before rendering
+        """
+        print(f"DEBUG get_page_element: Received context keys: {list(context.keys()) if context else 'None'}")
+        if context is None:
+            context = {}
+        else:
+            context = context.copy()  # Copy to avoid mutating the original
+        print(f"DEBUG get_page_element: After copy/initialization, context keys: {list(context.keys())}")
+        
+        try:
+            module = self.load_component_module(file_path)
+            
+            # Check for data fetching functions
+            page_props = {}
+            
+            # getServerSideProps (runs on every request)
+            if hasattr(module, 'getServerSideProps'):
+                if callable(module.getServerSideProps):
+                    result = module.getServerSideProps(context)
+                    if isinstance(result, dict) and 'props' in result:
+                        page_props.update(result['props'])
+            
+            # getStaticProps (runs at build time)
+            elif hasattr(module, 'getStaticProps'):
+                if callable(module.getStaticProps):
+                    static_props_key = f"static:{file_path}"
+                    static_cache_entry = self.cache.get(static_props_key)
+                    
+                    if self._is_cache_valid(file_path, static_cache_entry):
+                        page_props.update(static_cache_entry['props'])
+                    else:
+                        result = module.getStaticProps(context)
+                        if isinstance(result, dict) and 'props' in result:
+                            page_props.update(result['props'])
+                            self.cache[static_props_key] = {
+                                'props': result['props'],
+                                'timestamp': time.time(),
+                                'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0
+                            }
+            
+            # Get the main component
+            component = None
+            
+            if hasattr(module, 'default'):
+                component = module.default
+            elif hasattr(module, file_path.stem):
+                component = getattr(module, file_path.stem)
+            elif hasattr(module, 'Component'):
+                component = module.Component
+            elif hasattr(module, 'Page'):
+                component = module.Page
+            
+            if component is None:
+                raise ValueError(f"No component found in {file_path}")
+            
+            # Call the component to get the PSX element
+            # Pass both context and page_props
+            final_props = {**context, **page_props}
+            print(f"DEBUG: get_page_element calling component with props: {list(final_props.keys())}")
+            if callable(component):
+                element = component(final_props)
+            else:
+                element = component
+            
+            return element
+            
+        except Exception as e:
+            print(f"Error getting page element from {file_path}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
     def render_page(self, file_path: Path, context: Dict[str, Any] = None) -> str:
         """
         Render a page component to HTML with caching

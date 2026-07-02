@@ -1,0 +1,19 @@
+# Dashboard Layout
+from nextpy.psx import component
+
+@component
+def Layout(children):
+    return (
+        <div class="flex">
+            <aside class="w-64 bg-gray-200 p-4">
+                <h2 class="font-bold mb-4">Dashboard</h2>
+                <ul>
+                    <li><a href="/app/dashboard" class="block py-2">Overview</a></li>
+                    <li><a href="/app/dashboard/settings" class="block py-2">Settings</a></li>
+                </ul>
+            </aside>
+            <main class="flex-1 p-6">
+                {children}
+            </main>
+        </div>
+    )
