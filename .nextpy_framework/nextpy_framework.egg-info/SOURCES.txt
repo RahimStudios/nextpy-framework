@@ -57,6 +57,11 @@ pyproject.toml
 .nextpy_framework/nextpy/debug/performance.py
 .nextpy_framework/nextpy/debug/ui.py
 .nextpy_framework/nextpy/debug/websocket.py
+.nextpy_framework/nextpy/introspection/__init__.py
+.nextpy_framework/nextpy/introspection/ast.py
+.nextpy_framework/nextpy/introspection/compiler.py
+.nextpy_framework/nextpy/introspection/components.py
+.nextpy_framework/nextpy/introspection/framework.py
 .nextpy_framework/nextpy/plugins/__init__.py
 .nextpy_framework/nextpy/plugins/base.py
 .nextpy_framework/nextpy/plugins/builtin.py
