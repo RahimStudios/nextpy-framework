@@ -4,14 +4,14 @@ from pages.documentation.components.sidebar import DocsSidebar
 register_component("DocsSidebar", DocsSidebar)
 
 @component
-def Layout(props):
-    children = props.get("children")
+def Layout(children, **props):
+    
 
     return (
-        <div class="min-h-screen bg-black text-gray-100 scroll-smooth">
+        <div class="min-h-screen text-gray-100 bg-black scroll-smooth">
 
             {/* Docs Layout aligned with navbar container */}
-            <div class="mx-auto max-w-7xl px-6 lg:px-8">
+            <div class="px-6 mx-auto max-w-7xl lg:px-8">
 
                 <div class="flex">
 
@@ -23,8 +23,8 @@ def Layout(props):
                     </aside>
 
                     {/* Main Content */}
-                    <main class="min-w-0 flex-1">
-                        <div class="max-w-4xl mx-auto px-6 py-12">
+                    <main class="flex-1 min-w-0">
+                        <div class="max-w-4xl px-6 py-12 mx-auto">
                             {children}
                         </div>
                     </main>
@@ -35,3 +35,4 @@ def Layout(props):
 
         </div>
     )
+    

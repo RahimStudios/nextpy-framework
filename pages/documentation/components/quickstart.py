@@ -12,12 +12,12 @@ def QuickStartDemo(props):
     handle_click = create_onclick(lambda e: setCount(count + 1))
 
     return psx(f"""
-        <div class="p-5 border border-emerald-800 rounded-2xl bg-gray-900">
+        <div class="p-5 bg-gray-900 border border-emerald-800 rounded-2xl">
 
             <div class="flex items-center justify-between gap-4">
 
                 <div>
-                    <h3 class="font-semibold text-emerald-400 flex items-center gap-2">
+                    <h3 class="flex items-center gap-2 font-semibold text-emerald-400">
 
                         <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2"
                             viewBox="0 0 24 24">
@@ -34,7 +34,7 @@ def QuickStartDemo(props):
                 </div>
 
                 <button create_onclick={handle_click}
-                    class="px-4 py-2 text-sm font-semibold text-white rounded-lg bg-emerald-600 hover:bg-emerald-500 transition">
+                    class="px-4 py-2 text-sm font-semibold text-white transition rounded-lg bg-emerald-600 hover:bg-emerald-500">
                     Increment
                 </button>
 
@@ -54,7 +54,7 @@ register_component("QuickStartDemo", QuickStartDemo)
 @component
 def QuickStart():
     return psx("""
-        <section id="quickstart" class="space-y-10 py-8">
+        <section id="quickstart" class="py-8 space-y-10">
 
             <!-- Header -->
             <div class="pb-4 border-b border-gray-800">
@@ -72,7 +72,7 @@ def QuickStart():
             <!-- Grid 1 -->
             <div class="grid gap-6 lg:grid-cols-2">
 
-                <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900">
+                <div class="p-6 bg-gray-900 border border-gray-800 rounded-2xl">
 
                     <h3 class="font-semibold text-white">1. Create a page</h3>
 
@@ -83,15 +83,17 @@ from nextpy.psx import component
 
 @component
 def Home():
-    return <h1>Hello from NextPy</h1>
+    return(
+        <h1>Hello from NextPy</h1>
+    )
 
 default = Home
-                        "
+                       " 
                     />
 
                 </div>
 
-                <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900">
+                <div class="p-6 bg-gray-900 border border-gray-800 rounded-2xl">
 
                     <h3 class="font-semibold text-white">2. Add interactivity</h3>
 
@@ -121,7 +123,7 @@ def Counter():
             <!-- Grid 2 -->
             <div class="grid gap-6 lg:grid-cols-2">
 
-                <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900">
+                <div class="p-6 bg-gray-900 border border-gray-800 rounded-2xl">
 
                     <h3 class="font-semibold text-white">3. Create components</h3>
 
@@ -144,7 +146,7 @@ def Card(props):
 
                 </div>
 
-                <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900">
+                <div class="p-6 bg-gray-900 border border-gray-800 rounded-2xl">
 
                     <h3 class="font-semibold text-white">4. Styling</h3>
 
@@ -154,7 +156,7 @@ def Card(props):
 @component
 def StyledButton(props):
     return (
-        <button class='px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'>
+        <button class='px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700'>
             {props.get('children')}
         </button>
     )
@@ -166,9 +168,9 @@ def StyledButton(props):
             </div>
 
             <!-- Run -->
-            <div class="p-6 border border-gray-800 rounded-2xl bg-gray-800">
+            <div class="p-6 bg-gray-800 border border-gray-800 rounded-2xl">
 
-                <h3 class="font-semibold text-emerald-400 flex items-center gap-2">
+                <h3 class="flex items-center gap-2 font-semibold text-emerald-400">
 
                     <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2"
                         viewBox="0 0 24 24">

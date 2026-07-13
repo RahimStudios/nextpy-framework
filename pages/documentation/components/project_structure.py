@@ -1,4 +1,9 @@
-from nextpy.psx import psx
+from nextpy.psx import psx, register_component
+from pages.components.codeblock import CodeBlock
+
+register_component('CodeBlock', CodeBlock)
+
+
 
 
 
@@ -12,8 +17,8 @@ def ProjectStructure():
                 </p>
             </div>
 
-            <div class="p-6 text-gray-100 bg-gray-950 border border-gray-700 rounded-2xl">
-                <pre class="overflow-x-auto text-sm text-emerald-400">my-app/
+            <div class="p-6 py-8 text-gray-100 border border-gray-700 bg-gray-950 rounded-2xl">
+                <CodeBlock lang='txt' code="my-app/
 ├── pages/
 │   ├── index.py              # Home page (/)
 │   ├── about.py              # About page (/about)
@@ -38,28 +43,28 @@ def ProjectStructure():
 ├── requirements.txt          # Python dependencies
 ├── pyproject.toml            # Project configuration
 └── .env                      # Environment variables</pre>
-            </div>
+            "/>
 
             <div class="grid gap-4 md:grid-cols-2">
-                <div class="p-5 border border-gray-700 rounded-2xl bg-gray-900">
+                <div class="p-5 mt-4 bg-gray-900 border border-gray-700 rounded-2xl">
                     <h3 class="font-semibold text-gray-100">Pages</h3>
                     <p class="mt-2 text-sm text-gray-400">Every Python or PSX file under pages becomes a route automatically. Use brackets for dynamic routes like [slug].py.</p>
                 </div>
-                <div class="p-5 border border-gray-700 rounded-2xl bg-gray-900">
+                <div class="p-5 mt-4 bg-gray-900 border border-gray-700 rounded-2xl">
                     <h3 class="font-semibold text-gray-100">API Routes</h3>
                     <p class="mt-2 text-sm text-gray-400">Place API endpoints in pages/api/ to create backend endpoints. Support GET, POST, PUT, DELETE methods.</p>
                 </div>
-                <div class="p-5 border border-gray-700 rounded-2xl bg-gray-900">
+                <div class="p-5 mt-4 bg-gray-900 border border-gray-700 rounded-2xl">
                     <h3 class="font-semibold text-gray-100">Templates</h3>
                     <p class="mt-2 text-sm text-gray-400">Store Jinja2 templates for server-side rendering. Use _base.html for shared layouts and _layout.html for page-specific layouts.</p>
                 </div>
-                <div class="p-5 border border-gray-700 rounded-2xl bg-gray-900">
+                <div class="p-5 mt-4 bg-gray-900 border border-gray-700 m rounded-2xl">
                     <h3 class="font-semibold text-gray-100">Public & Styles</h3>
                     <p class="mt-2 text-sm text-gray-400">Public folder contains static assets served at root. Styles folder holds custom CSS files imported in your components.</p>
                 </div>
             </div>
 
-            <div class="p-6 border border-gray-700 rounded-2xl bg-gray-800">
+            <div class="p-6 mt-4 bg-gray-800 border border-gray-700 rounded-2xl">
                 <h3 class="font-semibold text-gray-100">File Naming Conventions</h3>
                 <ul class="pl-5 mt-3 space-y-2 text-sm text-gray-400 list-disc">
                     <li><strong>index.py:</strong> Maps to the directory path (pages/blog/index.py → /blog)</li>

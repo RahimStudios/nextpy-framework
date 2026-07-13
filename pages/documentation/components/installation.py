@@ -14,16 +14,16 @@ def Installation():
                     Installation
                 </h2>
 
-                <p class="mt-3 text-gray-400 leading-relaxed">
-                    Install <span class="text-sky-400 font-medium">NextPy</span> in a fresh environment and start building
+                <p class="mt-3 leading-relaxed text-gray-400">
+                    Install <span class="mr-4 font-medium text-sky-400">NextPy</span> in a fresh environment and start building
                     production-ready applications in minutes.
                 </p>
             </div>
 
             <!-- System Requirements -->
-            <div class="p-6 rounded-2xl border border-gray-800 bg-gray-900/60 backdrop-blur">
+            <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900/60 backdrop-blur">
 
-                <h3 class="text-white font-semibold flex items-center gap-2">
+                <h3 class="flex items-center gap-2 font-semibold text-white">
 
                     <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2"
                         viewBox="0 0 24 24">
@@ -34,7 +34,7 @@ def Installation():
                     System Requirements
                 </h3>
 
-                <ul class="mt-4 space-y-2 text-sm text-gray-300 list-disc pl-5">
+                <ul class="pl-5 mt-4 space-y-2 text-sm text-gray-300 list-disc">
                     <li><span class="text-sky-400">Python 3.9+</span></li>
                     <li>pip (Python package manager)</li>
                     <li>Node.js 16+ (for build tools)</li>
@@ -46,9 +46,9 @@ def Installation():
             <div class="grid gap-6 md:grid-cols-2">
 
                 <!-- Step 1 -->
-                <div class="p-6 rounded-2xl border border-gray-800 bg-gray-900/40">
+                <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900/40">
 
-                    <h3 class="text-white font-semibold flex items-center gap-2">
+                    <h3 class="flex items-center gap-2 font-semibold text-white">
 
                         <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2"
                             viewBox="0 0 24 24">
@@ -74,9 +74,9 @@ source venv/bin/activate
                 </div>
 
                 <!-- Step 2 -->
-                <div class="p-6 rounded-2xl border border-gray-800 bg-gray-900/40">
+                <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900/40">
 
-                    <h3 class="text-white font-semibold flex items-center gap-2">
+                    <h3 class="flex items-center gap-2 font-semibold text-white">
 
                         <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2"
                             viewBox="0 0 24 24">
@@ -102,9 +102,9 @@ pip install nextpy-framework
             </div>
 
             <!-- Step 3 -->
-            <div class="p-6 rounded-2xl border border-gray-800 bg-gray-900/40">
+            <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900/40">
 
-                <h3 class="text-white font-semibold flex items-center gap-2">
+                <h3 class="flex items-center gap-2 font-semibold text-white">
 
                     <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2"
                         viewBox="0 0 24 24">
@@ -130,9 +130,9 @@ nextpy dev
             </div>
 
             <!-- Alternative -->
-            <div class="p-6 rounded-2xl border border-gray-800 bg-gray-900/40">
+            <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900/40">
 
-                <h3 class="text-white font-semibold flex items-center gap-2">
+                <h3 class="flex items-center gap-2 font-semibold text-white">
 
                     <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2"
                         viewBox="0 0 24 24">
@@ -158,9 +158,9 @@ pip install -e .
             </div>
 
             <!-- Verify -->
-            <div class="p-6 rounded-2xl border border-gray-800 bg-gray-900/40">
+            <div class="p-6 border border-gray-800 rounded-2xl bg-gray-900/40">
 
-                <h3 class="text-white font-semibold flex items-center gap-2">
+                <h3 class="flex items-center gap-2 font-semibold text-white">
 
                     <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2"
                         viewBox="0 0 24 24">
@@ -179,7 +179,7 @@ nextpy --help
                     "
                 />
 
-                <p class="mt-3 text-gray-400 text-sm">
+                <p class="mt-3 text-sm text-gray-400">
                     Confirms your installation is working correctly.
                 </p>
             </div>
