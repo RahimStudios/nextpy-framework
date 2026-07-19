@@ -1,6 +1,9 @@
 # Byte-code files
 *.pyc
 
+#vscode count
+.VSCodeCounter/
+
 
 # NextPy
 
@@ -8,6 +11,26 @@ nextpy.db
 .web/
 out/
 public/tailwind.css # Ignore the compiled tailwind css as it's generated
+
+# Build / distribution
+dist/
+build/
+*.egg-info/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.so
+
+
+
+# pytest cache
+.pytest_cache/
+
+# Temporary files
+*.log
+*.tmp
+
 
 # Environment
 .env
@@ -18,6 +41,8 @@ env/
 # IDEs
 .idea/
 .vscode/
+.VSCodeCounter/
+.agents/
 
 # OS
 .DS_Store

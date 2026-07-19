@@ -8,6 +8,8 @@ pydantic>=2.12.5
 python-multipart>=0.0.20
 uvicorn>=0.38.0
 watchdog>=6.0.0
+python-dotenv>=1.2.1
+sqlalchemy>=2.0.44
 
 [dev]
 pytest>=7.0

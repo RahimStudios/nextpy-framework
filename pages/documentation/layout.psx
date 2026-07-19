@@ -1,0 +1,38 @@
+from nextpy.psx import component, register_component
+from pages.documentation.components.sidebar import DocsSidebar
+
+register_component("DocsSidebar", DocsSidebar)
+
+@component
+def Layout(children, **props):
+    
+
+    return (
+        <div class="min-h-screen text-gray-100 bg-black scroll-smooth">
+
+            {/* Docs Layout aligned with navbar container */}
+            <div class="px-6 mx-auto max-w-7xl lg:px-8">
+
+                <div class="flex">
+
+                    {/* Sidebar */}
+                    <aside class="hidden lg:block w-[280px] shrink-0 border-r border-gray-800">
+                        <div class="sticky top-20 h-[calc(100vh-5rem)] py-8 pr-6">
+                            <DocsSidebar />
+                        </div>
+                    </aside>
+
+                    {/* Main Content */}
+                    <main class="flex-1 min-w-0">
+                        <div class="max-w-4xl px-6 py-12 mx-auto">
+                            {children}
+                        </div>
+                    </main>
+
+                </div>
+
+            </div>
+
+        </div>
+    )
+    

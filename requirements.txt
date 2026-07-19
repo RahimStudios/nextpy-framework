@@ -1,37 +1,16 @@
-aiofiles>=25.1.0
-annotated-doc>=0.0.4
-annotated-types>=0.7.0
-anyio>=4.12.0
-certifi>=2025.11.12
-click>=8.3.1
-dnspython>=2.8.0
-email-validator>=2.3.0
-fastapi>=0.123.3
-greenlet>=3.2.4
-h11>=0.16.0
-httpcore>=1.0.9
-httpx>=0.28.1
-idna>=3.11
-Jinja2>=3.1.6
-MarkupSafe>=3.0.3
--e git+https://github.com/IBRAHIMFONYUY/nextpy-framework.git@5b7bc12930cdf6966fd8cf45d4b8bdf2858d32c2#egg=nextpy_framework
-
-pillow>=12.0.0
-pydantic>=2.12.5
-pydantic-settings>=2.12.0
-pydantic_core>=2.41.5
-PyJWT>=2.10.1
-python-dotenv>=1.2.1
-python-multipart>=0.0.20
-SQLAlchemy>=2.0.44
-starlette>=0.50.0git+https://github.com/IBRAHIMFONYUY/nextpy-framework.git@5b7bc12930cdf6966fd8cf45d4b8bdf2858d32c2#egg=nextpy_framework
-
-typing-inspection>=0.4.2
-typing_extensions>=4.15.0
-uvicorn>=0.38.0
-watchdog>=6.0.0
-
-# For Tailwind CSS integration, ensure Node.js and npm are installed.
-# Then run:
-# npm init -y
-# npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
+# NextPy Framework Requirements
+fastapi>=0.100.0
+uvicorn>=0.23.0
+jinja2>=3.1.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+click>=8.1.0
+watchdog>=3.0.0
+python-multipart>=0.0.6
+pillow>=10.0.0
+aiofiles>=23.0.0
+httpx>=0.24.0,<0.25  # ensure compatibility with Starlette TestClient
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
+pyjwt>=2.8.0
+markdown>=3.0.0

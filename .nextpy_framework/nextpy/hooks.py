@@ -1,348 +1,470 @@
 """
-React-like Hooks for NextPy State Management
-Implements useState, useEffect, useContext, useReducer, useCallback, useMemo, etc.
+React-like hooks for NextPy
+Provides useState, useEffect, useReducer, useContext, useRef, useMemo, useCallback
+and custom hooks like useCounter, useToggle, useLocalStorage, useFetch, useDebounce
 """
 
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic, Tuple
+import threading
+import time
+import uuid
+from typing import Any, Dict, List, Callable, Optional, TypeVar, Union
 from dataclasses import dataclass, field
-from functools import wraps
-import asyncio
 
 T = TypeVar('T')
 
 
 @dataclass
 class HookState:
-    """Manages state for a component"""
-    values: Dict[str, Any] = field(default_factory=dict)
-    effects: Dict[str, Callable] = field(default_factory=dict)
-    effect_dependencies: Dict[str, List] = field(default_factory=dict)
-    callbacks: Dict[str, Callable] = field(default_factory=dict)
-    callback_dependencies: Dict[str, List] = field(default_factory=dict)
+    """State for a component using hooks"""
+    component_id: str
+    hooks: List[Dict[str, Any]] = field(default_factory=list)
+    hook_index: int = 0
+    state: Dict[str, Any] = field(default_factory=dict)
+    cleanup_functions: List[Callable] = field(default_factory=list)
 
 
-class StateManager:
-    """Global state manager for all hooks"""
-    
-    _instance = None
-    _states: Dict[str, HookState] = {}
-    _current_component: Optional[str] = None
-    _hook_index: Dict[str, int] = {}
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    @classmethod
-    def set_component(cls, component_id: Optional[str]):
-        """Set current component context"""
-        cls._current_component = component_id
-        if component_id and component_id not in cls._hook_index:
-            cls._hook_index[component_id] = 0
-    
-    @classmethod
-    def get_hook_index(cls) -> int:
-        """Get current hook index"""
-        if not cls._current_component:
-            cls._current_component = "default"
-        if cls._current_component not in cls._hook_index:
-            cls._hook_index[cls._current_component] = 0
-        idx = cls._hook_index[cls._current_component]
-        cls._hook_index[cls._current_component] += 1
-        return idx
-    
-    @classmethod
-    def reset_hook_index(cls):
-        """Reset hook index for next render"""
-        if cls._current_component:
-            cls._hook_index[cls._current_component] = 0
-    
-    @classmethod
-    def get_state(cls, component_id: str) -> HookState:
-        """Get or create state for component"""
-        if component_id not in cls._states:
-            cls._states[component_id] = HookState()
-        return cls._states[component_id]
+# Thread-local storage for hooks
+_hook_state = threading.local()
 
 
-def useState(initial_value: Any = None) -> Tuple[Any, Callable]:
+def get_current_component() -> HookState:
+    """Get current component's hook state"""
+    if not hasattr(_hook_state, 'current'):
+        _hook_state.current = {}
+    
+    thread_id = threading.get_ident()
+    if thread_id not in _hook_state.current:
+        _hook_state.current[thread_id] = HookState(component_id=str(uuid.uuid4()))
+    
+    return _hook_state.current[thread_id]
+
+
+def reset_hooks():
+    """Reset hooks for new render"""
+    if hasattr(_hook_state, 'current'):
+        thread_id = threading.get_ident()
+        if thread_id in _hook_state.current:
+            state = _hook_state.current[thread_id]
+            state.hook_index = 0
+            state.cleanup_functions.clear()
+
+
+def cleanup_effects():
+    """Run all cleanup functions"""
+    if hasattr(_hook_state, 'current'):
+        thread_id = threading.get_ident()
+        if thread_id in _hook_state.current:
+            state = _hook_state.current[thread_id]
+            for cleanup in state.cleanup_functions:
+                try:
+                    cleanup()
+                except:
+                    pass
+            state.cleanup_functions.clear()
+
+
+# Core Hooks
+
+def useState(initial_value: T) -> tuple[T, Callable[[T], None]]:
     """
-    React-like useState hook
-    Returns (value, setValue) tuple
+    useState hook - just like React's useState
+    Returns [value, setter] tuple
     
-    Usage:
-        count, set_count = useState(0)
-        set_count(count + 1)
+    Example:
+        [count, setCount] = useState(0)
+        setCount(count + 1)
     """
-    component_id = StateManager._current_component or "default"
-    hook_index = StateManager.get_hook_index()
-    state = StateManager.get_state(component_id)
+    component = get_current_component()
     
-    state_key = f"state_{hook_index}"
+    if component.hook_index >= len(component.hooks):
+        hook_data = {'value': initial_value, 'queue': []}
+        component.hooks.append(hook_data)
+    else:
+        hook_data = component.hooks[component.hook_index]
     
-    if state_key not in state.values:
-        state.values[state_key] = initial_value
+    if hook_data['queue']:
+        hook_data['value'] = hook_data['queue'][-1]
+        hook_data['queue'] = []
     
-    def setter(new_value):
+    current_value = hook_data['value']
+    
+    def setter(new_value: T):
         if callable(new_value):
-            state.values[state_key] = new_value(state.values[state_key])
-        else:
-            state.values[state_key] = new_value
+            new_value = new_value(current_value)
+        hook_data['queue'].append(new_value)
+        component.state['_needs_rerender'] = True
     
-    return state.values[state_key], setter
+    component.hook_index += 1
+    return current_value, setter
 
 
-def useEffect(effect: Callable, dependencies: Optional[List] = None) -> None:
+def useEffect(effect: Callable, deps: Optional[List[Any]] = None):
     """
-    React-like useEffect hook
-    Runs effect function when dependencies change
+    useEffect hook - just like React's useEffect
+    Runs side effects and cleanup functions
     
-    Usage:
-        def effect():
-            print("Component mounted or deps changed")
-            return lambda: print("Cleanup")
+    Example:
+        useEffect(() => {
+            console.log('Mounted')
+            return () => console.log('Cleanup')
+        }, [dependency])
+    """
+    component = get_current_component()
+    
+    if component.hook_index >= len(component.hooks):
+        hook_data = {'deps': deps, 'cleanup': None, 'has_run': False}
+        component.hooks.append(hook_data)
+    else:
+        hook_data = component.hooks[component.hook_index]
+    
+    # Check if dependencies changed
+    deps_changed = False
+    if deps is None:
+        deps_changed = True
+    elif hook_data['deps'] is None:
+        deps_changed = True
+    elif len(deps) != len(hook_data['deps']):
+        deps_changed = True
+    else:
+        for i, dep in enumerate(deps):
+            if dep != hook_data['deps'][i]:
+                deps_changed = True
+                break
+    
+    if deps_changed or not hook_data['has_run']:
+        # Run cleanup if it exists
+        if hook_data['cleanup']:
+            try:
+                hook_data['cleanup']()
+            except:
+                pass
         
-        useEffect(effect, [count])
-    """
-    component_id = StateManager._current_component or "default"
-    hook_index = StateManager.get_hook_index()
-    state = StateManager.get_state(component_id)
+        # Run effect
+        try:
+            cleanup = effect()
+            if callable(cleanup):
+                component.cleanup_functions.append(cleanup)
+                hook_data['cleanup'] = cleanup
+        except:
+            pass
+        
+        hook_data['deps'] = deps
+        hook_data['has_run'] = True
     
-    effect_key = f"effect_{hook_index}"
-    deps_key = f"deps_{hook_index}"
-    
-    should_run = False
-    
-    if effect_key not in state.effects:
-        should_run = True
-    elif dependencies is None:
-        should_run = True
-    elif state.effect_dependencies.get(deps_key) != dependencies:
-        should_run = True
-    
-    if should_run:
-        state.effects[effect_key] = effect
-        state.effect_dependencies[deps_key] = dependencies or []
-        effect()
+    component.hook_index += 1
 
 
-def useContext(context_dict: Dict[str, Any]) -> Dict[str, Any]:
+def useReducer(reducer: Callable, initial_state: Any) -> tuple[Any, Callable]:
     """
-    React-like useContext hook
-    Provides context to component
+    useReducer hook - just like React's useReducer
+    Complex state management with reducer function
     
-    Usage:
-        user_context = {"user": "John", "role": "admin"}
-        context = useContext(user_context)
-    """
-    return context_dict
-
-
-def useReducer(reducer: Callable, initial_state: Any) -> Tuple[Any, Callable]:
-    """
-    React-like useReducer hook
-    Returns (state, dispatch) tuple
-    
-    Usage:
-        def reducer(state, action):
-            if action["type"] == "INCREMENT":
-                return state + 1
+    Example:
+        def counterReducer(state, action):
+            if action['type'] == 'increment':
+                return {'count': state['count'] + 1}
             return state
         
-        count, dispatch = useReducer(reducer, 0)
-        dispatch({"type": "INCREMENT"})
+        [state, dispatch] = useReducer(counterReducer, {'count': 0})
+        dispatch({'type': 'increment'})
     """
-    component_id = StateManager._current_component or "default"
-    hook_index = StateManager.get_hook_index()
-    state = StateManager.get_state(component_id)
+    component = get_current_component()
     
-    state_key = f"reducer_{hook_index}"
+    if component.hook_index >= len(component.hooks):
+        hook_data = {'state': initial_state}
+        component.hooks.append(hook_data)
+    else:
+        hook_data = component.hooks[component.hook_index]
     
-    if state_key not in state.values:
-        state.values[state_key] = initial_state
+    current_state = hook_data['state']
     
-    def dispatch(action):
-        current_state = state.values[state_key]
+    def dispatch(action: Any):
         new_state = reducer(current_state, action)
-        state.values[state_key] = new_state
+        hook_data['state'] = new_state
+        component.state['_needs_rerender'] = True
     
-    return state.values[state_key], dispatch
+    component.hook_index += 1
+    return current_state, dispatch
 
 
-def useCallback(callback: Callable, dependencies: Optional[List[Any]] = None) -> Callable:
+def useContext(context: 'Context') -> Any:
     """
-    React-like useCallback hook
-    Memoizes callback function
+    useContext hook - just like React's useContext
+    Access context values
     
-    Usage:
-        def on_click():
-            print("Clicked")
-        
-        memoized_click = useCallback(on_click, [])
+    Example:
+        ThemeContext = createContext('theme', 'light')
+        theme = useContext(ThemeContext)
     """
-    component_id = StateManager._current_component or "default"
-    hook_index = StateManager.get_hook_index()
-    state = StateManager.get_state(component_id)
+    component = get_current_component()
     
-    callback_key = f"callback_{hook_index}"
-    deps_key = f"callback_deps_{hook_index}"
-    
-    if callback_key not in state.callbacks:
-        state.callbacks[callback_key] = callback
-        state.callback_dependencies[deps_key] = dependencies or []
-    elif state.callback_dependencies.get(deps_key) != dependencies:
-        state.callbacks[callback_key] = callback
-        state.callback_dependencies[deps_key] = dependencies or []
-    
-    return state.callbacks[callback_key]
-
-
-def useMemo(compute: Callable, dependencies: Optional[List[Any]] = None) -> Any:
-    """
-    React-like useMemo hook
-    Memoizes expensive computations
-    
-    Usage:
-        expensive_value = useMemo(lambda: compute_value(count), [count])
-    """
-    component_id = StateManager._current_component or "default"
-    hook_index = StateManager.get_hook_index()
-    state = StateManager.get_state(component_id)
-    
-    memo_key = f"memo_{hook_index}"
-    deps_key = f"memo_deps_{hook_index}"
-    
-    if memo_key not in state.values:
-        state.values[memo_key] = compute()
-        state.effect_dependencies[deps_key] = dependencies or []
-    elif state.effect_dependencies.get(deps_key) != dependencies:
-        state.values[memo_key] = compute()
-        state.effect_dependencies[deps_key] = dependencies or []
-    
-    return state.values[memo_key]
+    # For simplicity, just return the default value
+    # In a real implementation, this would use a context provider
+    return context.default_value
 
 
 def useRef(initial_value: Any = None) -> Dict[str, Any]:
     """
-    React-like useRef hook
-    Returns a mutable ref object
+    useRef hook - just like React's useRef
+    Mutable ref object that persists across renders
     
-    Usage:
-        input_ref = useRef()
-        input_ref["current"] = some_value
+    Example:
+        inputRef = useRef()
+        inputRef.current = 'value'
     """
-    component_id = StateManager._current_component or "default"
-    hook_index = StateManager.get_hook_index()
-    state = StateManager.get_state(component_id)
+    component = get_current_component()
     
-    ref_key = f"ref_{hook_index}"
+    if component.hook_index >= len(component.hooks):
+        hook_data = {'current': initial_value}
+        component.hooks.append(hook_data)
+    else:
+        hook_data = component.hooks[component.hook_index]
     
-    if ref_key not in state.values:
-        state.values[ref_key] = {"current": initial_value}
-    
-    return state.values[ref_key]
+    component.hook_index += 1
+    return hook_data
 
 
-class GlobalState(Generic[T]):
-    """Global state container for cross-component state"""
+def useMemo(factory: Callable, deps: Optional[List[Any]] = None) -> Any:
+    """
+    useMemo hook - just like React's useMemo
+    Memoized value that only recalculates when dependencies change
     
-    _subscribers: Dict[str, List[Callable]] = {}
-    _values: Dict[str, Any] = {}
+    Example:
+        expensiveValue = useMemo(() => calculateExpensiveValue(data), [data])
+    """
+    component = get_current_component()
     
-    def __init__(self, key: str, initial_value: T):
-        self.key = key
-        self._values[key] = initial_value
-        if key not in self._subscribers:
-            self._subscribers[key] = []
+    if component.hook_index >= len(component.hooks):
+        hook_data = {'deps': deps, 'value': None, 'has_calculated': False}
+        component.hooks.append(hook_data)
+    else:
+        hook_data = component.hooks[component.hook_index]
     
-    def get(self) -> Optional[T]:
-        """Get current value"""
-        return self._values.get(self.key)
+    # Check if dependencies changed
+    deps_changed = False
+    if deps is None:
+        deps_changed = True
+    elif hook_data['deps'] is None:
+        deps_changed = True
+    elif len(deps) != len(hook_data['deps']):
+        deps_changed = True
+    else:
+        for i, dep in enumerate(deps):
+            if dep != hook_data['deps'][i]:
+                deps_changed = True
+                break
     
-    def set(self, value: T) -> None:
-        """Set new value and notify subscribers"""
-        self._values[self.key] = value
-        self._notify_subscribers()
+    if deps_changed or not hook_data['has_calculated']:
+        hook_data['value'] = factory()
+        hook_data['deps'] = deps
+        hook_data['has_calculated'] = True
     
-    def subscribe(self, callback: Callable) -> Callable:
-        """Subscribe to value changes"""
-        self._subscribers[self.key].append(callback)
-        
-        def unsubscribe():
-            self._subscribers[self.key].remove(callback)
-        
-        return unsubscribe
-    
-    def _notify_subscribers(self) -> None:
-        """Notify all subscribers of changes"""
-        for callback in self._subscribers.get(self.key, []):
-            callback(self._values[self.key])
+    component.hook_index += 1
+    return hook_data['value']
 
 
-def create_context(default_value: Any = None) -> Dict[str, Any]:
-    """Create a context object"""
+def useCallback(callback: Callable, deps: Optional[List[Any]] = None) -> Callable:
+    """
+    useCallback hook - just like React's useCallback
+    Memoized callback that only changes when dependencies change
+    
+    Example:
+        handleClick = useCallback(() => setCount(count + 1), [count])
+    """
+    return useMemo(lambda: callback, deps)
+
+
+# Custom Hooks
+
+def useCounter(initial_value: int = 0) -> tuple[int, Callable, Callable]:
+    """
+    Custom hook for counter functionality
+    Returns [count, increment, decrement]
+    
+    Example:
+        [count, increment, decrement] = useCounter(10)
+        increment()
+        decrement()
+    """
+    [count, setCount] = useState(initial_value)
+    
+    def increment():
+        setCount(count + 1)
+    
+    def decrement():
+        setCount(count - 1)
+    
+    return count, increment, decrement
+
+
+def useToggle(initial_value: bool = False) -> tuple[bool, Callable]:
+    """
+    Custom hook for toggle functionality
+    Returns [value, toggle]
+    
+    Example:
+        [visible, toggle] = useToggle(True)
+        toggle()
+    """
+    [value, setValue] = useState(initial_value)
+    
+    def toggle():
+        setValue(not value)
+    
+    return value, toggle
+
+
+def useLocalStorage(key: str, initial_value: Any) -> tuple[Any, Callable]:
+    """
+    Custom hook for localStorage persistence
+    Returns [value, setValue]
+    
+    Example:
+        [name, setName] = useLocalStorage('name', 'Guest')
+        setName('John')
+    """
+    # For simplicity, just use useState
+    # In a real implementation, this would use browser localStorage
+    [value, setValue] = useState(initial_value)
+    
+    return value, setValue
+
+
+def useFetch(url: str) -> Dict[str, Any]:
+    """
+    Custom hook for API data fetching
+    Returns data object with data, loading, error, refetch
+    
+    Example:
+        data = useFetch('/api/users')
+        if data['loading']: return <div>Loading...</div>
+        if data['error']: return <div>Error</div>
+        return <div>{data['data']}</div>
+    """
+    [data, setData] = useState(None)
+    [loading, setLoading] = useState(True)
+    [error, setError] = useState(None)
+    
+    def refetch():
+        setLoading(True)
+        setError(None)
+        # In a real implementation, this would make an HTTP request
+        try:
+            # Simulate API call
+            time.sleep(0.1)
+            setData({'message': f'Data from {url}'})
+        except Exception as e:
+            setError(str(e))
+        finally:
+            setLoading(False)
+    
+    useEffect(refetch, [url])
+    
     return {
-        "value": default_value,
-        "consumers": []
+        'data': data,
+        'loading': loading,
+        'error': error,
+        'refetch': refetch
     }
 
 
-def useGlobalState(key: str, initial_value: Any = None) -> Tuple[Any, Callable]:
+def useDebounce(value: Any, delay: int) -> Any:
     """
-    Hook to use global state across components
+    Custom hook for debouncing values
+    Returns debounced value
     
-    Usage:
-        user_state = GlobalState("user", {"name": "John"})
-        user, set_user = useGlobalState("user", {"name": "John"})
+    Example:
+        debouncedSearch = useDebounce(searchTerm, 500)
     """
-    if key not in GlobalState._values:
-        GlobalState._values[key] = initial_value
-        GlobalState._subscribers[key] = []
+    [debouncedValue, setDebouncedValue] = useState(value)
     
-    def setter(value):
-        GlobalState._values[key] = value
-        for callback in GlobalState._subscribers.get(key, []):
-            callback(value)
+    def setup_debounce():
+        def timeout_callback():
+            setDebouncedValue(value)
+        
+        handler = setTimeout(timeout_callback, delay)
+        
+        return lambda: clearTimeout(handler)
     
-    return GlobalState._values[key], setter
+    useEffect(setup_debounce, [value, delay])
+    
+    return debouncedValue
 
 
-# Component decorator to set component context
-def component(func: Callable) -> Callable:
+# Context API
+
+@dataclass
+class Context:
+    """Context object for useContext hook"""
+    name: str
+    default_value: Any
+
+
+def createContext(name: str, default_value: Any) -> Context:
     """
-    Decorator to wrap component functions with hook support
+    Create a context object
+    Returns context that can be used with useContext and Provider
     
-    Usage:
-        @component
-        def MyComponent():
-            count, set_count = useState(0)
-            return f"Count: {count}"
+    Example:
+        ThemeContext = createContext('theme', 'light')
     """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        component_id = f"{func.__name__}_{id(func)}"
-        StateManager.set_component(component_id)
+    return Context(name=name, default_value=default_value)
+
+
+class Provider:
+    """Provider for context values"""
+    
+    def __init__(self, context: Context, value: Any, children=None):
+        self.context = context
+        self.value = value
+        self.children = children
+
+
+# Timer functions (simplified)
+def setTimeout(callback: Callable, delay: int) -> str:
+    """Simulated setTimeout"""
+    timer_id = str(uuid.uuid4())
+    
+    def timer_thread():
+        time.sleep(delay / 1000.0)
         try:
-            result = func(*args, **kwargs)
-        finally:
-            StateManager.reset_hook_index()
-        return result
+            callback()
+        except:
+            pass
     
-    return wrapper
+    thread = threading.Thread(target=timer_thread)
+    thread.daemon = True
+    thread.start()
+    
+    return timer_id
 
 
-__all__ = [
-    'useState',
-    'useEffect',
-    'useContext',
-    'useReducer',
-    'useCallback',
-    'useMemo',
-    'useRef',
-    'GlobalState',
-    'create_context',
-    'useGlobalState',
-    'component',
-    'StateManager',
-]
+def clearTimeout(timer_id: str):
+    """Simulated clearTimeout"""
+    # In a real implementation, this would cancel the timer
+    pass
+
+
+def setInterval(callback: Callable, interval: int) -> str:
+    """Simulated setInterval"""
+    timer_id = str(uuid.uuid4())
+    
+    def interval_thread():
+        while True:
+            time.sleep(interval / 1000.0)
+            try:
+                callback()
+            except:
+                break
+    
+    thread = threading.Thread(target=interval_thread)
+    thread.daemon = True
+    thread.start()
+    
+    return timer_id
+
+
+def clearInterval(timer_id: str):
+    """Simulated clearInterval"""
+    # In a real implementation, this would cancel the interval
+    pass

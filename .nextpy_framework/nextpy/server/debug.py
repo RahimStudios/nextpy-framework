@@ -56,7 +56,8 @@ async def render_error_page(error: Dict[str, Any]) -> HTMLResponse:
     <html>
     <head>
         <title>NextPy Error</title>
-        <script src="https://cdn.tailwindcss.com"></script>
+        <!-- rely on compiled CSS instead of CDN -->
+        <link href="/tailwind.css" rel="stylesheet">
         <style>
             .animate-pulse {{ animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }}
             @keyframes pulse {{
@@ -66,23 +67,23 @@ async def render_error_page(error: Dict[str, Any]) -> HTMLResponse:
         </style>
     </head>
     <body class="bg-gray-900">
-        <div class="fixed bottom-0 left-0 right-0 z-50 bg-red-950 text-red-100 border-t-4 border-red-600 shadow-2xl">
+        <div class="fixed bottom-0 left-0 right-0 z-50 text-red-100 border-t-4 border-red-600 shadow-2xl bg-red-950">
             <div class="max-w-full">
                 <div class="flex items-center justify-between p-4 bg-red-900">
                     <div class="flex items-center gap-3">
                         <span class="text-2xl">⚠️</span>
                         <div>
-                            <h3 class="font-bold text-lg">{error.get('type', 'Error')}</h3>
+                            <h3 class="text-lg font-bold">{error.get('type', 'Error')}</h3>
                             <p class="text-sm text-red-200">{error.get('message', 'An error occurred')}</p>
                         </div>
                     </div>
                 </div>
                 <div class="p-4">
-                    <h4 class="font-mono font-bold text-sm mb-2">Traceback:</h4>
-                    <pre class="font-mono text-xs bg-black bg-opacity-30 p-3 rounded overflow-x-auto text-red-100">{error.get('traceback', '')}</pre>
+                    <h4 class="mb-2 font-mono text-sm font-bold">Traceback:</h4>
+                    <pre class="p-3 overflow-x-auto font-mono text-xs text-red-100 bg-black rounded bg-opacity-30">{error.get('traceback', '')}</pre>
                 </div>
                 <div class="p-4 border-t border-red-800">
-                    <h4 class="font-mono font-bold text-sm mb-2">Location:</h4>
+                    <h4 class="mb-2 font-mono text-sm font-bold">Location:</h4>
                     <p class="text-sm"><span class="text-red-300">{error.get('file', 'unknown')}</span> line <span class="font-bold">{error.get('line', '?')}</span></p>
                 </div>
             </div>

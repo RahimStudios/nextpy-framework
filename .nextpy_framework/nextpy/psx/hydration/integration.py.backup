@@ -1,0 +1,144 @@
+"""
+PSX Component Hydration Integration
+Integrates hydration engine with PSX component system
+"""
+
+import inspect
+import json
+from typing import Any, Dict, List, Optional, Callable
+from .engine import HydrationContext, get_hydration_engine
+
+
+class ComponentHydrator:
+    """Handles component hydration for interactive components"""
+    
+    def __init__(self):
+        self.engine = get_hydration_engine()
+        self.component_metadata: Dict[str, Dict[str, Any]] = {}
+    
+    def extract_component_metadata(self, component_func: Callable) -> Dict[str, Any]:
+        """Extract metadata about a component for hydration"""
+        metadata = {
+            'name': component_func.__name__,
+            'state': {},
+            'handlers': {},
+            'effects': [],
+            'bindings': {},
+        }
+        
+        # Try to analyze function source to extract useState calls
+        try:
+            source = inspect.getsource(component_func)
+            metadata['state'] = self._extract_state_from_source(source)
+            metadata['handlers'] = self._extract_handlers_from_source(source)
+            metadata['effects'] = self._extract_effects_from_source(source)
+        except Exception as e:
+            print(f"Warning: Could not extract component metadata: {e}")
+        
+        return metadata
+    
+    def _extract_state_from_source(self, source: str) -> Dict[str, Any]:
+        """Extract initial state values from useState calls"""
+        state = {}
+        import re
+        
+        # Match useState patterns: [variable, setVariable] = useState(initialValue)
+        pattern = r'\[(\w+),\s*\w+\]\s*=\s*useState\(([^)]+)\)'
+        matches = re.findall(pattern, source)
+        
+        for var_name, initial_value in matches:
+            try:
+                # Safely evaluate initial value
+                state[var_name] = eval(initial_value)
+            except:
+                # If can't eval, store as string
+                state[var_name] = initial_value
+        
+        return state
+    
+    def _extract_handlers_from_source(self, source: str) -> Dict[str, str]:
+        """Extract event handler code from source"""
+        handlers = {}
+        import re
+        
+        # Match create_onclick patterns
+        pattern = r'(\w+)\s*=\s*create_onclick\(lambda e:\s*([^)]+)\)'
+        matches = re.findall(pattern, source)
+        
+        for var_name, code in matches:
+            handlers[f'click_{var_name}'] = code.strip()
+        
+        return handlers
+    
+    def _extract_effects_from_source(self, source: str) -> List[Dict[str, Any]]:
+        """Extract useEffect calls from source"""
+        effects = []
+        import re
+        
+        # Match useEffect patterns
+        pattern = r'useEffect\(([^,]+),\s*(\[[^\]]*\])\)'
+        matches = re.findall(pattern, source)
+        
+        for func_name, deps in matches:
+            effects.append({
+                'function': func_name.strip(),
+                'dependencies': deps,
+            })
+        
+        return effects
+    
+    def register_component(self, component_func: Callable, props: Dict[str, Any]) -> str:
+        """Register a component for hydration"""
+        metadata = self.extract_component_metadata(component_func)
+        
+        component_data = {
+            'name': metadata['name'],
+            'state': metadata['state'],
+            'handlers': metadata['handlers'],
+            'effects': metadata['effects'],
+            'props': props,
+        }
+        
+        component_id = self.engine.register_component(component_data)
+        return component_id
+    
+    def generate_hydration_script(self) -> str:
+        """Generate complete hydration script"""
+        return self.engine.generate_hydration_script()
+    
+    def wrap_component_html(self, component_id: str, html: str, 
+                          state: Dict[str, Any]) -> str:
+        """Wrap component HTML with hydration data"""
+        return self.engine.generate_html_wrapper(component_id, html, state)
+
+
+# Global component hydrator instance
+_component_hydrator = ComponentHydrator()
+
+
+def get_component_hydrator() -> ComponentHydrator:
+    """Get the global component hydrator"""
+    return _component_hydrator
+
+
+def hydrate_component(component_func: Callable, props: Dict[str, Any], 
+                     html: str) -> tuple[str, str]:
+    """
+    Hydrate a component with interactivity
+    
+    Returns: (hydrated_html, hydration_script)
+    """
+    hydrator = get_component_hydrator()
+    component_id = hydrator.register_component(component_func, props)
+    
+    # Extract state from metadata
+    metadata = hydrator.extract_component_metadata(component_func)
+    state = metadata['state']
+    
+    # Wrap HTML with hydration data
+    hydrated_html = hydrator.wrap_component_html(component_id, html, state)
+    
+    # Generate hydration script
+    hydration_script = hydrator.generate_hydration_script()
+    
+    return hydrated_html, hydration_script

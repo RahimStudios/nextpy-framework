@@ -1,0 +1,28 @@
+# Root Layout
+from nextpy.psx import component
+
+
+
+@component
+def Layout(children):
+    title = "RahimStudios"
+    description = "NextPy Application"
+    theme = "dark"
+    return (
+        <html>
+            <head>
+                <title>{title}</title>
+                
+                <link href="/tailwind.css" rel="stylesheet">
+            </head>
+            <body class={theme}>
+                <nav class="bg-blue-600 text-white p-4">
+                    <h1 class="text-xl font-bold">RahimStudios</h1>
+                </nav>
+                {children}
+                <footer class="bg-gray-800 text-white p-4 text-center">
+                    © 2024 RahimStudios
+                </footer>
+            </body>
+        </html>
+    )

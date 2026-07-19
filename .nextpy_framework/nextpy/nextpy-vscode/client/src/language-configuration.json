@@ -1,0 +1,38 @@
+{
+  "comments": {
+    "lineComment": "#",
+    "blockComment": [ "'''", "'''" ]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"]
+  ],
+  "autoClosingPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["'", "'"],
+    ["\"", "\""],
+    ["<", ">"]
+  ],
+  "surroundingPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["'", "'"],
+    ["\"", "\""],
+    ["<", ">"]
+  ],
+  "folding": {
+    "markers": {
+      "start": "^\\s*def\\s+\\w+\\s*\\(|^\\s*class\\s+\\w+\\s*:|^\\s*#\\s*region|^\\s*if\\s+.*:^\\s*else\\s*|^\\s*for\\s+.*:\\s*|^\\s*try\\s*:|^\\s*except\\s*.*:\\s*|^\\s*with\\s*.*:\\s*|^\\s*while\\s+.*:\\s*",
+      "end": "^\\s*return|^\\s*$|^\\s*#\\s*endregion|^\\s*elif\\s+.*:\\s*|^\\s*except\\s*.*:\\s*|^\\s*finally\\s*:|^\\s*elif\\s+.*:\\s*"
+    }
+  },
+  "wordPattern": "(-?\\d*\\.\\d\\w*)|([^`\\~\\!\\@\\#\\%\\^&\\*\\(\\)\\-\\+\\=\\{\\}\\[\\]\\|\\\\;:\'\".,.<>\\/?\\s]+)",
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*((def|class|if|elif|else|for|while|try|except|finally|with|async|def)\\b.*:|\\{[^}]*$)",
+    "decreaseIndentPattern": "^\\s*((elif|else|except|finally)\\b.*:|^\\s*\\}|\\s*\\])"
+  }
+}

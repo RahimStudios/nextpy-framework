@@ -1,19 +1,14 @@
 {% extends "_base.html" %}
 
-{% block title %}{{ title | default('NextPy Page') }}{% endblock %}
+{% block title %}{{ title or "NextPy App" }}{% endblock %}
 
 {% block content %}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-    {% if title %}
-    <h1 class="text-4xl font-bold text-gray-900 mb-6">{{ title }}</h1>
-    {% endif %}
-    
-    {% if description %}
-    <p class="text-xl text-gray-600 mb-8">{{ description }}</p>
-    {% endif %}
-    
-    <div class="prose prose-lg max-w-none">
-        {{ content | safe if content else '' }}
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <div class="text-center">
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">{{ title or "Welcome to NextPy" }}</h1>
+        <div class="bg-white rounded-lg shadow-md p-8 max-w-2xl mx-auto">
+            {{ content or "<p class='text-gray-600'>This is a default page template. Content will appear here.</p>" | safe }}
+        </div>
     </div>
 </main>
 {% endblock %}

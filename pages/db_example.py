@@ -22,7 +22,7 @@ def get_server_side_props_sync(context):
             "props": {
                 "posts": [{"id": p.id, "title": p.title, "slug": p.slug} for p in posts],
                 "users": [{"id": u.id, "email": u.email, "username": u.username} for u in users],
-                "database_url": settings.database_url,
+                "database_url": settings["database_url"],
                 "total_posts": session.query(Post).count(),
                 "total_users": session.query(User).count(),
             }
@@ -42,7 +42,7 @@ async def get_server_side_props(context):
             "props": {
                 "posts": [{"id": p.id, "title": p.title, "slug": p.slug} for p in posts],
                 "users": [{"id": u.id, "email": u.email, "username": u.username} for u in users],
-                "database_url": settings.database_url,
+                "database_url": settings["database_url"],
                 "total_posts": session.query(Post).count(),
                 "total_users": session.query(User).count(),
             }

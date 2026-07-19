@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextpy-framework"
-version = "1.1.1"
-description = "A Python web framework inspired by Next.js with file-based routing, SSR, and SSG and more"
+version = "4.1.0"
+description = "The Python Web Framework introducing file-based routing, SSR, and SSG and more"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -44,6 +44,8 @@ dependencies = [
     "python-multipart>=0.0.20",
     "uvicorn>=0.38.0",
     "watchdog>=6.0.0",
+    "python-dotenv>=1.2.1",
+    "sqlalchemy>=2.0.44",
 ]
 
 [project.optional-dependencies]
@@ -70,3 +72,4 @@ include = ["nextpy*"]
 
 [tool.setuptools.package-data]
 nextpy = ["py.typed"]
+"nextpy.public" = ["*.png"]

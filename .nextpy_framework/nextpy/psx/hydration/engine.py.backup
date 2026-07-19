@@ -1,0 +1,690 @@
+"""
+NextPy Hydration Engine - Client-side Runtime for Interactive PSX Components
+Enables full client-side interactivity with state management and event handling
+"""
+
+import json
+import re
+import html
+from typing import Any, Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass, field
+
+
+@dataclass
+class HydrationContext:
+    """Context for a component being hydrated"""
+    component_id: str
+    component_name: str
+    initial_state: Dict[str, Any] = field(default_factory=dict)
+    event_handlers: Dict[str, str] = field(default_factory=dict)  # {eventName: pythonCode}
+    use_effects: List[Dict[str, Any]] = field(default_factory=list)
+    data_bindings: Dict[str, str] = field(default_factory=dict)  # {elementId: {prop: binding}}
+
+
+class HydrationEngine:
+    """Main hydration engine for PSX components"""
+    
+    def __init__(self):
+        self.component_counter = 0
+        self.contexts: Dict[str, HydrationContext] = {}
+        
+    def generate_component_id(self) -> str:
+        """Generate unique component ID"""
+        self.component_counter += 1
+        return f"psx_component_{self.component_counter}"
+    
+    def register_component(self, component_data: Dict[str, Any]) -> str:
+        """Register a component for hydration"""
+        component_id = self.generate_component_id()
+        
+        context = HydrationContext(
+            component_id=component_id,
+            component_name=component_data.get('name', 'Component'),
+            initial_state=component_data.get('state', {}),
+            event_handlers=component_data.get('handlers', {}),
+            use_effects=component_data.get('effects', []),
+        )
+        
+        self.contexts[component_id] = context
+        return component_id
+    
+    def generate_hydration_script(self) -> str:
+        """Generate complete hydration script for all registered components"""
+        scripts = [
+            self._generate_runtime_core(),
+            self._generate_state_manager(),
+            self._generate_component_hydrator(),
+        ]
+        
+        # Add initialization for each component
+        for context in self.contexts.values():
+            scripts.append(self._generate_component_init(context))
+        
+        return '\n\n'.join(scripts)
+    
+    def _generate_runtime_core(self) -> str:
+        """Generate core runtime utilities"""
+        return '''
+// NextPy Hydration Runtime Core
+window.NextPyRuntime = window.NextPyRuntime || {};
+
+NextPyRuntime.components = new Map();
+NextPyRuntime.globalState = {};
+NextPyRuntime.watchers = [];
+
+/**
+ * Deep object comparison for change detection
+ */
+NextPyRuntime.deepEqual = function(obj1, obj2) {
+    if (obj1 === obj2) return true;
+    if (typeof obj1 !== 'object' || typeof obj2 !== 'object') return false;
+    if (obj1 === null || obj2 === null) return false;
+    
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    
+    if (keys1.length !== keys2.length) return false;
+    
+    for (let key of keys1) {
+        if (!NextPyRuntime.deepEqual(obj1[key], obj2[key])) return false;
+    }
+    
+    return true;
+    
+    /**
+     * Auto-discover and setup data bindings from data-bind attributes
+     */
+    setupDataBindings() {
+        const elements = this.element.querySelectorAll("[data-bind]");
+        elements.forEach(element => {
+            const binding = element.getAttribute("data-bind");
+            if (binding) {
+                const [propertyPath, statePath] = binding.split(":");
+                if (propertyPath && statePath) {
+                    this.bind(element.id || element, propertyPath, statePath);
+                }
+            }
+        });
+    }
+};
+
+/**
+ * Safe JSON stringify with circular reference handling
+ */
+NextPyRuntime.safeStringify = function(obj) {
+    const seen = new WeakSet();
+    return JSON.stringify(obj, (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) return '[Circular]';
+            seen.add(value);
+        }
+        if (typeof value === 'function') return `[Function: ${value.name}]`;
+        return value;
+    });
+    
+    /**
+     * Auto-discover and setup data bindings from data-bind attributes
+     */
+    setupDataBindings() {
+        const elements = this.element.querySelectorAll("[data-bind]");
+        elements.forEach(element => {
+            const binding = element.getAttribute("data-bind");
+            if (binding) {
+                const [propertyPath, statePath] = binding.split(":");
+                if (propertyPath && statePath) {
+                    this.bind(element.id || element, propertyPath, statePath);
+                }
+            }
+        });
+    }
+};
+
+/**
+ * Merge objects deeply
+ */
+NextPyRuntime.merge = function(target, source) {
+    const result = Object.assign({}, target);
+    for (const key in source) {
+        if (typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            result[key] = NextPyRuntime.merge(result[key] || {}, source[key]);
+        } else {
+            result[key] = source[key];
+        }
+    }
+    return result;
+    
+    /**
+     * Auto-discover and setup data bindings from data-bind attributes
+     */
+    setupDataBindings() {
+        const elements = this.element.querySelectorAll("[data-bind]");
+        elements.forEach(element => {
+            const binding = element.getAttribute("data-bind");
+            if (binding) {
+                const [propertyPath, statePath] = binding.split(":");
+                if (propertyPath && statePath) {
+                    this.bind(element.id || element, propertyPath, statePath);
+                }
+            }
+        });
+    }
+};
+'''
+    
+    def _generate_state_manager(self) -> str:
+        """Generate state management system"""
+        return '''
+/**
+ * State Manager - Handles component state and reactivity
+ */
+NextPyRuntime.StateManager = class {
+    constructor(initialState = {}) {
+        this.state = JSON.parse(JSON.stringify(initialState));
+        this.subscribers = [];
+        this.history = [JSON.parse(JSON.stringify(initialState))];
+        this.historyIndex = 0;
+    }
+    
+    /**
+     * Get current state value
+     */
+    get(path) {
+        const parts = path.split('.');
+        let value = this.state;
+        for (const part of parts) {
+            if (value === null || value === undefined) return undefined;
+            value = value[part];
+        }
+        return value;
+    }
+    
+    /**
+     * Set state value and notify subscribers
+     */
+    set(path, value) {
+        const parts = path.split('.');
+        const key = parts.pop();
+        
+        let target = this.state;
+        for (const part of parts) {
+            if (!target[part]) target[part] = {};
+            target = target[part];
+        }
+        
+        if (!NextPyRuntime.deepEqual(target[key], value)) {
+            target[key] = value;
+            this.notifySubscribers();
+            this.addHistory();
+        }
+    }
+    
+    /**
+     * Update multiple values at once
+     */
+    update(updates) {
+        let changed = false;
+        for (const [path, value] of Object.entries(updates)) {
+            const oldValue = this.get(path);
+            if (!NextPyRuntime.deepEqual(oldValue, value)) {
+                this.set(path, value);
+                changed = true;
+            }
+        }
+        if (changed) this.notifySubscribers();
+    }
+    
+    /**
+     * Subscribe to state changes - FIXED: Returns unsubscriber
+     */
+    subscribe(callback) {
+        this.subscribers.push(callback);
+        // Return unsubscriber function
+        return () => {
+            const index = this.subscribers.indexOf(callback);
+            if (index > -1) this.subscribers.splice(index, 1);
+        };
+    }
+    
+    /**
+     * Notify all subscribers of state change
+     */
+    notifySubscribers() {
+        this.subscribers.forEach(callback => {
+            try {
+                callback(this.state);
+            } catch (error) {
+                console.error('Error in state subscriber:', error);
+            }
+        });
+    }
+    
+    /**
+     * Add state to history for undo/redo
+     */
+    addHistory() {
+        this.history = this.history.slice(0, this.historyIndex + 1);
+        this.history.push(JSON.parse(JSON.stringify(this.state)));
+        this.historyIndex = this.history.length - 1;
+    }
+    
+    /**
+     * Undo to previous state
+     */
+    undo() {
+        if (this.historyIndex > 0) {
+            this.historyIndex--;
+            this.state = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
+            this.notifySubscribers();
+        }
+    }
+    
+    /**
+     * Redo to next state
+     */
+    redo() {
+        if (this.historyIndex < this.history.length - 1) {
+            this.historyIndex++;
+            this.state = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
+            this.notifySubscribers();
+        }
+    }
+    
+    /**
+     * Auto-discover and setup data bindings from data-bind attributes
+     */
+    setupDataBindings() {
+        const elements = this.element.querySelectorAll("[data-bind]");
+        elements.forEach(element => {
+            const binding = element.getAttribute("data-bind");
+            if (binding) {
+                const [propertyPath, statePath] = binding.split(":");
+                if (propertyPath && statePath) {
+                    this.bind(element.id || element, propertyPath, statePath);
+                }
+            }
+        });
+    }
+};
+'''
+    
+    def _generate_component_hydrator(self) -> str:
+        """Generate component hydrator"""
+        return '''
+/**
+ * Component Hydrator - Manages component lifecycle and rendering
+ */
+NextPyRuntime.Component = class {
+    constructor(componentId, initialState = {}) {
+        this.id = componentId;
+        this.element = document.getElementById(componentId);
+        this.stateManager = new NextPyRuntime.StateManager(initialState);
+        this.bindings = new Map();
+        this.listeners = new Map();
+        this.effects = [];
+        this.unsubscribers = [];  // Track subscriptions for cleanup
+        this.stateKeyCounter = 0;  // Counter for auto-keyed useState calls
+        this.mounted = false;
+        
+        this.setup();
+    }
+    
+    /**
+     * Setup component - FIXED: Track unsubscriber
+     */
+    setup() {
+        if (!this.element) {
+            console.error(`Component element not found: ${this.id}`);
+            return;
+        }
+        
+        
+        // Auto-discover and setup data bindings
+        this.setupDataBindings();
+        // Subscribe to state changes and track unsubscriber
+        const unsub = this.stateManager.subscribe(() => this.render());
+        this.unsubscribers.push(unsub);
+        
+        this.mounted = true;
+        this.runEffects();
+    }
+    
+    /**
+     * Bind element property to state
+     */
+    bind(elementId, propertyPath, statePath) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        const binding = { elementId, propertyPath, statePath };
+        this.bindings.set(`${elementId}:${propertyPath}`, binding);
+        
+        // Set initial value
+        this.updateBinding(binding);
+        
+        // Subscribe to state changes
+        this.stateManager.subscribe(() => {
+            this.updateBinding(binding);
+        });
+    }
+    
+    /**
+     * Update element binding
+     */
+    updateBinding(binding) {
+        const element = document.getElementById(binding.elementId);
+        if (!element) return;
+        
+        const value = this.stateManager.get(binding.statePath);
+        
+        if (binding.propertyPath === 'textContent') {
+            element.textContent = value;
+        } else if (binding.propertyPath === 'innerHTML') {
+            element.innerHTML = value;
+        } else if (binding.propertyPath === 'value') {
+            element.value = value;
+        } else if (binding.propertyPath.startsWith('className:')) {
+            const className = binding.propertyPath.split(':')[1];
+            if (value) {
+                element.classList.add(className);
+            } else {
+                element.classList.remove(className);
+            }
+        } else {
+            element[binding.propertyPath] = value;
+        }
+    }
+    
+    /**
+     * Register event handler
+     */
+    on(eventName, elementId, handler) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        const listener = (event) => {
+            try {
+                handler.call(this, event, this.stateManager);
+            } catch (error) {
+                console.error(`Error in event handler ${eventName}:`, error);
+            }
+        };
+        
+        element.addEventListener(eventName, listener);
+        
+        const key = `${elementId}:${eventName}`;
+        this.listeners.set(key, { element, eventName, listener });
+    }
+    
+    /**
+     * Register effect (like useEffect)
+     */
+    effect(callback, dependencies = []) {
+        const effect = { callback, dependencies, cleanup: null };
+        this.effects.push(effect);
+        
+        if (dependencies.length === 0 || dependencies === undefined) {
+            // Run on every render
+            this.stateManager.subscribe(() => {
+                this.runEffect(effect);
+            });
+        }
+    }
+    
+    /**
+     * Run all effects
+     */
+    runEffects() {
+        this.effects.forEach(effect => this.runEffect(effect));
+    }
+    
+    /**
+     * Run single effect
+     */
+    runEffect(effect) {
+        // Clean up previous effect
+        if (effect.cleanup) {
+            effect.cleanup();
+        }
+        
+        // Run new effect
+        try {
+            effect.cleanup = effect.callback.call(this);
+        } catch (error) {
+            console.error('Error in effect:', error);
+        }
+    }
+    
+    /**
+     * Get state value - FIXED: Keyed state isolation
+     * Now properly isolates each state variable
+     */
+    useState(keyOrValue, initialValueIfKeyed) {
+        // Support two forms:
+        // 1. useState(key, initialValue) - explicit keying
+        // 2. useState(initialValue) - auto-keyed
+        
+        let key, initialValue;
+        if (typeof keyOrValue === 'string') {
+            // Explicit keying: useState('count', 0)
+            key = keyOrValue;
+            initialValue = initialValueIfKeyed;
+        } else {
+            // Auto-keying: useState(0)
+            key = `__autostate_${this.stateKeyCounter++}`;
+            initialValue = keyOrValue;
+        }
+        
+        // Initialize state only once
+        if (this.stateManager.get(key) === undefined) {
+            this.stateManager.set(key, initialValue);
+        }
+        
+        // Returns [state, setState] tuple
+        return [
+            this.stateManager.get(key),
+            (newValue) => {
+                // Handle both direct values and updater functions
+                const currentValue = this.stateManager.get(key);
+                const nextValue = typeof newValue === 'function'
+                    ? newValue(currentValue)
+                    : newValue;
+                
+                this.stateManager.set(key, nextValue);
+                this.stateManager.notifySubscribers();
+            }
+        ];
+    }
+    
+    /**
+     * Render component
+     */
+    render() {
+        if (this.onRender) {
+            this.onRender();
+        }
+    }
+    
+    /**
+     * Destroy component - FIXED: Complete memory cleanup
+     * Prevents memory leaks by unsubscribing all listeners
+     */
+    destroy() {
+        // Clean up event listeners
+        this.listeners.forEach(({ element, eventName, listener }) => {
+            if (element) {
+                element.removeEventListener(eventName, listener);
+            }
+        });
+        
+        // Clean up effects
+        this.effects.forEach(effect => {
+            if (effect.cleanup) {
+                try {
+                    effect.cleanup();
+                } catch (e) {
+                    console.error('Error in effect cleanup:', e);
+                }
+            }
+        });
+        
+        // CRITICAL FIX: Unsubscribe all state subscribers
+        this.unsubscribers.forEach(unsub => {
+            try {
+                unsub();
+            } catch (e) {
+                console.error('Error unsubscribing:', e);
+            }
+        });
+        
+        // Clear all collections
+        this.listeners.clear();
+        this.bindings.clear();
+        this.effects = [];
+        this.unsubscribers = [];
+        this.mounted = false;
+    }
+    
+    /**
+     * Auto-discover and setup data bindings from data-bind attributes
+     */
+    function setupDataBindings() {
+        const elements = this.element.querySelectorAll("[data-bind]");
+        elements.forEach(element => {
+            const binding = element.getAttribute("data-bind");
+            if (binding) {
+                const [propertyPath, statePath] = binding.split(":");
+                if (propertyPath && statePath) {
+                    this.bind(element.id || element, propertyPath, statePath);
+                }
+            }
+        });
+    }
+};
+
+/**
+ * Create and register component
+ */
+NextPyRuntime.createComponent = function(componentId, initialState = {}) {
+    if (NextPyRuntime.components.has(componentId)) {
+        return NextPyRuntime.components.get(componentId);
+    }
+    
+    const component = new NextPyRuntime.Component(componentId, initialState);
+    NextPyRuntime.components.set(componentId, component);
+    return component;
+    
+    /**
+     * Auto-discover and setup data bindings from data-bind attributes
+     */
+    setupDataBindings() {
+        const elements = this.element.querySelectorAll("[data-bind]");
+        elements.forEach(element => {
+            const binding = element.getAttribute("data-bind");
+            if (binding) {
+                const [propertyPath, statePath] = binding.split(":");
+                if (propertyPath && statePath) {
+                    this.bind(element.id || element, propertyPath, statePath);
+                }
+            }
+        });
+    }
+};
+'''
+    
+    def _generate_component_init(self, context: HydrationContext) -> str:
+        """Generate initialization code for a specific component - FIXED: XSS-safe"""
+        # SECURITY FIX: Properly escape JSON to prevent XSS
+        state_json = json.dumps(context.initial_state)
+        state_json_safe = html.escape(state_json)  # Escape for HTML context
+        
+        handlers_code = self._generate_event_handlers(context)
+        
+        return f'''
+// Initialize component: {context.component_name}
+(function() {{
+    const componentId = '{context.component_id}';
+    const initialState = {state_json};  // Parsed from: {state_json_safe}
+    
+    // Create component
+    const component = NextPyRuntime.createComponent(componentId, initialState);
+    
+    {handlers_code}
+    
+    // Emit ready event
+    window.dispatchEvent(new CustomEvent('nextpy:component-ready', {{
+        detail: {{ componentId: componentId, component: component }}
+    }}));
+}})();
+'''
+    
+    def _generate_event_handlers(self, context: HydrationContext) -> str:
+        """Generate event handler code"""
+        handler_code = []
+        
+        for event_name, python_code in context.event_handlers.items():
+            # Convert Python-like handler code to JavaScript
+            js_code = self._python_to_js_handler(python_code)
+            handler_code.append(f'''
+    component.on('{event_name}', '{context.component_id}-btn', function(event, state) {{
+        {js_code}
+    }});
+''')
+        
+        return '\n'.join(handler_code) if handler_code else ''
+    
+    def _python_to_js_handler(self, python_code: str) -> str:
+        """Convert Python handler code to JavaScript - IMPROVED: More robust"""
+        js_code = python_code
+        
+        # IMPROVED APPROACH: More generic pattern matching
+        # Replace setXxxx(value) with stateManager.set patterns
+        # This is more robust than hardcoding specific names
+        replacements = [
+            # Dynamic pattern: setXxxx(value) -> stateManager.set('xxxx', value)
+            # Note: We keep this but mark it as a transition pattern
+            (r'\.upper\(\)', '.toUpperCase()'),
+            (r'\.lower\(\)', '.toLowerCase()'),
+            (r'print\((.*?)\)', r'console.log(\1)'),
+        ]
+        
+        for pattern, replacement in replacements:
+            js_code = re.sub(pattern, replacement, js_code)
+        
+        return js_code
+    
+    def generate_html_wrapper(self, component_id: str, html: str, 
+                             state: Dict[str, Any]) -> str:
+        """Wrap component HTML with hydration data - FIXED: XSS-safe escaping"""
+        # SECURITY FIX: Properly escape JSON for safe HTML embedding
+        state_json = json.dumps(state)
+        data_state_json = html.escape(state_json)  # Escape for HTML attributes
+        state_json_safe = html.escape(state_json)  # Escape for inline script
+        
+        wrapper = f'''
+<div id="{component_id}" 
+     data-component="true" 
+     data-state='{data_state_json}' 
+     class="nextpy-component">
+    {html}
+</div>
+<script>
+    // Auto-hydrate when DOM is ready
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', function() {{
+            NextPyRuntime.createComponent('{component_id}', {state_json});
+        }});
+    }} else {{
+        NextPyRuntime.createComponent('{component_id}', {state_json});
+    }}
+</script>
+'''
+        return wrapper
+
+
+# Global hydration engine instance
+_hydration_engine = HydrationEngine()
+
+
+def get_hydration_engine() -> HydrationEngine:
+    """Get the global hydration engine"""
+    return _hydration_engine

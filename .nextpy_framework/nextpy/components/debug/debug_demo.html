@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NextPy Debug Icon Demo</title>
+    <link rel="stylesheet" href="DebugIcon.css">
+</head>
+<body>
+    <div style="padding: 20px; font-family: system-ui, sans-serif;">
+        <h1>NextPy Debug Icon Demo</h1>
+        <p>This is a demonstration of the NextPy debug icon component.</p>
+        
+        <!-- Debug Icon Component -->
+        <div class="nextpy-debug-overlay">
+            <!-- Debug Icon Button -->
+            <div 
+                class="nextpy-debug-icon"
+                onclick="toggleDebugPanel()"
+                title="NextPy Debug Panel"
+            >
+                <span class="nextpy-debug-text">NP</span>
+                <span class="nextpy-debug-badge nextpy-debug-warning">2</span>
+            </div>
+            
+            <!-- Debug Panel -->
+            <div class="nextpy-debug-panel" style="display: none;">
+                <!-- Header -->
+                <div class="nextpy-debug-header">
+                    <div class="nextpy-debug-title">
+                        <h3>NextPy Debug</h3>
+                        <span class="nextpy-debug-version">v2.0.0</span>
+                    </div>
+                    <button 
+                        class="nextpy-debug-close"
+                        onclick="toggleDebugPanel()"
+                        title="Close"
+                    >
+                        ×
+                    </button>
+                </div>
+                
+                <!-- Current Route Info -->
+                <div class="nextpy-debug-section">
+                    <h4>📍 Current Route</h4>
+                    <div class="nextpy-debug-info">
+                        <div class="nextpy-debug-row">
+                            <span class="nextpy-debug-label">Path:</span>
+                            <span class="nextpy-debug-value">/debug-demo</span>
+                        </div>
+                        <div class="nextpy-debug-row">
+                            <span class="nextpy-debug-label">Render Time:</span>
+                            <span class="nextpy-debug-value">12ms</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Performance Metrics -->
+                <div class="nextpy-debug-section">
+                    <h4>Performance</h4>
+                    <div class="nextpy-debug-metrics">
+                        <div class="nextpy-debug-row">
+                            <span class="nextpy-debug-label">Components:</span>
+                            <span class="nextpy-debug-value">5</span>
+                        </div>
+                        <div class="nextpy-debug-row">
+                            <span class="nextpy-debug-label">Re-renders:</span>
+                            <span class="nextpy-debug-value">2</span>
+                        </div>
+                        <div class="nextpy-debug-row">
+                            <span class="nextpy-debug-label">API Calls:</span>
+                            <span class="nextpy-debug-value">1</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Issues -->
+                <div class="nextpy-debug-section">
+                    <h4>🚨 Issues</h4>
+                    <div class="nextpy-debug-warnings">
+                        <div class="nextpy-debug-warning-item">
+                            <span class="nextpy-debug-warning-count">2</span>
+                            <span>Warnings</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Development Tools -->
+                <div class="nextpy-debug-section">
+                    <h4>Tools</h4>
+                    <div class="nextpy-debug-tools">
+                        <button 
+                            class="nextpy-debug-tool-btn"
+                            onclick="toggleComponentBoundaries()"
+                            title="Toggle component boundaries"
+                        >
+                            Boundaries
+                        </button>
+                        <button 
+                            class="nextpy-debug-tool-btn"
+                            onclick="toggleRerenderHighlight()"
+                            title="Highlight re-renders"
+                        >
+                            Re-renders
+                        </button>
+                        <button 
+                            class="nextpy-debug-tool-btn"
+                            onclick="toggleVerboseLogging()"
+                            title="Enable verbose logging"
+                        >
+                            Verbose
+                        </button>
+                        <button 
+                            class="nextpy-debug-tool-btn"
+                            onclick="clearDebugLogs()"
+                            title="Clear debug logs"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Console Logs -->
+                <div class="nextpy-debug-section">
+                    <h4>Console Logs</h4>
+                    <div class="nextpy-debug-logs">
+                        <div class="nextpy-debug-log-item nextpy-debug-log-info">
+                            <span class="nextpy-debug-log-time">12:34:56</span>
+                            <span class="nextpy-debug-log-level">INFO</span>
+                            <span class="nextpy-debug-log-message">Page loaded successfully</span>
+                        </div>
+                        <div class="nextpy-debug-log-item nextpy-debug-log-warning">
+                            <span class="nextpy-debug-log-time">12:34:57</span>
+                            <span class="nextpy-debug-log-level">WARN</span>
+                            <span class="nextpy-debug-log-message">Unused prop detected</span>
+                        </div>
+                        <div class="nextpy-debug-log-item nextpy-debug-log-warning">
+                            <span class="nextpy-debug-log-time">12:34:58</span>
+                            <span class="nextpy-debug-log-level">WARN</span>
+                            <span class="nextpy-debug-log-message">Component missing key prop</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle debug panel
+        function toggleDebugPanel() {
+            const panel = document.querySelector('.nextpy-debug-panel');
+            const icon = document.querySelector('.nextpy-debug-icon');
+            
+            if (panel.style.display === 'block') {
+                panel.style.display = 'none';
+                icon.classList.remove('active');
+            } else {
+                panel.style.display = 'block';
+                icon.classList.add('active');
+            }
+        }
+
+        // Toggle component boundaries
+        function toggleComponentBoundaries() {
+            const btn = event.target;
+            btn.classList.toggle('active');
+            console.log('Component boundaries', btn.classList.contains('active') ? 'enabled' : 'disabled');
+        }
+
+        // Toggle re-render highlights
+        function toggleRerenderHighlight() {
+            const btn = event.target;
+            btn.classList.toggle('active');
+            console.log('Re-render highlights', btn.classList.contains('active') ? 'enabled' : 'disabled');
+        }
+
+        // Toggle verbose logging
+        function toggleVerboseLogging() {
+            const btn = event.target;
+            btn.classList.toggle('active');
+            console.log('Verbose logging', btn.classList.contains('active') ? 'enabled' : 'disabled');
+        }
+
+        // Clear debug logs
+        function clearDebugLogs() {
+            const logs = document.querySelector('.nextpy-debug-logs');
+            logs.innerHTML = '<div class="nextpy-debug-log-item nextpy-debug-log-info"><span class="nextpy-debug-log-time">' + new Date().toLocaleTimeString() + '</span><span class="nextpy-debug-log-level">INFO</span><span class="nextpy-debug-log-message">Debug logs cleared</span></div>';
+        }
+
+        // Capture console logs
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addDebugLog('INFO', args.join(' '));
+        };
+
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addDebugLog('WARN', args.join(' '));
+        };
+
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addDebugLog('ERROR', args.join(' '));
+        };
+
+        function addDebugLog(level, message) {
+            const logs = document.querySelector('.nextpy-debug-logs');
+            if (logs) {
+                const time = new Date().toLocaleTimeString();
+                const logItem = document.createElement('div');
+                logItem.className = `nextpy-debug-log-item nextpy-debug-log-${level.toLowerCase()}`;
+                logItem.innerHTML = `
+                    <span class="nextpy-debug-log-time">${time}</span>
+                    <span class="nextpy-debug-log-level">${level}</span>
+                    <span class="nextpy-debug-log-message">${message}</span>
+                `;
+                logs.appendChild(logItem);
+                logs.scrollTop = logs.scrollHeight;
+            }
+        }
+
+        // Make debug panel draggable
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        let xOffset = 0;
+        let yOffset = 0;
+
+        const debugIcon = document.querySelector('.nextpy-debug-icon');
+        debugIcon.addEventListener('mousedown', dragStart);
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', dragEnd);
+
+        function dragStart(e) {
+            if (e.target.classList.contains('nextpy-debug-icon')) {
+                initialX = e.clientX - xOffset;
+                initialY = e.clientY - yOffset;
+                isDragging = true;
+            }
+        }
+
+        function dragEnd(e) {
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+        }
+
+        function drag(e) {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+                xOffset = currentX;
+                yOffset = currentY;
+
+                debugIcon.style.transform = `translate(${currentX}px, ${currentY}px)`;
+            }
+        }
+
+        // Simulate some activity
+        setTimeout(() => {
+            console.log('Component mounted');
+        }, 1000);
+
+        setTimeout(() => {
+            console.warn('This is a warning message');
+        }, 2000);
+
+        setTimeout(() => {
+            console.log('API call completed');
+        }, 3000);
+    </script>
+</body>
+</html>

@@ -1,45 +1,74 @@
-"""NextPy Components - Reusable UI components"""
+"""NextPy Components - Reusable UI components - Updated for JSX system"""
 
+# Legacy components (still available)
 from nextpy.components.head import Head
 from nextpy.components.link import Link
 from nextpy.components.image import Image
-from nextpy.components import form, feedback, layout, loader, toast, visual, hooks_provider
 
-# Form components
+# New JSX-compatible components
 from nextpy.components.form import (
     Input, TextArea, Select, Checkbox, Radio, RadioGroup, Form, FormGroup, FileInput,
-    NumberInput, DateInput, TimeInput, PasswordInput, RangeInput, ColorInput
+    NumberInput, DateInput, TimeInput, PasswordInput, RangeInput, ColorInput, SubmitButton
 )
 
-# Feedback components
-from nextpy.components.feedback import Alert, Badge, Progress
+from nextpy.components.layout import (
+    Container, Grid, Flex, Stack, Sidebar, MainContent, Section, Article, 
+    Header, Footer, Navigation, Center, Spacer, Divider, AspectRatio, Card
+)
 
-# Layout components
-from nextpy.components.layout import Grid, Flex, Stack, Container, Sidebar
+from nextpy.components.ui import (
+    Button, Badge, Avatar, Icon, Alert, Progress, Skeleton, Tooltip, Chip, 
+    Breadcrumb, Table, Code, Blockquote
+)
 
-# Loader components
+from nextpy.components.navigation import (
+    Navbar, Sidebar as NavSidebar, Menu, Dropdown, Tabs, Pagination, 
+    SearchBar, BreadcrumbNav
+)
+
+# Legacy feedback components
+from nextpy.components.feedback import Alert as LegacyAlert, Badge as LegacyBadge, Progress as LegacyProgress
+
+# Legacy loader components
 from nextpy.components.loader import spinner, skeleton, progress_bar, loading_screen
 
-# Toast components
+# Legacy toast components
 from nextpy.components.toast import Toast, get_toast, toast_html
 
-# Visual components
+# Legacy visual components
 from nextpy.components.visual import (
-    Tabs, Accordion, Dropdown, Modal, Card, Breadcrumb, Pagination
+    Tabs as LegacyTabs, Accordion, Dropdown as LegacyDropdown, Modal, 
+    Card as LegacyCard, Breadcrumb as LegacyBreadcrumb, Pagination as LegacyPagination
 )
 
 # Hooks provider
 from nextpy.components.hooks_provider import HooksProvider, HooksContext, with_hooks
 
 __all__ = [
+    # Core components
     "Head", "Link", "Image",
+    
+    # Form components (NEW)
     "Input", "TextArea", "Select", "Checkbox", "Radio", "RadioGroup", "Form", "FormGroup", "FileInput",
-    "NumberInput", "DateInput", "TimeInput", "PasswordInput", "RangeInput", "ColorInput",
-    "Alert", "Badge", "Progress",
-    "Grid", "Flex", "Stack", "Container", "Sidebar",
+    "NumberInput", "DateInput", "TimeInput", "PasswordInput", "RangeInput", "ColorInput", "SubmitButton",
+    
+    # Layout components (NEW)
+    "Container", "Grid", "Flex", "Stack", "Sidebar", "MainContent", "Section", "Article", 
+    "Header", "Footer", "Navigation", "Center", "Spacer", "Divider", "AspectRatio", "Card",
+    
+    # UI components (NEW)
+    "Button", "Badge", "Avatar", "Icon", "Alert", "Progress", "Skeleton", "Tooltip", "Chip", 
+    "Breadcrumb", "Table", "Code", "Blockquote",
+    
+    # Navigation components (NEW)
+    "Navbar", "NavSidebar", "Menu", "Dropdown", "Tabs", "Pagination", 
+    "SearchBar", "BreadcrumbNav",
+    
+    # Legacy components (still available)
+    "LegacyAlert", "LegacyBadge", "LegacyProgress",
     "spinner", "skeleton", "progress_bar", "loading_screen",
     "Toast", "get_toast", "toast_html",
-    "Tabs", "Accordion", "Dropdown", "Modal", "Card", "Breadcrumb", "Pagination",
-    "HooksProvider", "HooksContext", "with_hooks",
-    "form", "feedback", "layout", "loader", "toast", "visual", "hooks_provider"
+    "LegacyTabs", "Accordion", "LegacyDropdown", "Modal", 
+    "LegacyCard", "LegacyBreadcrumb", "LegacyPagination",
+    "HooksProvider", "HooksContext", "with_hooks"
 ]

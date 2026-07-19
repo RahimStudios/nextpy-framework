@@ -1,0 +1,8 @@
+from nextpy.psx import interactive_component
+
+@interactive_component
+def Eve(props=None):
+    props = props or {}
+    return( <div>Eve</div>)
+
+default = Eve

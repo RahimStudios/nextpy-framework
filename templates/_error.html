@@ -2,127 +2,326 @@
 
 {% block title %}Error - NextPy{% endblock %}
 
+{% block extra_head %}
+<style>
+    /* Next.js-inspired error page styles */
+    .error-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    
+    .error-content {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        max-width: 800px;
+        width: 100%;
+        padding: 40px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        animation: slideUp 0.5s ease-out;
+    }
+    
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .error-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    
+    .error-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #ff6b6b, #ff4444);
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 20px rgba(255, 68, 68, 0.3);
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    
+    .error-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1a202c;
+        margin-bottom: 10px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .error-subtitle {
+        font-size: 1.1rem;
+        color: #4a5568;
+        margin-bottom: 30px;
+    }
+    
+    .error-section {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 20px;
+        border-left: 4px solid #667eea;
+        transition: all 0.3s ease;
+    }
+    
+    .error-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .error-section-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .error-message {
+        background: #fff5f5;
+        border: 1px solid #fed7d7;
+        border-radius: 8px;
+        padding: 16px;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        font-size: 0.95rem;
+        color: #c53030;
+        line-height: 1.5;
+        word-break: break-word;
+    }
+    
+    .error-details {
+        display: grid;
+        gap: 12px;
+    }
+    
+    .error-detail-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .error-detail-label {
+        font-weight: 600;
+        color: #4a5568;
+        font-size: 0.9rem;
+    }
+    
+    .error-detail-value {
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        color: #2d3748;
+        font-size: 0.9rem;
+        background: #f7fafc;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    
+    .stack-trace {
+        background: #1a202c;
+        border-radius: 8px;
+        padding: 20px;
+        color: #e2e8f0;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        font-size: 0.85rem;
+        line-height: 1.6;
+        overflow-x: auto;
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #2d3748;
+    }
+    
+    .stack-trace::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    .stack-trace::-webkit-scrollbar-track {
+        background: #2d3748;
+        border-radius: 4px;
+    }
+    
+    .stack-trace::-webkit-scrollbar-thumb {
+        background: #4a5568;
+        border-radius: 4px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 30px;
+        flex-wrap: wrap;
+    }
+    
+    .btn {
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+    }
+    
+    .btn-secondary {
+        background: #f8fafc;
+        color: #4a5568;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .btn-secondary:hover {
+        background: #e2e8f0;
+        transform: translateY(-1px);
+    }
+    
+    @media (max-width: 768px) {
+        .error-content {
+            padding: 24px;
+            margin: 10px;
+        }
+        
+        .error-title {
+            font-size: 2rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+        
+        .btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-red-50 to-orange-50">
-    <!-- Error Header -->
-    <div class="bg-gradient-to-r from-red-600 to-red-700 text-white py-12 px-4">
-        <div class="max-w-4xl mx-auto">
-            <div class="flex items-center gap-4 mb-6">
-                <div class="text-5xl">⚠️</div>
-                <div>
-                    <h1 class="text-4xl font-bold">{{ error_type | default('Error') }}</h1>
-                    <p class="text-red-100 mt-2">Something went wrong. Here's what happened:</p>
-                </div>
-            </div>
+<div class="error-container">
+    <div class="error-content">
+        <!-- Error Header -->
+        <div class="error-header">
+            <div class="error-icon">⚠️</div>
+            <h1 class="error-title">{{ error_type | default('Error') }}</h1>
+            <p class="error-subtitle">Something went wrong while processing your request</p>
         </div>
-    </div>
 
-    <div class="max-w-4xl mx-auto px-4 py-12">
         <!-- Error Message -->
-        <div class="bg-white rounded-lg shadow-lg p-8 mb-8 border-l-4 border-red-600">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Error Message</h2>
-            <div class="bg-red-50 rounded-lg p-6 border border-red-200">
-                <p class="text-lg text-red-800 font-mono">{{ error_message | default('An unexpected error occurred') }}</p>
+        <div class="error-section">
+            <div class="error-section-title">
+                <span>🔍</span>
+                <span>What Happened</span>
+            </div>
+            <div class="error-message">
+                {{ error_message | default('An unexpected error occurred while processing your request') }}
             </div>
         </div>
 
-        <!-- Why This Happened -->
-        <div class="bg-white rounded-lg shadow-lg p-8 mb-8 border-l-4 border-orange-600">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Why This Happened</h2>
-            <div class="bg-orange-50 rounded-lg p-6 border border-orange-200 space-y-2">
-                <p class="text-gray-700"><strong>Error Type:</strong> <code class="bg-gray-100 px-2 py-1 rounded">{{ error_type | default('Unknown') }}</code></p>
-                <p class="text-gray-700"><strong>When:</strong> {{ error_timestamp | default('Just now') }}</p>
-                <p class="text-gray-700"><strong>Request:</strong> <code class="bg-gray-100 px-2 py-1 rounded">{{ error_path | default('Unknown') }}</code></p>
+        <!-- Error Details -->
+        <div class="error-section">
+            <div class="error-section-title">
+                <span>📍</span>
+                <span>Error Details</span>
             </div>
-        </div>
-
-        <!-- Where It Happened -->
-        <div class="bg-white rounded-lg shadow-lg p-8 mb-8 border-l-4 border-yellow-600">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Where It Happened</h2>
-            <div class="bg-yellow-50 rounded-lg p-6 border border-yellow-200 space-y-3">
-                <div>
-                    <p class="text-sm text-gray-600 mb-1">📄 File Location:</p>
-                    <p class="text-lg font-mono text-yellow-900 bg-white rounded p-3">{{ error_file | default('Unknown') }}</p>
+            <div class="error-details">
+                <div class="error-detail-item">
+                    <span class="error-detail-label">Error Type:</span>
+                    <span class="error-detail-value">{{ error_type | default('Unknown') }}</span>
                 </div>
-                <div>
-                    <p class="text-sm text-gray-600 mb-1">📍 Line Number:</p>
-                    <p class="text-2xl font-bold text-yellow-700 bg-white rounded p-3">Line <strong>{{ error_line | default('?') }}</strong></p>
+                <div class="error-detail-item">
+                    <span class="error-detail-label">When:</span>
+                    <span class="error-detail-value">{{ error_timestamp | default('Just now') }}</span>
                 </div>
+                <div class="error-detail-item">
+                    <span class="error-detail-label">Request Path:</span>
+                    <span class="error-detail-value">{{ error_path | default('Unknown') }}</span>
+                </div>
+                {% if error_file %}
+                <div class="error-detail-item">
+                    <span class="error-detail-label">File:</span>
+                    <span class="error-detail-value">{{ error_file }}</span>
+                </div>
+                {% endif %}
+                {% if error_line %}
+                <div class="error-detail-item">
+                    <span class="error-detail-label">Line:</span>
+                    <span class="error-detail-value">{{ error_line }}</span>
+                </div>
+                {% endif %}
             </div>
         </div>
 
         <!-- Stack Trace -->
-        <div class="bg-white rounded-lg shadow-lg p-8 mb-8 border-l-4 border-blue-600">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Stack Trace</h2>
-            <div class="bg-gray-900 rounded-lg p-6 border border-gray-700 overflow-x-auto">
-                <pre class="text-green-400 font-mono text-xs leading-relaxed">{{ error_traceback | default('No traceback available') }}</pre>
+        {% if stack_trace %}
+        <div class="error-section">
+            <div class="error-section-title">
+                <span>📋</span>
+                <span>Stack Trace</span>
             </div>
-            <p class="text-sm text-gray-500 mt-4">💡 Use this information to debug the issue or check the file at the line number indicated above.</p>
-        </div>
-
-        <!-- Error Details Table -->
-        {% if error_details %}
-        <div class="bg-white rounded-lg shadow-lg p-8 mb-8 border-l-4 border-indigo-600">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Error Details</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-indigo-50 border-b-2 border-indigo-200">
-                        <tr>
-                            <th class="text-left px-4 py-2 font-bold text-gray-900">Key</th>
-                            <th class="text-left px-4 py-2 font-bold text-gray-900">Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for key, value in error_details.items() %}
-                        <tr class="border-b border-gray-200 hover:bg-gray-50">
-                            <td class="px-4 py-2 font-mono text-gray-700">{{ key }}</td>
-                            <td class="px-4 py-2 text-gray-600">{{ value }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="stack-trace">
+                {{ stack_trace | safe }}
             </div>
         </div>
         {% endif %}
 
-        <!-- Common Solutions -->
-        <div class="bg-blue-50 rounded-lg border-l-4 border-blue-600 p-8 mb-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Common Solutions</h2>
-            <ul class="space-y-3 text-gray-700">
-                <li class="flex items-start gap-3">
-                    <span class="text-blue-600 font-bold">1.</span>
-                    <span><strong>Check the line number:</strong> Review the file path and line number above to locate the issue in your code</span>
-                </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-blue-600 font-bold">2.</span>
-                    <span><strong>Check the stack trace:</strong> Follow the error chain to understand what triggered the error</span>
-                </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-blue-600 font-bold">3.</span>
-                    <span><strong>Review imports:</strong> Ensure all required modules are imported and available</span>
-                </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-blue-600 font-bold">4.</span>
-                    <span><strong>Check the database:</strong> If database-related, ensure your database is running and connected</span>
-                </li>
-                <li class="flex items-start gap-3">
-                    <span class="text-blue-600 font-bold">5.</span>
-                    <span><strong>Read documentation:</strong> Check DOCUMENTATION.md and COMPREHENSIVE_GUIDE.md for guidance</span>
-                </li>
-            </ul>
-        </div>
-
         <!-- Action Buttons -->
-        <div class="flex flex-col sm:flex-row gap-4 justify-center sm:justify-start">
-            <a href="/" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition text-center" hx-get="/" hx-target="#main-content" hx-push-url="true">
-                ← Go Home
-            </a>
-            <a href="/documentation" class="px-8 py-3 border-2 border-blue-600 text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition text-center" hx-get="/documentation" hx-target="#main-content" hx-push-url="true">
-                📖 View Docs
-            </a>
-            <button onclick="location.reload()" class="px-8 py-3 border-2 border-gray-400 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition">
-                🔄 Retry
+        <div class="action-buttons">
+            <button onclick="window.history.back()" class="btn btn-secondary">
+                <span>←</span>
+                <span>Go Back</span>
             </button>
+            <button onclick="window.location.reload()" class="btn btn-primary">
+                <span>🔄</span>
+                <span>Try Again</span>
+            </button>
+            <a href="/" class="btn btn-secondary">
+                <span>🏠</span>
+                <span>Home</span>
+            </a>
         </div>
     </div>
 </div>

@@ -1,0 +1,255 @@
+{
+  "NextPy PSX Component": {
+    "prefix": "component",
+    "body": [
+      "@component",
+      "def ${1:ComponentName}(${2:props}):",
+      "    \"\"\"${3:Component description}\"\"\"",
+      "    ",
+      "    ${4:# Component logic here}",
+      "    ",
+      "    return psx('",
+      "        \"<div className=\"${5:container}\">",
+      "            <h1>{props.get('title', 'Default Title')}</h1>",
+      "            <p>{props.get('description', 'Default description')}</p>",
+      "        </div>\"",
+      "    )"
+    ],
+    "description": "Create a NextPy PSX component"
+  },
+  "NextPy PSX Page": {
+    "prefix": "page",
+    "body": [
+      "from nextpy.psx import psx, component",
+      "",
+      "@component",
+      "def Page(${1:props}):",
+      "    \"\"\"${2:Page description}\"\"\"",
+      "    ",
+      "    return psx('",
+      "        \"<div className=\"${3:page}\">",
+      "            <h1>${4:Page Title}</h1>",
+      "            <p>${5:Page content}</p>",
+      "        </div>\"",
+      "    )"
+    ],
+    "description": "Create a NextPy PSX page"
+  },
+  "PSX Element": {
+    "prefix": "psx",
+    "body": [
+      "psx('",
+      "    \"<${1:div} className=\"${2:className}\">",
+      "        ${3:content}",
+      "    </${1:div}>\"",
+      ")"
+    ],
+    "description": "Create a PSX element"
+  },
+  "PSX For Loop": {
+    "prefix": "for",
+    "body": [
+      "{for ${1:item} in ${2:items}:",
+      "    <div key={${1:item}}>",
+      "        {${1:item}}",
+      "    </div>",
+      "}"
+    ],
+    "description": "Create a PSX for loop"
+  },
+  "PSX If Condition": {
+    "prefix": "if",
+    "body": [
+      "{if ${1:condition}:",
+      "    <div>",
+      "        ${2:content}",
+      "    </div>",
+      "}"
+    ],
+    "description": "Create a PSX if condition"
+  },
+  "PSX Try-Catch": {
+    "prefix": "try",
+    "body": [
+      "{try:",
+      "    <div>",
+      "        {${1:risky_operation()}}",
+      "    </div>",
+      "}{except ${2:Exception} as e:",
+      "    <div className=\"error\">",
+      "        Error: {e}",
+      "    </div>",
+      "}"
+    ],
+    "description": "Create a PSX try-catch block"
+  },
+  "PSX Python Logic": {
+    "prefix": "python",
+    "body": [
+      "{python:",
+      "    ${1:# Python code here}",
+      "    result = ${2:expression}",
+      "    return psx('<div>{result}</div>')",
+      "}"
+    ],
+    "description": "Create a PSX Python logic block"
+  },
+  "useState Hook": {
+    "prefix": "useState",
+    "body": [
+      "${1:value}, set_${1:value} = useState(${2:initial_value})"
+    ],
+    "description": "Use useState hook"
+  },
+  "useEffect Hook": {
+    "prefix": "useEffect",
+    "body": [
+      "useEffect(lambda: () => {",
+      "    ${1:# Effect logic here}",
+      "}, [${2:dependencies}])"
+    ],
+    "description": "Use useEffect hook"
+  },
+  "useMemo Hook": {
+    "prefix": "useMemo",
+    "body": [
+      "${1:memoized_value} = useMemo(lambda: ${2:computation}, [${3:dependencies}])"
+    ],
+    "description": "Use useMemo hook"
+  },
+  "useCallback Hook": {
+    "prefix": "useCallback",
+    "body": [
+      "${1:callback} = useCallback(lambda ${2:args}: ${3:return_value}, [${4:dependencies}])"
+    ],
+    "description": "Use useCallback hook"
+  },
+  "PSX Form": {
+    "prefix": "form",
+    "body": [
+      "<form onSubmit={${1:handleSubmit}} className=\"${2:form-class}\">",
+      "    <div className=\"form-group\">",
+      "        <label htmlFor=\"${3:field}\">${4:Label}:</label>",
+      "        <input",
+      "            type=\"${5:text}\"",
+      "            id=\"${3:field}\"",
+      "            name=\"${3:field}\"",
+      "            value={${6:value}}",
+      "            onChange={${7:handleChange}}",
+      "            className=\"form-control\"",
+      "        />",
+      "    </div>",
+      "    <button type=\"submit\" className=\"btn btn-primary\">",
+      "        ${8:Submit}",
+      "    </button>",
+      "</form>"
+    ],
+    "description": "Create a PSX form"
+  },
+  "PSX List": {
+    "prefix": "list",
+    "body": [
+      "<ul className=\"${1:list-class}\">",
+      "    {for item in ${2:items}:",
+      "        <li key={item} className=\"list-item\">",
+      "            {item}",
+      "        </li>",
+      "    }",
+      "</ul>"
+    ],
+    "description": "Create a PSX list"
+  },
+  "PSX Conditional Rendering": {
+    "prefix": "conditional",
+    "body": [
+      "{if ${1:condition}:",
+      "    <div className=\"${2:true-class}\">",
+      "        ${3:True content}",
+      "    </div>",
+      "}{else:",
+      "    <div className=\"${4:false-class}\">",
+      "        ${5:False content}",
+      "    </div>",
+      "}"
+    ],
+    "description": "Create conditional rendering"
+  },
+  "PSX Fragment": {
+    "prefix": "fragment",
+    "body": [
+      "<>",
+      "    ${1:content}",
+      "</>"
+    ],
+    "description": "Create a PSX fragment"
+  },
+  "PSX Link": {
+    "prefix": "link",
+    "body": [
+      "<Link href=\"${1:/path}\" className=\"${2:link-class}\">",
+      "    ${3:Link text}",
+      "</Link>"
+    ],
+    "description": "Create a PSX Link"
+  },
+  "PSX Head": {
+    "prefix": "head",
+    "body": [
+      "<Head>",
+      "    <title>${1:Page Title}</title>",
+      "    <meta name=\"description\" content=\"${2:Page description}\" />",
+      "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
+      "</Head>"
+    ],
+    "description": "Create PSX Head metadata"
+  },
+  "PSX Layout": {
+    "prefix": "layout",
+    "body": [
+      "@component",
+      "def Layout({children}):",
+      "    \"\"\"Layout component\"\"\"",
+      "    ",
+      "    return psx('",
+      "        \"<html>",
+      "            <Head>",
+      "                <title>${1:App Title}</title>",
+      "                <meta name=\"description\" content=\"${2:App description}\" />",
+      "            </Head>",
+      "            <body className=\"${3:body-class}\">",
+      "                {children}",
+      "            </body>",
+      "        </html>\"",
+      "    )"
+    ],
+    "description": "Create a PSX layout component"
+  },
+  "PSX Event Handler": {
+    "prefix": "onclick",
+    "body": [
+      "onClick={${1:handleClick}}"
+    ],
+    "description": "Add onClick event handler"
+  },
+  "PSX Style": {
+    "prefix": "style",
+    "body": [
+      "style={{",
+      "    ${1:property}: '${2:value}',",
+      "    ${3:property}: '${4:value}'",
+      "}}"
+    ],
+    "description": "Add inline styles"
+  },
+  "PSX Class Names": {
+    "prefix": "classnames",
+    "body": [
+      "className={class_names(",
+      "    '${1:class1}',",
+      "    ${2:condition} && '${3:class2}',",
+      "    ${4:condition2} && '${5:class3}'",
+      ")}"
+    ],
+    "description": "Use class_names utility"
+  }
+}

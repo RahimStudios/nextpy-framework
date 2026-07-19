@@ -1,17 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}NextPy App{% endblock %}</title>
+    <meta name="google-site-verification" content="oXBMOyST6fwllC2aDmcGSr_S-QirT_2BouKOGFkq2tA" />
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="{% block description %}NextPy - The Python web framework inspired by Next.js. Build modern web applications with file-based routing, SSR, SSG, and more.{% endblock %}">
+    <meta name="keywords" content="Python web framework, Next.js alternative, SSR, SSG, file-based routing, FastAPI, web development">
+    <meta name="author" content="NextPy Framework">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="{% block og_title %}NextPy - The Python Framework{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}The Python web framework inspired by Next.js. Build modern web applications with file-based routing, SSR, SSG, and more.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://nextpy-framework.onrender.com{% block og_url %}{% endblock %}">
+    <meta property="og:image" content="https://nextpy-framework.onrender.com/static/images/og-image.png">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}NextPy - The Python Framework{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}The Python web framework inspired by Next.js. Build modern web applications with file-based routing, SSR, SSG, and more.{% endblock %}">
+    <meta name="twitter:image" content="https://nextpy-framework.onrender.com/static/images/og-image.png">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://nextpy-framework.onrender.com{% block canonical %}{% endblock %}">
+    
+    <title>{% block title %}NextPy - The Python Framework{% endblock %}</title>
+    <link rel="shortcut icon" href="/static/images/icon.png" type="image/x-icon">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Use locally compiled Tailwind rather than CDN for consistency -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="../public/tailwind.css" rel="stylesheet">
+
+    
     <style>
         @keyframes slideIn {
             0% { transform: scaleX(0); }
             10% { transform: scaleX(0.1); }
             50% { transform: scaleX(1); }
             100% { transform: scaleX(1); }
+        }
+
+        @keyframes border-run {
+            0% { stroke-dashoffset: 1000; }
+            100% { stroke-dashoffset: 0; }
+        }
+
+        .animated-border-container {
+            position: relative;
+            padding: 1px;
+            border-radius: 1rem;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .animated-border-container::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(
+                transparent,
+                transparent,
+                transparent,
+                #3b82f6,
+                transparent
+            );
+            animation: rotate 4s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes border-run-rect {
+            0% { stroke-dashoffset: 1000; }
+            100% { stroke-dashoffset: 0; }
+        }
+
+        .hero-border-animation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .animated-border-content {
+            position: relative;
+            background: white;
+            border-radius: calc(1rem - 1px);
+            height: 100%;
+            width: 100%;
         }
         
         .htmx-indicator {
@@ -49,25 +136,41 @@
     </style>
     {% block head %}{% endblock %}
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="min-h-screen text-gray-900 bg-white selection:bg-blue-100 selection:text-blue-900">
     <!-- NextPy Loading Bar -->
     <div class="nextpy-loading-bar" id="nextpy-loading"></div>
     
-    <nav class="bg-white shadow-sm border-b sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
+    <nav class="sticky py-4 top-0 z-50 w-full border-b border-gray-100 bg-white/80 backdrop-blur-md">
+        <div class="px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <a href="/" class="flex items-center space-x-2 group" hx-get="/" hx-target="#main-content" hx-push-url="true">
-                        <span class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform">NextPy</span>
+                        <div>
+                            <img src="/static/images/icon.png" alt="NextPy Logo" class="h-20 w-auto bg-white  p-2">
+                        </div>
+                        <div class="flex items-baseline font-bold tracking-tight text-black">
+                            <span class="text-3xl font-black">N</span>
+                            <span class="text-xl font-light">ext</span>
+                            <span class="text-3xl font-black">P</span>
+                            <span class="text-xl font-light">y</span>
+                        </div>
                     </a>
                 </div>
-                <div class="flex items-center space-x-8">
-                    <a href="/" class="text-gray-600 hover:text-blue-600 font-medium transition-colors" hx-get="/" hx-target="#main-content" hx-push-url="true">Home</a>
-                    <a href="/about" class="text-gray-600 hover:text-blue-600 font-medium transition-colors" hx-get="/about" hx-target="#main-content" hx-push-url="true">About</a>
-                    <a href="/blog" class="text-gray-600 hover:text-blue-600 font-medium transition-colors" hx-get="/blog" hx-target="#main-content" hx-push-url="true">Blog</a>
-                    <a href="/documentaion" class="text-gray-600 hover:text-blue-600 font-medium transition-colors" hx-get="/documentation" hx-target="#main-content" hx-push-url="true">Docs</a>
+                
+                <div class="items-center hidden space-x-1 md:flex">
+                    <a href="/" class="px-3 py-2 text-sm font-medium text-gray-600 transition-colors rounded-md hover:text-black hover:bg-gray-50" hx-get="/" hx-target="#main-content" hx-push-url="true">Home</a>
+                    <a href="/about" class="px-3 py-2 text-sm font-medium text-gray-600 transition-colors rounded-md hover:text-black hover:bg-gray-50" hx-get="/about" hx-target="#main-content" hx-push-url="true">About</a>
+                    <a href="/blog" class="px-3 py-2 text-sm font-medium text-gray-600 transition-colors rounded-md hover:text-black hover:bg-gray-50" hx-get="/blog" hx-target="#main-content" hx-push-url="true">Blog</a>
+                    <a href="/documentation" class="px-3 py-2 text-sm font-medium text-gray-600 transition-colors rounded-md hover:text-black hover:bg-gray-50" hx-get="/documentation" hx-target="#main-content" hx-push-url="true">Docs</a>
+                </div>
 
-                    <a href="/login" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium" hx-get="/login" hx-target="#main-content" hx-push-url="true">Login</a>
+                <div class="flex items-center space-x-4">
+                    <a href="https://github.com/IBRAHIMFONYUY/nextpy-framework/" target="_blank" class="items-center hidden text-gray-500 transition-colors md:flex hover:text-black">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.43.372.823 1.102.823 2.222 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+                    </a>
+                    <a href="/login" class="px-4 py-1.5 text-sm font-medium text-white bg-black rounded-full hover:bg-gray-800 transition-all shadow-sm" hx-get="/login" hx-target="#main-content" hx-push-url="true">
+                        Sign In
+                    </a>
                 </div>
             </div>
         </div>
@@ -77,41 +180,67 @@
         {% block content %}{{ content | safe }}{% endblock %}
     </div>
     
-    <footer class="bg-gradient-to-r from-gray-900 to-gray-800 text-white py-16 mt-20">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-4 gap-8 mb-8">
-                <div>
-                    <h3 class="font-bold text-lg mb-4">NextPy</h3>
-                    <p class="text-gray-400 text-sm">The Python web framework inspired by Next.js</p>
+    <footer class="py-24 mt-24 border-t border-gray-100 bg-gray-50">
+        <div class="px-6 mx-auto max-w-7xl lg:px-8">
+            <div class="grid gap-16 xl:grid-cols-3 xl:gap-24">
+                <div class="space-y-8">
+                    <div class="flex items-center space-x-2">
+                           <div>
+                            <img src="/static/images/icon.png" alt="NextPy Logo" class="h-20 w-auto bg-white  p-2">
+                            </div>
+                        
+                        <div class="flex items-baseline font-bold tracking-tight text-black">
+                            <span class="text-3xl font-black">N</span>
+                            <span class="text-xl font-light">ext</span>
+                            <span class="text-3xl font-black">P</span>
+                            <span class="text-xl font-light">y</span>
+                        </div>
+                    </div>
+                    <p class="max-w-xs text-sm leading-7 text-gray-500">
+                        The Python web framework for building performant and modern web applications with speed and simplicity.
+                    </p>
+                    <div class="flex space-x-6">
+                        <a href="#" class="text-gray-400 transition-colors hover:text-black">
+                            <span class="sr-only">GitHub</span>
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.43.372.823 1.102.823 2.222 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+                        </a>
+                        <a href="#" class="text-gray-400 transition-colors hover:text-black">
+                            <span class="sr-only">Twitter</span>
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.84 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/></svg>
+                        </a>
+                    </div>
                 </div>
-                <div>
-                    <h4 class="font-semibold mb-4">Documentation</h4>
-                    <ul class="space-y-2 text-gray-400 text-sm">
-                        <li><a href="/examples" class="hover:text-white transition">Examples</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="font-semibold mb-4">Community</h4>
-                    <ul class="space-y-2 text-gray-400 text-sm">
-                        <li><a href="#" class="hover:text-white transition">GitHub</a></li>
-                        <li><a href="#" class="hover:text-white transition">Discord</a></li>
-                        <li><a href="#" class="hover:text-white transition">Twitter</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="font-semibold mb-4">Resources</h4>
-                    <ul class="space-y-2 text-gray-400 text-sm">
-                        <li><a href="/blog" class="hover:text-white transition">Blog</a></li>
-                        <li><a href="/about" class="hover:text-white transition">About</a></li>
-                        <li><a href="#" class="hover:text-white transition">License</a></li>
-                    </ul>
+                <div class="grid grid-cols-2 col-span-2 gap-8 md:grid-cols-3">
+                    <div>
+                        <h3 class="text-sm font-semibold leading-6 tracking-wider text-black uppercase">Framework</h3>
+                        <ul role="list" class="mt-6 space-y-4">
+                            <li><a href="/documentation" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Documentation</a></li>
+                            <li><a href="/features" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Features</a></li>
+                            <li><a href="/examples" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Examples</a></li>
+                            <li><a href="/blog" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Blog</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold leading-6 tracking-wider text-black uppercase">Resources</h3>
+                        <ul role="list" class="mt-6 space-y-4">
+                            <li><a href="/about" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">About Us</a></li>
+                            <li><a href="#" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Community</a></li>
+                            <li><a href="#" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Support</a></li>
+                            <li><a href="#" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold leading-6 tracking-wider text-black uppercase">Legal</h3>
+                        <ul role="list" class="mt-6 space-y-4">
+                            <li><a href="#" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Privacy Policy</a></li>
+                            <li><a href="#" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Terms of Service</a></li>
+                            <li><a href="#" class="text-sm leading-6 text-gray-500 transition-colors hover:text-black">Cookie Policy</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-            <div class="border-t border-gray-700 pt-8">
-                <div class="flex flex-col md:flex-row justify-between items-center">
-                    <p class="text-gray-400">Built with NextPy - The Python Web Framework | Version 1.0.0</p>
-                    <p class="text-gray-500 text-sm mt-4 md:mt-0">© 2025 NextPy. All rights reserved.</p>
-                </div>
+            <div class="pt-12 mt-16 border-t border-gray-100">
+                <p class="text-xs leading-5 text-gray-400">&copy; 2026 NextPy Framework. All rights reserved.</p>
             </div>
         </div>
     </footer>

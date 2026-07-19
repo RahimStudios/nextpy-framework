@@ -1,0 +1,108 @@
+{
+  "scopeName": "source.nextpy",
+  "name": "NextPy",
+  "fileTypes": [
+    "py.jsx"
+  ],
+  "patterns": [
+    {
+      "include": "# Python code blocks",
+      "begin": "(^[^\\s]*def\\s+\\w+|^[^\\s]*class\\s+\\w+|^[^\\s]*import\\s+\\w+|^[^\\s]*from\\s+\\w+|^[^\\s]*return\\s*\\(",
+      "end": "(?=\\n|$)",
+      "patterns": [
+        {
+          "include": "# Python keywords",
+          "match": "\\b(def|class|import|from|return|if|else|elif|for|while|try|except|finally|with|as|pass|break|continue|yield|lambda|and|or|not|in|is|None|True|False)\\b",
+          "name": "keyword.control.python"
+        },
+        {
+          "include": "# Function names",
+          "match": "\\b\\w+(?=\\s*\\()",
+          "name": "entity.name.function.python"
+        },
+        {
+          "include": "# Class names",
+          "match": "\\b\\w+(?=\\s*:)",
+          "name": "entity.name.class.python"
+        },
+        {
+          "include": "# Strings",
+          "match": "\"[^\"]*\"|'[^\']*'",
+          "name": "string.quoted.double.python"
+        },
+        {
+          "include": "# Numbers",
+          "match": "\\b\\d+(\\.\\d+)?\\b",
+          "name": "constant.numeric.python"
+        }
+      ]
+    },
+    {
+      "include": "# JSX elements",
+      "begin": "<([a-zA-Z][a-zA-Z0-9]*)",
+      "end": "(</\\1>|/>)",
+      "patterns": [
+        {
+          "include": "# Tag names",
+          "match": "^<([a-zA-Z][a-zA-Z0-9]*)",
+          "captures": {
+            "1": { "name": "entity.name.tag.jsx" }
+          }
+        },
+        {
+          "include": "# Attributes",
+          "match": "(className|onClick|onChange|onSubmit|type|name|id|placeholder|value|required|disabled|variant|size)\\s*=\\s*(\"[^\"]*\"|'[^']*')",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.jsx" },
+            "2": { "name": "string.quoted.double.jsx" }
+          }
+        },
+        {
+          "include": "# JSX expressions",
+          "begin": "\\{",
+          "end": "\\}",
+          "name": "meta.embedded.line.jsx",
+          "patterns": [
+            {
+              "match": "\\w+",
+              "name": "variable.other.jsx"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "jsx-tag": {
+      "patterns": [
+        {
+          "begin": "<([a-zA-Z][a-zA-Z0-9]*)",
+          "end": "(</\\1>|/>)",
+          "captures": {
+            "1": { "name": "entity.name.tag.jsx" }
+          }
+        }
+      ]
+    },
+    "jsx-attribute": {
+      "patterns": [
+        {
+          "match": "(className|onClick|onChange|onSubmit|type|name|id|placeholder|value|required|disabled|variant|size)\\s*=\\s*(\"[^\"]*\"|'[^']*')",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.jsx" },
+            "2": { "name": "string.quoted.double.jsx" }
+          }
+        }
+      ]
+    },
+    "jsx-expression": {
+      "patterns": [
+        {
+          "begin": "\\{",
+          "end": "\\}",
+          "name": "meta.embedded.line.jsx"
+        }
+      ]
+    }
+  }
+}

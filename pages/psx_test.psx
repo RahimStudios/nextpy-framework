@@ -1,0 +1,98 @@
+# Import all necessary PSX components
+from nextpy.psx import useState, useEffect, useCallback, useMemo, create_onclick, create_onchange, create_onsubmit, interactive_component
+
+@interactive_component
+def Home(props=None):
+    # Python-style array destructuring for hooks
+    [name, setName] = useState('rahim')
+    [count, setCount] = useState(0)
+    [me, setMe]=useState([1, 2, 3, 4, 5])
+    [loading, setLoading] = useState(False)
+    [user, setUser]=useState('my user')
+    
+    # Server-side props
+    props = props or {}
+    title = props.get("title", "Welcome to NextPy")
+    message = props.get("message", "Your Python-powered web framework with True JSX")
+    
+    handleIncrement = create_onclick(lambda e: setCount(count + 1))
+    handleClick = create_onclick(lambda e: setName(name.upper()))
+    handletext = create_onclick(lambda e: setMe(me + ['6'])) 
+             
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-900">
+            <div className="text-center text-black max-w-4xl mx-auto p-8">
+                <h1 className="mb-4 text-5xl font-bold text-white">{title}</h1>
+                <p className="text-xl mb-8 text-white">{message}</p>
+                
+                {/* Interactive Section */}
+                <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg p-6">
+                    <h2 className="text-2xl font-bold mb-4">Interactive Demo</h2>
+                    <p className="mb-4">Count: {count}</p>
+                    
+                    <div className="flex flex-wrap gap-4 justify-center">
+                        <button create_onclick={handleIncrement} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium">
+                            Increment number: {count}
+                        </button>
+                        
+                        <button create_onclick={handleClick} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg font-medium">
+                            Uppercase Name {name}
+                        </button>
+                        
+                       
+                    </div>
+                </div>
+                
+                {/* Component Nesting Demo */}
+                <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg p-6">
+                    <h2 className="text-2xl font-bold mb-4">Component Nesting</h2>
+                    <button create_onclick={handletext} className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium">
+                        Nested Button Component
+                    </button>
+                </div>
+                
+                {/* Python Logic Demo */}
+                <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg p-6">
+                    <h2 className="text-2xl font-bold mb-4">Python Logic in JSX</h2>
+                    
+                    {/* Conditional rendering */}
+                    {if len(name) > 5:
+                        <p className="text-green-300">Long name detected!</p>
+                    {else:
+                        <p className="text-yellow-300">Short name</p>
+                    }
+                    
+                    {/* For loop */}
+                    <div className="mt-4">
+                        {for i in range(3):
+                            <div key={i} className="mb-2 p-2 bg-white bg-opacity-20 rounded">
+                                Item {i}: {name} {i + 1}
+                            </div>
+                        }
+                    </div>
+                </div>
+                
+                {/* Navigation */}
+                <div className="flex flex-wrap gap-4 justify-center">
+                    <a href="/about" className="inline-block px-6 py-3 font-semibold text-blue-600 transition-all duration-300 transform bg-white rounded-lg shadow-lg hover:bg-gray-100 hover:text-blue-700 hover:scale-105">
+                        Learn More
+                    </a>
+                    
+                    <a href="/blog" className="inline-block px-6 py-3 font-semibold text-purple-600 transition-all duration-300 transform bg-white rounded-lg shadow-lg hover:bg-gray-100 hover:text-purple-700 hover:scale-105">
+                        View Blog
+                    </a>
+                </div>
+            </div>
+        </div>
+    )
+
+# Server-side props (Next.js style)
+def getServerSideProps(context):
+    return {
+        "props": {
+            "title": "Welcome to NextPy",
+            "message": "Your Python-powered web framework with True JSX"
+        }
+    }
+
+default = Home

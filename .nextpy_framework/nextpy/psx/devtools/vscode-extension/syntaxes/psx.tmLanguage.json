@@ -1,0 +1,141 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "source.psx",
+  "name": "PSX",
+  "patterns": [
+    {
+      "name": "comment.line.number-sign.psx",
+      "begin": "#",
+      "end": "$"
+    },
+    {
+      "name": "string.quoted.double.psx",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.psx",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.psx",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.psx",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "entity.name.tag.psx",
+      "match": "</?[A-Za-z][A-Za-z0-9-]*",
+      "captures": {
+        "0": {
+          "name": "entity.name.tag.psx"
+        }
+      }
+    },
+    {
+      "name": "punctuation.definition.tag.psx",
+      "match": "</?|/>"
+    },
+    {
+      "name": "meta.tag.psx",
+      "begin": "<([A-Za-z][A-Za-z0-9-]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.tag.psx"
+        }
+      },
+      "end": "/?>",
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.psx",
+          "match": "([A-Za-z][A-Za-z0-9-]*)",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name.psx"
+            }
+          }
+        },
+        {
+          "name": "punctuation.separator.key-value.psx",
+          "match": "="
+        },
+        {
+          "name": "string.quoted.double.psx",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.psx",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.psx",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.psx",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "meta.brace.curly.psx",
+          "begin": "\\{",
+          "end": "\\}",
+          "patterns": [
+            {
+              "include": "source.python"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "keyword.control.psx",
+      "match": "\\b(if|elif|else|for|while|try|except|finally|with|def|class|import|from|as|return|yield|lambda|and|or|not|in|is|None|True|False|break|continue|pass)\\b"
+    },
+    {
+      "name": "variable.other.psx",
+      "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+    },
+    {
+      "name": "constant.numeric.psx",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    {
+      "name": "support.function.event.psx",
+      "match": "\\b(on[A-Z][a-zA-Z]+)\\b"
+    },
+    {
+      "name": "support.type.component.psx",
+      "match": "\\b([A-Z][a-zA-Z0-9]*)\\b",
+      "captures": {
+        "1": {
+          "name": "support.type.component.psx"
+        }
+      }
+    }
+  ],
+  "repository": {
+    "python-expression": {
+      "name": "meta.expression.python.psx",
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "source.python"
+        }
+      ]
+    }
+  }
+}

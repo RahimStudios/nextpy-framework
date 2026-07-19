@@ -1,0 +1,34 @@
+services:
+  # Web Service
+  - type: web
+    name: nextpy-app
+    env: python
+    plan: free
+    buildCommand: |
+      # Install Node.js dependencies for Tailwind
+      cd .nextpy_framework/nextpy
+      npm ci
+      npm run build:tailwind
+      cd ../../
+      # Install Python dependencies
+      pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+    autoDeploy: true
+    
+  # PostgreSQL Database (optional)
+  - type: pserv
+    name: nextpy-db
+    plan: free
+    env: docker
+    databaseName: nextpy
+    user: nextpy

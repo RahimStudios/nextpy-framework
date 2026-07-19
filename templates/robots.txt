@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: {{ base_url }}/sitemap.xml
+
+# Allow all pages to be crawled
+Allow: /
+Allow: /documentation
+Allow: /examples
+Allow: /features
+Allow: /about
+Allow: /blog
+Allow: /db_example
+Allow: /hooks-demo
+
+# Block common non-content paths
+Disallow: /api/
+Disallow: /_nextpy_debug/
+Disallow: /static/
+Disallow: *.py$
+Disallow: *.html$

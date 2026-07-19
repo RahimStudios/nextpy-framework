@@ -1,0 +1,21 @@
+{
+  "plugins": {
+    "tailwind": {
+      "enabled": true,
+      "config": {
+        "optimize_classes": true,
+        "remove_duplicates": true,
+        "purge_unused": true
+      },
+      "priority": 10
+    },
+    "typescript": {
+      "enabled": true,
+      "config": {
+        "strict": true,
+        "generate_types": true
+      },
+      "priority": 5
+    }
+  }
+}

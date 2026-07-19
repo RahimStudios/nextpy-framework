@@ -1,0 +1,301 @@
+{
+  "PSX Component": {
+    "prefix": "component",
+    "body": [
+      "@component",
+      "def ${1:ComponentName}(props=None):",
+      "    props = props or {}",
+      "    ",
+      "    # Python-style hooks with array destructuring",
+      "    [${2:state}, set${2/(.*)/${2:/capitalize}}] = useState(${3:initialValue})",
+      "    ",
+      "    return (",
+      "        <div className=\"$4\">",
+      "            $5",
+      "        </div>",
+      "    )",
+      "",
+      "def getServerSideProps(context):",
+      "    return {",
+      "        \"props\": {",
+      "            \"title\": \"${6:Page Title}\"",
+      "        }",
+      "    }",
+      "",
+      "default = ${1:ComponentName}"
+    ],
+    "description": "Complete PSX component with hooks and server props"
+  },
+  "PSX useState Hook": {
+    "prefix": "useState",
+    "body": [
+      "[${1:value}, set${1/(.*)/${1:/capitalize}}] = useState(${2:initialValue})"
+    ],
+    "description": "Python-style useState hook with array destructuring"
+  },
+  "PSX useEffect Hook": {
+    "prefix": "useEffect",
+    "body": [
+      "def _effect():",
+      "    $1",
+      "",
+      "useEffect(_effect, [${2:dependencies}])"
+    ],
+    "description": "PSX useEffect hook"
+  },
+  "PSX useCallback Hook": {
+    "prefix": "useCallback",
+    "body": [
+      "${1:functionName} = useCallback(lambda ${2:params}: ${3:implementation}, [${4:dependencies}])"
+    ],
+    "description": "PSX useCallback hook"
+  },
+  "PSX useMemo Hook": {
+    "prefix": "useMemo",
+    "body": [
+      "${1:value} = useMemo(lambda: ${2:calculation}, [${3:dependencies}])"
+    ],
+    "description": "PSX useMemo hook"
+  },
+  "PSX useRef Hook": {
+    "prefix": "useRef",
+    "body": [
+      "${1:refName} = useRef(${2:initialValue})"
+    ],
+    "description": "PSX useRef hook"
+  },
+  "PSX useReducer Hook": {
+    "prefix": "useReducer",
+    "body": [
+      "def reducer(state, action):",
+      "    if action['type'] == '${1:action_type}':",
+      "        return ${2:new_state}",
+      "    return state",
+      "",
+      "[${3:state}, dispatch] = useReducer(reducer, ${4:initialState})"
+    ],
+    "description": "PSX useReducer hook"
+  },
+  "PSX useContext Hook": {
+    "prefix": "useContext",
+    "body": [
+      "${1:value} = useContext(${2:Context})"
+    ],
+    "description": "PSX useContext hook"
+  },
+  "PSX Custom Hook - useCounter": {
+    "prefix": "useCounter",
+    "body": [
+      "[${1:count}, increment, decrement] = useCounter(${2:initialValue})"
+    ],
+    "description": "PSX useCounter custom hook"
+  },
+  "PSX Custom Hook - useToggle": {
+    "prefix": "useToggle",
+    "body": [
+      "[${1:isToggled}, toggle] = useToggle(${2:initialValue})"
+    ],
+    "description": "PSX useToggle custom hook"
+  },
+  "PSX Custom Hook - useLocalStorage": {
+    "prefix": "useLocalStorage",
+    "body": [
+      "[${1:value}, set${1/(.*)/${1:/capitalize}}] = useLocalStorage('${2:key}', ${3:defaultValue})"
+    ],
+    "description": "PSX useLocalStorage custom hook"
+  },
+  "PSX Event Handler - onClick": {
+    "prefix": "onclick",
+    "body": [
+      "${1:handleClick} = create_onclick(lambda e: ${2:action})"
+    ],
+    "description": "PSX onClick event handler"
+  },
+  "PSX Event Handler - onChange": {
+    "prefix": "onchange",
+    "body": [
+      "${1:handleChange} = create_onchange(lambda e: ${1:value} = e.target.value; ${2:action})"
+    ],
+    "description": "PSX onChange event handler"
+  },
+  "PSX Event Handler - onSubmit": {
+    "prefix": "onsubmit",
+    "body": [
+      "${1:handleSubmit} = create_onsubmit(lambda e: e.preventDefault(); ${2:action})"
+    ],
+    "description": "PSX onSubmit event handler"
+  },
+  "PSX Button with Event": {
+    "prefix": "button",
+    "body": [
+      "<button onclick={${1:handleClick}} className=\"$2\">",
+      "  $3",
+      "</button>"
+    ],
+    "description": "PSX button element with event handler"
+  },
+  "PSX Input with Event": {
+    "prefix": "input",
+    "body": [
+      "<input type=\"$1\" className=\"$2\" value={${3:value}} onchange={${4:handleChange}} />"
+    ],
+    "description": "PSX input element with change handler"
+  },
+  "PSX Form with Events": {
+    "prefix": "form",
+    "body": [
+      "<form onSubmit={${1:handleSubmit}}>",
+      "  $2",
+      "</form>"
+    ],
+    "description": "PSX form element with submit handler"
+  },
+  "PSX For Loop": {
+    "prefix": "for",
+    "body": [
+      "{for ${1:item} in ${2:items}}",
+      "  <div key={${1:item}.id}>",
+      "    {${1:item}}",
+      "  </div>",
+      "{/for}"
+    ],
+    "description": "PSX for loop with Python syntax"
+  },
+  "PSX Conditional": {
+    "prefix": "if",
+    "body": [
+      "{if ${1:condition}}",
+      "  $2",
+      "{else}",
+      "  $3",
+      "{/if}"
+    ],
+    "description": "PSX conditional rendering with Python syntax"
+  },
+  "PSX Conditional with elif": {
+    "prefix": "elif",
+    "body": [
+      "{if ${1:condition1}}",
+      "  $2",
+      "{elif ${2:condition2}}",
+      "  $3",
+      "{else}",
+      "  $4",
+      "{/if}"
+    ],
+    "description": "PSX conditional with elif"
+  },
+  "PSX While Loop": {
+    "prefix": "while",
+    "body": [
+      "{while ${1:condition}}",
+      "  $2",
+      "{/while}"
+    ],
+    "description": "PSX while loop"
+  },
+  "PSX Try Except": {
+    "prefix": "try",
+    "body": [
+      "{try}",
+      "  $1",
+      "{except}",
+      "  $2",
+      "{/try}"
+    ],
+    "description": "PSX try-except block"
+  },
+  "PSX Component Import": {
+    "prefix": "import-component",
+    "body": [
+      "from ${1:components} import ${2:ComponentName}"
+    ],
+    "description": "Import PSX component from another file"
+  },
+  "PSX Full Import": {
+    "prefix": "import-nextpy",
+    "body": [
+      "from nextpy import (",
+      "    component, psx, clsx,",
+      "    # React hooks",
+      "    useState, useEffect, useCallback, useMemo, useRef,",
+      "    useContext, useReducer,",
+      "    # Custom hooks",
+      "    useCounter, useToggle, useLocalStorage,",
+      "    # Event utilities",
+      "    create_onclick, create_onchange, create_onsubmit,",
+      ")"
+    ],
+    "description": "Complete NextPy import statement"
+  },
+  "PSX Fragment": {
+    "prefix": "fragment",
+    "body": [
+      "<>",
+      "  $1",
+      "</>"
+    ],
+    "description": "PSX fragment"
+  },
+  "PSX clsx Utility": {
+    "prefix": "clsx",
+    "body": [
+      "className={clsx('$1', '$2', ${3:condition} and '$4')}"
+    ],
+    "description": "PSX clsx utility for conditional classes"
+  },
+  "PSX Props Destructuring": {
+    "prefix": "props",
+    "body": [
+      "${1:title} = props.get('${1:title}', '${2:default value}')"
+    ],
+    "description": "PSX props destructuring"
+  },
+  "PSX Server Props Function": {
+    "prefix": "serverside",
+    "body": [
+      "def getServerSideProps(context):",
+      "    return {",
+      "        \"props\": {",
+      "            \"${1:key}\": \"${2:value}\"",
+      "        }",
+      "    }"
+    ],
+    "description": "getServerSideProps function"
+  },
+  "PSX Component Export": {
+    "prefix": "export",
+    "body": [
+      "default = ${1:ComponentName}"
+    ],
+    "description": "PSX component export"
+  },
+  "PSX List Comprehension": {
+    "prefix": "listcomp",
+    "body": [
+      "[${1:item}.${2:property} for ${1:item} in ${3:items} if ${4:condition}]"
+    ],
+    "description": "PSX list comprehension"
+  },
+  "PSX String Operation": {
+    "prefix": "string",
+    "body": [
+      "{${1:text}.upper()}"
+    ],
+    "description": "PSX string operation"
+  },
+  "PSX Math Expression": {
+    "prefix": "math",
+    "body": [
+      "{${1:value} + ${2:amount}}"
+    ],
+    "description": "PSX math expression"
+  },
+  "PSX Ternary Conditional": {
+    "prefix": "ternary",
+    "body": [
+      "{${1:condition} and '${2:true_value}' or '${3:false_value}'}"
+    ],
+    "description": "PSX ternary conditional"
+  }
+}

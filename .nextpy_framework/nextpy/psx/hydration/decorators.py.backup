@@ -1,0 +1,136 @@
+"""
+Interactive Component Decorator for NextPy PSX
+Enables client-side interactivity with automatic hydration
+"""
+
+from functools import wraps
+from typing import Callable, Dict, Any, Optional
+from ..components.component import component as base_component
+from .integration import hydrate_component, get_component_hydrator
+
+
+def interactive_component(func: Callable) -> Callable:
+    """
+    Decorator for interactive PSX components with client-side state management
+    
+    Usage:
+        @interactive_component
+        def MyComponent(props=None):
+            [count, setCount] = useState(0)
+            return (
+                <div>
+                    <p>Count: {count}</p>
+                    <button onclick={lambda e: setCount(count + 1)}>Increment</button>
+                </div>
+            )
+    """
+    
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # First, get the component from the base decorator
+        base_component_result = base_component(func)(*args, **kwargs)
+        
+        # Extract props if provided
+        props = args[0] if args and isinstance(args[0], dict) else kwargs
+        
+        # Get the HTML output
+        if hasattr(base_component_result, 'to_html'):
+            html = base_component_result.to_html()
+        else:
+            html = str(base_component_result)
+        
+        # Hydrate the component
+        hydrated_html, hydration_script = hydrate_component(func, props, html)
+        
+        # Create a wrapped result that includes hydration data
+        class InteractiveComponentResult:
+            def __init__(self, html, script):
+                self.html = html
+                self.script = script
+                self.is_interactive = True
+            
+            def to_html(self, context=None):
+                return self.html
+            
+            def __str__(self):
+                return self.html
+        
+        return InteractiveComponentResult(hydrated_html, hydration_script)
+    
+    return wrapper
+
+
+def enable_hydration_globally():
+    """
+    Enable hydration globally by replacing the default @component decorator
+    """
+    import sys
+    from .. import components
+    
+    # Replace component decorator
+    original_component = components.component
+    
+    def hydrated_component(func):
+        # Use interactive_component for all components
+        return interactive_component(func)
+    
+    components.component = hydrated_component
+    
+    print("✓ Global hydration enabled - all @component decorated functions will be interactive")
+
+
+# HTML template for embedding hydration script and styles
+HYDRATION_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        /* NextPy Hydration Styles */
+        .nextpy-component {{
+            position: relative;
+        }}
+        
+        .nextpy-component [data-bind] {{
+            transition: all 0.3s ease-in-out;
+        }}
+        
+        .nextpy-state-changed {{
+            animation: pulse 0.3s ease-in-out;
+        }}
+        
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.8; }}
+        }}
+        
+        /* Loading state */
+        .nextpy-loading {{
+            opacity: 0.6;
+            pointer-events: none;
+        }}
+    </style>
+</head>
+<body>
+    {content}
+    
+    <script>
+        {hydration_script}
+    </script>
+</body>
+</html>
+'''
+
+
+def create_interactive_page(component_html: str, hydration_script: str, 
+                           title: str = "NextPy App") -> str:
+    """
+    Create a complete HTML page with component and hydration script
+    """
+    return HYDRATION_TEMPLATE.format(
+        title=title,
+        content=component_html,
+        hydration_script=hydration_script,
+    )

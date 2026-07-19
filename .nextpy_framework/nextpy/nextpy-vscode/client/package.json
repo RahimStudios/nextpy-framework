@@ -1,0 +1,87 @@
+{
+  "name": "nextpy-vscode",
+  "displayName": "NextPy Language Support",
+  "description": "Complete NextPy development support with JSX highlighting and Python IntelliSense",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "activationEvents": [
+    "onLanguage:nextpy",
+    "onLanguage:python"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "nextpy",
+        "aliases": [
+          "NextPy",
+          "nextpy"
+        ],
+        "extensions": [
+          ".py.jsx",
+          ".py"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/nextpy-light.svg",
+          "dark": "./icons/nextpy-dark.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nextpy",
+        "scopeName": "source.nextpy",
+        "path": "./syntaxes/nextpy.tmLanguage.json",
+        "injectTo": [
+          "text.html.python"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "NextPy",
+      "properties": {
+        "nextpy.enableIntelliSense": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Python IntelliSense in NextPy files"
+        },
+        "nextpy.enableJSXHighlighting": {
+          "type": "boolean", 
+          "default": true,
+          "description": "Enable JSX syntax highlighting"
+        },
+        "nextpy.formatter": {
+          "type": "string",
+          "enum": [
+            "black",
+            "prettier",
+            "none"
+          ],
+          "default": "black",
+          "description": "Formatter to use for NextPy files"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  }
+}

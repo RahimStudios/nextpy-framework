@@ -1,0 +1,134 @@
+{
+  "name": "psx",
+  "displayName": "PSX Language Support",
+  "description": "Complete PSX (Python Syntax Extension) support with JSX-like experience",
+  "version": "1.0.0",
+  "publisher": "rahimstudios",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "keywords": [
+    "psx",
+    "python",
+    "jsx",
+    "syntax",
+    "language"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "psx",
+        "name": "PSX",
+        "extensions": [
+          ".psx"
+        ],
+        "aliases": [
+          "PSX",
+          "Python Syntax Extension"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "psx",
+        "scopeName": "source.psx",
+        "path": "./syntaxes/psx.tmLanguage.json",
+        "injectTo": [
+          "source.python"
+        ]
+      }
+    ],
+    "snippets": [
+      {
+        "language": "psx",
+        "path": "./snippets/psx.code-snippets"
+      }
+    ],
+    "configuration": {
+      "title": "PSX",
+      "properties": {
+        "psx.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable PSX Language Server for IntelliSense"
+        },
+        "psx.languageServer.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to PSX Language Server executable"
+        },
+        "psx.formatting.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable PSX code formatting"
+        },
+        "psx.validation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable PSX syntax validation"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "psx.restartServer",
+        "title": "PSX: Restart Language Server",
+        "category": "PSX"
+      },
+      {
+        "command": "psx.formatDocument",
+        "title": "PSX: Format Document",
+        "category": "PSX"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "psx.formatDocument",
+          "when": "resourceLangId == psx",
+          "group": "1_modification"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onLanguage:psx"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "typescript": "^4.9.4",
+    "webpack": "^5.75.0",
+    "ts-loader": "^9.4.1",
+    "vscode-test": "^1.6.1"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rahimstudios/psx-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/rahimstudios/psx-vscode/issues"
+  },
+  "homepage": "https://github.com/rahimstudios/psx-vscode#readme"
+}

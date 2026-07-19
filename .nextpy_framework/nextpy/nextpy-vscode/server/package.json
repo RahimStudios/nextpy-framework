@@ -1,0 +1,21 @@
+{
+  "name": "nextpy-language-server",
+  "description": "NextPy Language Server for VS Code",
+  "version": "0.1.0",
+  "engines": {
+    "node": "*"
+  },
+  "dependencies": {
+  "vscode-languageserver": "^8.1.0",
+  "vscode-languageserver-textdocument": "^1.0.5",
+  "python-shell": "^3.0.1"
+},
+  "scripts": {
+    "compile": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.7",
+    "typescript": "^4.9.4"
+  }
+}

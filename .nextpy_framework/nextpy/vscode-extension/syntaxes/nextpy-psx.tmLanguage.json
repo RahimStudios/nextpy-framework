@@ -1,0 +1,316 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "NextPy PSX",
+  "scopeName": "source.nextpy.psx",
+  "patterns": [
+    {
+      "include": "#python-logic-blocks"
+    },
+    {
+      "include": "#psx-elements"
+    },
+    {
+      "include": "#python-embedded"
+    },
+    {
+      "include": "#comments"
+    }
+  ],
+  "repository": {
+    "python-logic-blocks": {
+      "patterns": [
+        {
+          "name": "meta.psx.python-logic.for",
+          "begin": "\\{(for)\\s+([^\\s]+)\\s+(in)\\s+([^:]+):",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.psx.python"
+            },
+            "2": {
+              "name": "variable.other.psx.python"
+            },
+            "3": {
+              "name": "keyword.control.psx.python"
+            },
+            "4": {
+              "name": "variable.other.psx.python"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#psx-elements"
+            },
+            {
+              "include": "#python-embedded"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.python-logic.if",
+          "begin": "\\{(if)\\s+([^:]+):",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.psx.python"
+            },
+            "2": {
+              "name": "variable.other.psx.python"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#psx-elements"
+            },
+            {
+              "include": "#python-embedded"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.python-logic.try",
+          "begin": "\\{(try):",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.psx.python"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#psx-elements"
+            },
+            {
+              "include": "#python-embedded"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.python-logic.except",
+          "begin": "\\{(except)\\s+([^\\s]+):",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.psx.python"
+            },
+            "2": {
+              "name": "variable.other.psx.python"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#psx-elements"
+            },
+            {
+              "include": "#python-embedded"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.python-logic.python",
+          "begin": "\\{(python):",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.psx.python"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.block.end.psx"
+            }
+          },
+          "contentName": "source.python.embedded.psx",
+          "patterns": [
+            {
+              "include": "source.python"
+            }
+          ]
+        }
+      ]
+    },
+    "psx-elements": {
+      "patterns": [
+        {
+          "name": "meta.psx.element.start",
+          "begin": "(<)([a-zA-Z][a-zA-Z0-9-]*)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.psx"
+            },
+            "2": {
+              "name": "entity.name.tag.psx"
+            }
+          },
+          "end": ">",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.tag.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#tag-attributes"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.element.self-closing",
+          "begin": "(<)([a-zA-Z][a-zA-Z0-9-]*)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.psx"
+            },
+            "2": {
+              "name": "entity.name.tag.psx"
+            }
+          },
+          "end": "/>",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.tag.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#tag-attributes"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.element.end",
+          "match": "(</)([a-zA-Z][a-zA-Z0-9-]*)>",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.psx"
+            },
+            "2": {
+              "name": "entity.name.tag.psx"
+            },
+            "3": {
+              "name": "punctuation.definition.tag.end.psx"
+            }
+          }
+        }
+      ]
+    },
+    "tag-attributes": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.psx",
+          "match": "\\b([a-zA-Z][a-zA-Z0-9-]*)\\s*="
+        },
+        {
+          "name": "string.quoted.double.psx",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.psx"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#python-embedded"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.psx",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.psx"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.psx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#python-embedded"
+            }
+          ]
+        },
+        {
+          "name": "meta.psx.brace.attribute",
+          "begin": "\\{",
+          "end": "\\}",
+          "captures": {
+            "0": {
+              "name": "punctuation.definition.brace.psx"
+            }
+          },
+          "contentName": "source.python.embedded.psx",
+          "patterns": [
+            {
+              "include": "source.python"
+            }
+          ]
+        }
+      ]
+    },
+    "python-embedded": {
+      "patterns": [
+        {
+          "name": "meta.psx.brace.expression",
+          "begin": "\\{",
+          "end": "\\}",
+          "captures": {
+            "0": {
+              "name": "punctuation.definition.brace.psx"
+            }
+          },
+          "contentName": "source.python.embedded.psx",
+          "patterns": [
+            {
+              "include": "source.python"
+            }
+          ]
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.psx",
+          "begin": "<!--",
+          "end": "-->",
+          "captures": {
+            "0": {
+              "name": "punctuation.definition.comment.psx"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

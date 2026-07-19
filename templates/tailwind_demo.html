@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <!-- use compiled Tailwind file rather than CDN for consistent styling -->
+    <link rel="stylesheet" href="/tailwind.css">
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+            <div class="container mx-auto px-4 py-6">
+                <h1 class="text-3xl font-bold">Tailwind CSS Demo</h1>
+                <p class="text-blue-100">{{ description }}</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Typography Demo -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Typography</h2>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h1 class="text-4xl font-bold text-gray-900 mb-4">Heading 1 - Bold</h1>
+                    <h2 class="text-3xl font-semibold text-gray-800 mb-3">Heading 2 - Semibold</h2>
+                    <h3 class="text-2xl font-medium text-gray-700 mb-2">Heading 3 - Medium</h3>
+                    <p class="text-lg text-gray-600 mb-4">This is a paragraph with large text and gray color.</p>
+                    <p class="text-sm text-gray-500">Small text with lighter gray color.</p>
+                </div>
+            </section>
+
+            <!-- Layout Demo -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Layout & Flexbox</h2>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="bg-blue-500 text-white px-4 py-2 rounded">Left</div>
+                        <div class="bg-green-500 text-white px-4 py-2 rounded">Center</div>
+                        <div class="bg-red-500 text-white px-4 py-2 rounded">Right</div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-purple-100 p-4 rounded">Grid Item 1</div>
+                        <div class="bg-purple-200 p-4 rounded">Grid Item 2</div>
+                        <div class="bg-purple-300 p-4 rounded">Grid Item 3</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Colors Demo -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Colors</h2>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-red-500 text-white p-4 rounded text-center">Red 500</div>
+                        <div class="bg-blue-500 text-white p-4 rounded text-center">Blue 500</div>
+                        <div class="bg-green-500 text-white p-4 rounded text-center">Green 500</div>
+                        <div class="bg-yellow-500 text-white p-4 rounded text-center">Yellow 500</div>
+                        <div class="bg-purple-500 text-white p-4 rounded text-center">Purple 500</div>
+                        <div class="bg-pink-500 text-white p-4 rounded text-center">Pink 500</div>
+                        <div class="bg-indigo-500 text-white p-4 rounded text-center">Indigo 500</div>
+                        <div class="bg-gray-500 text-white p-4 rounded text-center">Gray 500</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Spacing Demo -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Spacing</h2>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="space-y-4">
+                        <div class="bg-blue-100 p-2 rounded">p-2 (padding 8px)</div>
+                        <div class="bg-blue-200 p-4 rounded">p-4 (padding 16px)</div>
+                        <div class="bg-blue-300 p-6 rounded">p-6 (padding 24px)</div>
+                        <div class="bg-blue-400 p-8 rounded text-white">p-8 (padding 32px)</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Buttons Demo -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Buttons</h2>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="flex flex-wrap gap-4">
+                        <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                            Blue Button
+                        </button>
+                        <button class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                            Green Button
+                        </button>
+                        <button class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+                            Red Button
+                        </button>
+                        <button class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">
+                            Gray Button
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <nav class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Navigation</h2>
+                <div class="flex space-x-4">
+                    <a href="/" class="text-blue-600 hover:text-blue-800 font-medium">Home</a>
+                    <a href="/about" class="text-blue-600 hover:text-blue-800 font-medium">About</a>
+                    <a href="/tailwind_demo" class="text-blue-600 hover:text-blue-800 font-medium">Tailwind Demo</a>
+                </div>
+            </nav>
+        </main>
+    </div>
+</body>
+</html>

@@ -1,75 +1,72 @@
 """
 NextPy Configuration Manager
-Environment variables, settings, and configuration
+Plain Python settings, no Pydantic
 """
 
 import os
-from typing import Optional, Any
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
 
-# Load .env file
-load_dotenv()
+# Load .env file (adjust path if your .env is two levels up)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "./.env"))
+
+# Helper to parse booleans
+def get_bool(key: str, default=False) -> bool:
+    val = os.getenv(key, str(default))
+    return val.lower() in ("1", "true", "yes", "on")
 
 
-class Settings(BaseSettings):
-    """Application settings from environment variables"""
-    
+
+# Application settings
+settings = {
     # App
-    app_name: str = "NextPy App"
-    debug: bool = os.getenv("DEBUG", "true").lower() == "true"
-    secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")
-    domain: str = os.getenv("DOMAIN", "localhost:5000")
-    
+    "app_name": os.getenv("APP_NAME", "NextPy App"),
+    "debug": get_bool("DEBUG", True),
+    "secret_key": os.getenv("SECRET_KEY", "change-me-in-production"),
+    "domain": os.getenv("DOMAIN", "localhost:5000"),
+
+    # Development
+    "development": get_bool("DEVELOPMENT", True),
+    "nextpy_debug": get_bool("NEXTPY_DEBUG", True),
+    "host": os.getenv("HOST", "0.0.0.0"),
+    "port": int(os.getenv("PORT", 5000)), 
+    "nextpy_debug_icon": get_bool("NEXTPY_DEBUG_ICON", True),
+    "nextpy_hot_reload": get_bool("NEXTPY_HOT_RELOAD", True),
+    "nextpy_log_level": os.getenv("NEXTPY_LOG_LEVEL", "info"),
+
     # Database
-    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./nextpy.db")
-    db_echo: bool = os.getenv("DB_ECHO", "false").lower() == "true"
-    
+    "database_url": os.getenv("DATABASE_URL", "sqlite:///./nextpy.db"),
+    "db_echo": get_bool("DB_ECHO", False),
+
     # Auth
-    jwt_secret: str = os.getenv("JWT_SECRET", "change-me")
-    jwt_algorithm: str = "HS256"
-    jwt_expiration_hours: int = 24
-    session_secret: str = os.getenv("SESSION_SECRET", "change-me")
-    
+    "jwt_secret": os.getenv("JWT_SECRET", "change-me"),
+    "jwt_algorithm": "HS256",
+    "jwt_expiration_hours": int(os.getenv("JWT_EXPIRATION_HOURS", 24)),
+    "session_secret": os.getenv("SESSION_SECRET", "change-me"),
+
     # Email
-    mail_server: str = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    mail_port: int = int(os.getenv("MAIL_PORT", "587"))
-    mail_username: str = os.getenv("MAIL_USERNAME", "")
-    mail_password: str = os.getenv("MAIL_PASSWORD", "")
-    
+    "mail_server": os.getenv("MAIL_SERVER", "smtp.gmail.com"),
+    "mail_port": int(os.getenv("MAIL_PORT", 587)),
+    "mail_username": os.getenv("MAIL_USERNAME", ""),
+    "mail_password": os.getenv("MAIL_PASSWORD", ""),
+
     # API Keys
-    api_key: Optional[str] = os.getenv("API_KEY")
-    stripe_key: Optional[str] = os.getenv("STRIPE_KEY")
-    openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
-    
+    "api_key": os.getenv("API_KEY"),
+    "stripe_key": os.getenv("STRIPE_KEY"),
+    "openai_api_key": os.getenv("OPENAI_API_KEY"),
+
     # URLs
-    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:5000")
-    backend_url: str = os.getenv("BACKEND_URL", "http://localhost:5000")
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:5000"),
+    "backend_url": os.getenv("BACKEND_URL", "http://localhost:5000"),
+}
 
 
-# Global settings instance
-settings = Settings()
 
+# Optional helper functions
+def get_setting(key, default=None):
+    return settings.get(key, default)
 
-def get_setting(key: str, default: Any = None) -> Any:
-    """Get setting by key"""
-    return getattr(settings, key, default)
+def is_development():
+    return settings.get("development", True)
 
-
-def get_env(key: str, default: Any = None) -> Any:
-    """Get environment variable"""
-    return os.getenv(key, default)
-
-
-def is_production() -> bool:
-    """Check if running in production"""
-    return not settings.debug
-
-
-def is_development() -> bool:
-    """Check if running in development"""
-    return settings.debug
+def is_production():
+    return not is_development()

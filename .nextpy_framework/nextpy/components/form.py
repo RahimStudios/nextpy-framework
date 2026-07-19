@@ -1,9 +1,10 @@
 """
-Form components for NextPy
+Form components for NextPy - Updated for JSX system
 Input, TextArea, Select, Checkbox, Radio, Form, etc.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+from ..jsx import jsx, input, textarea, select, option, button, label, div, form as form_tag
 
 
 def Input(
@@ -15,21 +16,23 @@ def Input(
     disabled: bool = False,
     class_name: str = "",
     **kwargs
-) -> str:
-    """Input component"""
-    req = "required" if required else ""
-    dis = "disabled" if disabled else ""
+):
+    """Input component - returns JSX element"""
     default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'type': type,
+        'name': name,
+        'placeholder': placeholder,
+        'value': value,
+        'className': class_name or default_class
+    }
     
-    return f'''<input 
-        type="{type}"
-        name="{name}"
-        placeholder="{placeholder}"
-        value="{value}"
-        class="{class_name or default_class}"
-        {req}
-        {dis}
-    >'''
+    if required:
+        props['required'] = 'True'
+    if disabled:
+        props['disabled'] = 'True'
+    
+    return input(props)
 
 
 def TextArea(
@@ -41,50 +44,60 @@ def TextArea(
     disabled: bool = False,
     class_name: str = "",
     **kwargs
-) -> str:
-    """TextArea component"""
-    req = "required" if required else ""
-    dis = "disabled" if disabled else ""
+):
+    """TextArea component - returns JSX element"""
     default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'name': name,
+        'placeholder': placeholder,
+        'rows': rows,
+        'className': class_name or default_class
+    }
     
-    return f'''<textarea 
-        name="{name}"
-        placeholder="{placeholder}"
-        rows="{rows}"
-        class="{class_name or default_class}"
-        {req}
-        {dis}
-    >{value}</textarea>'''
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return textarea(props, value or '')
 
 
 def Select(
     name: str = "",
-    options: Optional[List[Dict[str, str]]] = None,
+    options: List[Dict[str, str]] = None,
+    placeholder: str = "Select an option",
     value: str = "",
     required: bool = False,
     disabled: bool = False,
     class_name: str = "",
     **kwargs
-) -> str:
-    """Select dropdown component"""
+):
+    """Select component - returns JSX element"""
     if options is None:
         options = []
     
-    req = "required" if required else ""
-    dis = "disabled" if disabled else ""
     default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'name': name,
+        'className': class_name or default_class
+    }
     
-    option_html = ""
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    children = []
+    if placeholder:
+        children.append(option({'value': ''}, placeholder))
+    
     for opt in options:
-        selected = "selected" if opt.get("value") == value else ""
-        option_html += f'<option value="{opt.get("value")}" {selected}>{opt.get("label")}</option>'
+        opt_props = {'value': opt.get('value', opt.get('label', ''))}
+        if opt.get('value') == value:
+            opt_props['selected'] = True
+        children.append(option(opt_props, opt.get('label', '')))
     
-    return f'''<select 
-        name="{name}"
-        class="{class_name or default_class}"
-        {req}
-        {dis}
-    >{option_html}</select>'''
+    return select(props, *children)
 
 
 def Checkbox(
@@ -93,24 +106,30 @@ def Checkbox(
     checked: bool = False,
     required: bool = False,
     disabled: bool = False,
+    class_name: str = "",
     **kwargs
-) -> str:
-    """Checkbox component"""
-    check = "checked" if checked else ""
-    dis = "disabled" if disabled else ""
-    req = "required" if required else ""
+):
+    """Checkbox component - returns JSX element"""
+    input_class = "h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+    label_class = "ml-2 block text-sm text-gray-900"
     
-    return f'''<label class="flex items-center gap-2">
-        <input 
-            type="checkbox"
-            name="{name}"
-            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-            {check}
-            {req}
-            {dis}
-        >
-        <span>{label}</span>
-    </label>'''
+    input_props = {
+        'type': 'checkbox',
+        'name': name,
+        'className': class_name or input_class
+    }
+    
+    if checked:
+        input_props['checked'] = True
+    if required:
+        input_props['required'] = True
+    if disabled:
+        input_props['disabled'] = True
+    
+    return div({'className': 'flex items-center'},
+        input(input_props),
+        label({'className': label_class}, label)
+    )
 
 
 def Radio(
@@ -120,88 +139,111 @@ def Radio(
     checked: bool = False,
     required: bool = False,
     disabled: bool = False,
+    class_name: str = "",
     **kwargs
-) -> str:
-    """Radio button component"""
-    check = "checked" if checked else ""
-    dis = "disabled" if disabled else ""
-    req = "required" if required else ""
+):
+    """Radio component - returns JSX element"""
+    input_class = "h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+    label_class = "ml-2 block text-sm text-gray-900"
     
-    return f'''<label class="flex items-center gap-2">
-        <input 
-            type="radio"
-            name="{name}"
-            value="{value}"
-            class="w-4 h-4 text-blue-600 border-gray-300 focus:ring-2 focus:ring-blue-500"
-            {check}
-            {req}
-            {dis}
-        >
-        <span>{label}</span>
-    </label>'''
+    input_props = {
+        'type': 'radio',
+        'name': name,
+        'value': value,
+        'className': class_name or input_class
+    }
+    
+    if checked:
+        input_props['checked'] = True
+    if required:
+        input_props['required'] = True
+    if disabled:
+        input_props['disabled'] = True
+    
+    return div({'className': 'flex items-center'},
+        input(input_props),
+        label({'className': label_class}, label)
+    )
 
 
 def RadioGroup(
     name: str = "",
-    options: Optional[List[Dict[str, str]]] = None,
+    options: List[Dict[str, str]] = None,
     value: str = "",
+    required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
     **kwargs
-) -> str:
-    """Radio group component"""
+):
+    """RadioGroup component - returns JSX element"""
     if options is None:
         options = []
     
-    html = f'<fieldset class="space-y-3">'
+    container_class = "space-y-2"
+    radios = []
     
     for opt in options:
-        checked = opt.get("value") == value
-        label = opt.get("label", "")
-        opt_value = opt.get("value", "")
-        html += Radio(
+        opt_value = opt.get('value', opt.get('label', ''))
+        radios.append(Radio(
             name=name,
-            label=label,
+            label=opt.get('label', ''),
             value=opt_value,
-            checked=checked
-        )
+            checked=opt_value == value,
+            required=required,
+            disabled=disabled
+        ))
     
-    html += '</fieldset>'
-    return html
+    return div({'className': class_name or container_class}, *radios)
 
 
 def Form(
-    children: str = "",
     action: str = "",
     method: str = "POST",
-    onsubmit: str = "",
+    children: List = None,
     class_name: str = "",
     **kwargs
-) -> str:
-    """Form component"""
-    submit_handler = f'onsubmit="{onsubmit}"' if onsubmit else ""
-    default_class = "space-y-6"
+):
+    """Form component - returns JSX element"""
+    if children is None:
+        children = []
     
-    return f'''<form 
-        action="{action}"
-        method="{method}"
-        class="{class_name or default_class}"
-        {submit_handler}
-    >{children}</form>'''
+    default_class = "space-y-6"
+    props = {
+        'action': action,
+        'method': method,
+        'className': class_name or default_class
+    }
+    
+    return form_tag(props, *children)
 
 
 def FormGroup(
     label: str = "",
-    children: str = "",
+    children: List = None,
     error: str = "",
+    required: bool = False,
+    class_name: str = "",
     **kwargs
-) -> str:
-    """Form group component (label + input)"""
-    error_html = f'<p class="text-red-600 text-sm mt-1">{error}</p>' if error else ""
+):
+    """FormGroup component - returns JSX element"""
+    if children is None:
+        children = []
     
-    return f'''<div class="space-y-2">
-        {f'<label class="block text-sm font-semibold text-gray-900">{label}</label>' if label else ''}
-        {children}
-        {error_html}
-    </div>'''
+    container_class = "space-y-2"
+    label_class = "block text-sm font-medium text-gray-700"
+    error_class = "text-red-600 text-sm mt-1"
+    
+    content = []
+    if label:
+        label_text = label + (" *" if required else "")
+        content.append(label({'className': label_class}, label_text))
+    
+    content.extend(children)
+    
+    if error:
+        content.append(div({'className': error_class}, error))
+    
+    return div({'className': class_name or container_class}, *content)
 
 
 def FileInput(
@@ -210,137 +252,217 @@ def FileInput(
     multiple: bool = False,
     required: bool = False,
     disabled: bool = False,
+    class_name: str = "",
     **kwargs
-) -> str:
-    """File input component"""
-    req = "required" if required else ""
-    dis = "disabled" if disabled else ""
-    mult = "multiple" if multiple else ""
+):
+    """FileInput component - returns JSX element"""
+    input_class = "block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
     
-    return f'''<input 
-        type="file"
-        name="{name}"
-        accept="{accept}"
-        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-        {mult}
-        {req}
-        {dis}
-    >'''
-
-
-def DateInput(
-    name: str = "",
-    label: str = "",
-    value: str = "",
-    required: bool = False,
-    **kwargs
-) -> str:
-    """Date input component"""
-    req = "required" if required else ""
-    label_html = f'<label class="block text-sm font-medium mb-1">{label}</label>' if label else ''
-    return f'''<div class="mb-4">
-        {label_html}
-        <input type="date" name="{name}" value="{value}" {req}
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"/>
-    </div>'''
-
-
-def TimeInput(
-    name: str = "",
-    label: str = "",
-    value: str = "",
-    required: bool = False,
-    **kwargs
-) -> str:
-    """Time input component"""
-    req = "required" if required else ""
-    label_html = f'<label class="block text-sm font-medium mb-1">{label}</label>' if label else ''
-    return f'''<div class="mb-4">
-        {label_html}
-        <input type="time" name="{name}" value="{value}" {req}
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"/>
-    </div>'''
-
-
-def PasswordInput(
-    name: str = "",
-    label: str = "",
-    placeholder: str = "",
-    required: bool = False,
-    **kwargs
-) -> str:
-    """Password input component"""
-    req = "required" if required else ""
-    label_html = f'<label class="block text-sm font-medium mb-1">{label}</label>' if label else ''
-    return f'''<div class="mb-4">
-        {label_html}
-        <input type="password" name="{name}" placeholder="{placeholder}" {req}
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"/>
-    </div>'''
-
-
-def RangeInput(
-    name: str = "",
-    label: str = "",
-    value: int = 50,
-    min: int = 0,
-    max: int = 100,
-    **kwargs
-) -> str:
-    """Range slider component"""
-    return f'''<div class="mb-4">
-        {f'<label class="block text-sm font-medium mb-1">{label} (<span id="{name}_value">{value}</span>)</label>' if label else ''}
-        <input type="range" name="{name}" value="{value}" min="{min}" max="{max}"
-            onchange="document.getElementById('{name}_value').textContent = this.value"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"/>
-    </div>'''
-
-
-def ColorInput(
-    name: str = "",
-    label: str = "",
-    value: str = "#3b82f6",
-    **kwargs
-) -> str:
-    """Color picker component"""
-    return f'''<div class="mb-4">
-        {f'<label class="block text-sm font-medium mb-1">{label}</label>' if label else ''}
-        <input type="color" name="{name}" value="{value}"
-            class="w-16 h-10 border border-gray-300 rounded-lg cursor-pointer"/>
-    </div>'''
+    props = {
+        'type': 'file',
+        'name': name,
+        'className': class_name or input_class
+    }
+    
+    if accept:
+        props['accept'] = accept
+    if multiple:
+        props['multiple'] = True
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
 
 
 def NumberInput(
     name: str = "",
     placeholder: str = "",
-    value: str = "",
-    min: str = "",
-    max: str = "",
-    step: str = "1",
+    value: Union[int, float] = "",
+    min: Union[int, float] = None,
+    max: Union[int, float] = None,
+    step: Union[int, float] = 1,
     required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
     **kwargs
-) -> str:
-    """Number input component"""
-    return Input(
-        name=name,
-        type="number",
-        placeholder=placeholder,
-        value=value,
-        required=required
-    )
+):
+    """NumberInput component - returns JSX element"""
+    default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'type': 'number',
+        'name': name,
+        'placeholder': placeholder,
+        'value': str(value),
+        'className': class_name or default_class
+    }
+    
+    if min is not None:
+        props['min'] = min
+    if max is not None:
+        props['max'] = max
+    if step is not None:
+        props['step'] = step
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
 
 
-__all__ = [
-    'Input',
-    'TextArea',
-    'Select',
-    'Checkbox',
-    'Radio',
-    'RadioGroup',
-    'Form',
-    'FormGroup',
-    'FileInput',
-    'PasswordInput',
-    'EmailInput',
-    'NumberInput',
-]
+def DateInput(
+    name: str = "",
+    value: str = "",
+    required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
+    **kwargs
+):
+    """DateInput component - returns JSX element"""
+    default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'type': 'date',
+        'name': name,
+        'value': value,
+        'className': class_name or default_class
+    }
+    
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
+
+
+def TimeInput(
+    name: str = "",
+    value: str = "",
+    required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
+    **kwargs
+):
+    """TimeInput component - returns JSX element"""
+    default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'type': 'time',
+        'name': name,
+        'value': value,
+        'className': class_name or default_class
+    }
+    
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
+
+
+def PasswordInput(
+    name: str = "",
+    placeholder: str = "",
+    value: str = "",
+    required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
+    **kwargs
+):
+    """PasswordInput component - returns JSX element"""
+    default_class = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    props = {
+        'type': 'password',
+        'name': name,
+        'placeholder': placeholder,
+        'value': value,
+        'className': class_name or default_class
+    }
+    
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
+
+
+def RangeInput(
+    name: str = "",
+    value: Union[int, float] = 0,
+    min: Union[int, float] = 0,
+    max: Union[int, float] = 100,
+    step: Union[int, float] = 1,
+    required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
+    **kwargs
+):
+    """RangeInput component - returns JSX element"""
+    default_class = "w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+    props = {
+        'type': 'range',
+        'name': name,
+        'value': str(value),
+        'min': min,
+        'max': max,
+        'step': step,
+        'className': class_name or default_class
+    }
+    
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
+
+
+def ColorInput(
+    name: str = "",
+    value: str = "#000000",
+    required: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
+    **kwargs
+):
+    """ColorInput component - returns JSX element"""
+    default_class = "h-10 w-20 border border-gray-300 rounded cursor-pointer"
+    props = {
+        'type': 'color',
+        'name': name,
+        'value': value,
+        'className': class_name or default_class
+    }
+    
+    if required:
+        props['required'] = True
+    if disabled:
+        props['disabled'] = True
+    
+    return input(props)
+
+
+def SubmitButton(
+    text: str = "Submit",
+    loading: bool = False,
+    disabled: bool = False,
+    class_name: str = "",
+    **kwargs
+):
+    """SubmitButton component - returns JSX element"""
+    default_class = "w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+    
+    props = {
+        'type': 'submit',
+        'className': class_name or default_class
+    }
+    
+    if disabled or loading:
+        props['disabled'] = True
+    
+    button_text = "Loading..." if loading else text
+    
+    return button(props, button_text)

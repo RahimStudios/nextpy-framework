@@ -18,3 +18,10 @@ help:
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
 %: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+
+## Tailwind build target for convenience
+.PHONY: tailwind-build
+# run inside the vendored framework since that's where package.json lives
+tailwind-build:
+	cd .nextpy_framework/nextpy && npm ci && npm run build:tailwind

@@ -1,0 +1,28 @@
+from nextpy.psx import useState, useEffect, interactive_component, create_onsubmit, create_onclick
+
+@interactive_component
+def Test(props):
+    props={}
+
+    [change, setchangestate] = useState(False)
+    [num, numchange] = useState(0)
+    
+    handleToggle = create_onclick(lambda e: setchangestate(not change))
+    handleadd=create_onclick(lambda e: numchange(num + 1))
+   
+    return (
+        <div>
+            <button class="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700" create_onclick={handleToggle}>Toggle</button>
+            {if change:
+                <p>Visible</p>
+            {else:
+                <p>Hidden</p>
+            }
+            {change}
+            <button class="px-4 py-2 font-bold text-white bg-blue-500 rounded hover:bg-blue-700" create_onclick={handleadd}>Add</button>
+            {num}
+        </div>
+        
+    )
+    
+default = Test

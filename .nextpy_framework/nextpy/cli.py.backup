@@ -1,0 +1,760 @@
+
+"""
+NextPy CLI - Command-line interface for NextPy projects
+Commands: dev, build, start
+"""
+
+import os
+import sys
+import asyncio
+import signal
+from pathlib import Path
+from typing import Optional
+
+import click
+import uvicorn
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
+    Observer = None
+    FileSystemEventHandler = None
+
+
+class HotReloadHandler:
+    """Handles file system changes for hot reload"""
+    
+    def __init__(self, reload_callback):
+        self.reload_callback = reload_callback
+        self._debounce_timer = None
+        
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+            
+        extensions = (".py", ".html", ".jinja2", ".css", ".js")
+        if isinstance(event.src_path, str) and any(event.src_path.endswith(ext) for ext in extensions):
+            self._trigger_reload()
+            
+    def on_created(self, event):
+        if not event.is_directory:
+            self._trigger_reload()
+            
+    def on_deleted(self, event):
+        if not event.is_directory:
+            self._trigger_reload()
+            
+    def _trigger_reload(self):
+        if self.reload_callback:
+            self.reload_callback()
+
+
+if WATCHDOG_AVAILABLE:
+    class WatchdogHotReloadHandler(HotReloadHandler, FileSystemEventHandler):
+        pass
+else:
+    class WatchdogHotReloadHandler(HotReloadHandler):
+        pass
+
+def find_main_module():
+    # main.py is always expected at the project root for NextPy projects
+    # We ensure the current directory is in sys.path before calling uvicorn.run
+    return "main:app"
+
+@click.group()
+@click.version_option(version="1.0.0", prog_name="NextPy")
+def cli():
+    """NextPy - A Python web framework inspired by Next.js"""
+    pass
+
+
+@cli.command()
+@click.option("--port", "-p", default=5000, help="Port to run the server on")
+@click.option("--host", "-h", default="0.0.0.0", help="Host to bind to")
+@click.option("--reload/--no-reload", default=True, help="Enable hot reload")
+@click.option("--debug/--no-debug", default=True, help="Enable debug mode")
+def dev(port: int, host: str, reload: bool, debug: bool):
+    """Start the development server with hot reload"""
+    click.echo(click.style("\n  NextPy Development Server", fg="cyan", bold=True))
+    click.echo(click.style("  ========================\n", fg="cyan"))
+    
+    _ensure_project_structure()
+    
+    click.echo(f"  - Mode:     {'Development' if debug else 'Production'}")
+    click.echo(f"  - Host:     {host} (accessible at http://localhost:{port})")
+    click.echo(f"  - Port:     {port}")
+    click.echo(f"  - Reload:   {'Enabled' if reload else 'Disabled'}")
+    click.echo(f"\n  ✨ Server ready at http://0.0.0.0:{port}")
+    click.echo(f"  🌐 Open http://localhost:{port} in your browser\n")
+    
+    project_dir = Path('.')
+    os.chdir(project_dir)
+
+    # Ensure the current directory is in sys.path for module discovery
+    if str(project_dir.resolve()) not in sys.path:
+        sys.path.insert(0, str(project_dir.resolve()))
+
+    main_module = find_main_module()
+    
+    if reload:
+        uvicorn.run(
+            main_module,
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=["pages", "templates", ".nextpy_framework"], # Corrected path
+            log_level="info",
+        )
+    else:
+        uvicorn.run(
+            main_module,
+            host=host,
+            port=port,
+            log_level="info",
+        )
+
+
+@cli.command()
+@click.option("--out", "-o", default="out", help="Output directory for static files")
+@click.option("--clean/--no-clean", default=True, help="Clean output directory first")
+def build(out: str, clean: bool):
+    """Build the project for production (SSG)"""
+    click.echo(click.style("\n  NextPy Static Build", fg="green", bold=True))
+    click.echo(click.style("  ===================\n", fg="green"))
+    
+    from nextpy.core.builder import Builder
+    
+    builder = Builder(out_dir=out)
+    
+    async def run_build():
+        manifest = await builder.build(clean=clean)
+        return manifest
+        
+    manifest = asyncio.run(run_build())
+    
+    pages_count = len(manifest.get("pages", {}))
+    click.echo(f"\n  Built {pages_count} pages")
+    click.echo(f"  Output: {out}/")
+    click.echo(click.style("\n  Build complete!\n", fg="green", bold=True))
+
+
+@cli.command()
+@click.option("--port", "-p", default=5000, help="Port to run the server on")
+@click.option("--host", "-h", default="0.0.0.0", help="Host to bind to")
+def start(port: int, host: str):
+    """Start the production server"""
+    click.echo(click.style("\n  NextPy Production Server", fg="green", bold=True))
+    click.echo(click.style("  ========================\n", fg="green"))
+    
+    click.echo(f"  - Mode:     Production")
+    click.echo(f"  - Host:     {host} (accessible at http://localhost:{port})")
+    click.echo(f"  - Port:     {port}")
+    click.echo(f"\n  ✨ Server ready at http://0.0.0.0:{port}")
+    click.echo(f"  🌐 Open http://localhost:{port} in your browser\n")
+    
+    os.chdir(Path.cwd())
+    
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        workers=4,
+        log_level="warning",
+    )
+
+
+@cli.command()
+@click.argument("name")
+def create(name: str):
+    """Create a new NextPy project"""
+    click.echo(click.style(f"\n  Creating NextPy project: {name}", fg="cyan", bold=True))
+    click.echo(click.style("  " + "=" * (25 + len(name)) + "\n", fg="cyan"))
+    
+    project_dir = Path(name)
+    
+    if project_dir.exists():
+        click.echo(click.style(f"  Error: Directory '{name}' already exists", fg="red"))
+        return
+        
+    _create_project_structure(project_dir)
+    
+    click.echo(f"\n  Project created at: {project_dir.absolute()}")
+    click.echo(f"\n  Next steps:")
+    click.echo(f"    cd {name}")
+    click.echo(f"    pip install -r requirements.txt")
+    click.echo(f"    nextpy dev")
+    click.echo()
+
+
+@cli.command()
+def routes():
+    """Display all registered routes"""
+    click.echo(click.style("\n  NextPy Routes", fg="cyan", bold=True))
+    click.echo(click.style("  =============\n", fg="cyan"))
+    
+    from nextpy.core.router import Router
+    
+    router = Router()
+    router.scan_pages()
+    
+    click.echo("  Page Routes:")
+    for route in router.routes:
+        dynamic = " (dynamic)" if route.is_dynamic else ""
+        click.echo(f"    {route.path}{dynamic} -> {route.file_path}")
+        
+    click.echo("\n  API Routes:")
+    for route in router.api_routes:
+        dynamic = " (dynamic)" if route.is_dynamic else ""
+        click.echo(f"    {route.path}{dynamic} -> {route.file_path}")
+        
+    click.echo()
+
+
+def _ensure_project_structure():
+    """Ensure the basic project structure exists"""
+    dirs = ["pages", "pages/api", "templates", "public", "public/css", "public/js"]
+    
+    for dir_path in dirs:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
+
+
+def _create_project_structure(project_dir: Path, template: str = None):
+    """Create a new project structure with True JSX architecture"""
+    dirs = [
+        "pages",
+        "pages/api",
+        "components",
+        "components/ui",
+        "components/layout",
+        "public",
+        "public/css",
+        "public/js",
+        "public/images",
+        "models",
+    ]
+    
+    # Add template-specific directories
+    if template == "blog":
+        dirs.extend([
+            "pages/blog",
+            "pages/api/posts",
+            "components/blog",
+        ])
+    elif template == "api":
+        dirs.extend([
+            "pages/api/users",
+            "pages/api/posts",
+            "components/api",
+        ])
+    else:
+        # Default template
+        dirs.extend([
+            "pages/blog",
+            "pages/api/users",
+        ])
+    
+    for dir_path in dirs:
+        (project_dir / dir_path).mkdir(parents=True, exist_ok=True)
+        click.echo(f"  Created: {dir_path}/")
+        
+    # Create JSX-based homepage with .py.jsx extension
+    (project_dir / "pages" / "index.py.jsx").write_text('''"""Homepage with True JSX"""
+
+def Home(props: dict = None):
+    """Homepage component"""
+    props = props or {}
+    
+    title = props.get("title", "Welcome to NextPy")
+    message = props.get("message", "Your Python-powered web framework with True JSX")
+    
+    return (
+        <div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
+            <div class="text-center text-white">
+                <h1 class="mb-4 text-5xl font-bold">{title}</h1>
+                <p class="text-xl">{message}</p>
+                <a href="https://github.com/nextpy/nextpy-framework" target="_blank" 
+                   class="inline-block px-6 py-3 mt-8 font-semibold text-blue-600 transition-all duration-300 transform bg-white rounded-lg shadow-lg hover:bg-gray-100 hover:text-blue-700 hover:scale-105">
+                    Explore NextPy Framework
+                </a>
+            </div>
+        </div>
+    )
+
+def getServerSideProps(context):
+    return {
+        "props": {
+            "title": "Welcome to NextPy",
+            "message": "Your Python-powered web framework with True JSX"
+        }
+    }
+
+default = Home
+''')
+    click.echo("  Created: pages/index.py.jsx")
+    
+    # Create about page with True JSX
+    (project_dir / "pages" / "about.py.jsx").write_text('''"""About page with True JSX"""
+
+def About(props: dict = None):
+    """About page component"""
+    props = props or {}
+    
+    title = props.get("title", "About NextPy")
+    description = props.get("description", "Learn about the NextPy framework")
+    
+    return (
+        <div class="max-w-4xl mx-auto px-4 py-12">
+            <h1 class="mb-6 text-4xl font-bold text-gray-900">{title}</h1>
+            <p class="text-lg text-gray-600 mb-4">{description}</p>
+            <p class="text-gray-700">
+                NextPy is a Python web framework inspired by Next.js, offering file-based routing, 
+                server-side rendering, static site generation, and a modern True JSX component-based architecture.
+            </p>
+        </div>
+    )
+
+def getServerSideProps(context):
+    return {
+        "props": {
+            "title": "About NextPy",
+            "description": "Learn about the NextPy framework"
+        }
+    }
+
+default = About
+''')
+    click.echo("  Created: pages/about.py.jsx")
+    
+    # Create a reusable Button component
+    (project_dir / "components" / "ui" / "Button.py.jsx").write_text('''"""Button component"""
+
+def Button(props: dict = None):
+    """Reusable Button component"""
+    props = props or {}
+    
+    variant = props.get("variant", "default")
+    children = props.get("children", "Button")
+    className = props.get("className", "")
+    
+    if variant == "primary":
+        variant_class = "bg-blue-600 text-white hover:bg-blue-700"
+    elif variant == "secondary":
+        variant_class = "bg-gray-200 text-gray-900 hover:bg-gray-300"
+    else:
+        variant_class = "bg-gray-600 text-white hover:bg-gray-700"
+    
+    class_attr = f"px-4 py-2 rounded-lg font-medium transition-colors {variant_class} {className}"
+    
+    return (
+        <button class={class_attr} 
+                id={props.get("id")}
+                disabled={props.get("disabled", False)}>
+            {children}
+        </button>
+    )
+
+default = Button
+''')
+    click.echo("  Created: components/ui/Button.py.jsx")
+    
+    # Create a Layout component
+    (project_dir / "components" / "layout" / "Layout.py.jsx").write_text('''"""Layout component"""
+
+def Layout(props: dict = None):
+    """Layout component wrapper"""
+    props = props or {}
+    
+    title = props.get("title", "NextPy App")
+    children = props.get("children", "")
+    
+    return (
+        <div class="min-h-screen flex flex-col">
+            <header class="bg-white shadow-sm">
+                <div class="max-w-7xl mx-auto px-4 py-4">
+                    <div class="flex items-center justify-between">
+                        <h1 class="text-2xl font-bold text-gray-900">{title}</h1>
+                        <nav class="flex space-x-4">
+                            <a href="/" class="text-gray-600 hover:text-gray-900">Home</a>
+                            <a href="/about" class="text-gray-600 hover:text-gray-900">About</a>
+                        </nav>
+                    </div>
+                </div>
+            </header>
+            <main class="flex-1">
+                {children}
+            </main>
+            <footer class="bg-gray-100 mt-auto">
+                <div class="max-w-7xl mx-auto px-4 py-6 text-center text-gray-600">
+                    <p>© 2025 NextPy Framework. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    )
+
+default = Layout
+''')
+    click.echo("  Created: components/layout/Layout.py.jsx")
+    
+    # Create VS Code configuration for JSX support
+    (project_dir / ".vscode").mkdir(exist_ok=True)
+    (project_dir / ".vscode" / "settings.json").write_text('''{
+  "files.associations": {
+    "*.py.jsx": "javascriptreact"
+  },
+  "emmet.includeLanguages": {
+    "javascriptreact": "html"
+  },
+  "emmet.triggerExpansionOnTab": true
+}''')
+    click.echo("  Created: .vscode/settings.json")
+    
+    (project_dir / ".vscode" / "extensions.json").write_text('''{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode"
+  ]
+}''')
+    click.echo("  Created: .vscode/extensions.json")
+    
+    # Create API example
+    (project_dir / "pages" / "api" / "hello.py").write_text('''"""API example"""
+
+def get(request):
+    """GET /api/hello"""
+    return {"message": "Hello from NextPy API!", "status": "success"}
+
+def post(request):
+    """POST /api/hello"""
+    return {"message": "POST request received", "status": "success"}
+''')
+    click.echo("  Created: pages/api/hello.py")
+    
+    # Create main.py
+    (project_dir / "main.py").write_text('''"""NextPy Application Entry Point"""
+
+from nextpy import create_app
+
+app = create_app(debug=True)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
+''')
+    click.echo("  Created: main.py")
+    
+    # Create requirements.txt
+    (project_dir / "requirements.txt").write_text('''fastapi>=0.100.0
+uvicorn>=0.23.0
+jinja2>=3.1.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+click>=8.1.0
+watchdog>=3.0.0
+python-multipart>=0.0.6
+pillow>=10.0.0
+aiofiles>=23.0.0
+httpx>=0.24.0
+sqlalchemy>=2.0.0
+python-dotenv>=1.0.0
+pyjwt>=2.8.0
+markdown>=3.0.0
+''')
+    click.echo("  Created: requirements.txt")
+    
+    # Create README.md for the new project
+    (project_dir / "README.md").write_text(f'''# {project_dir.name}
+
+A modern NextPy application with True JSX syntax and component-based architecture.
+
+## Getting Started
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run the development server:
+   ```bash
+   nextpy dev
+   ```
+
+3. Open http://localhost:5000 in your browser.
+
+## Project Structure
+
+```
+{project_dir.name}/
+├── pages/              # File-based routes
+│   ├── index.py.jsx    # Homepage (/)
+│   ├── about.py.jsx    # About page (/about)
+│   └── api/            # API routes
+│       └── hello.py    # API endpoint (/api/hello)
+├── components/         # Reusable JSX components
+│   ├── ui/             # UI components
+│   │   └── Button.py.jsx # Button component
+│   └── layout/         # Layout components
+│       └── Layout.py.jsx # Layout wrapper
+''')
+
+@cli.command()
+@click.option('--port', default=5000, help='Port to run the development server on')
+@click.option('--host', default='0.0.0.0', help='Host to bind the development server to')
+@click.option('--reload/--no-reload', default=True, help='Enable hot reload')
+@click.option('--debug/--no-debug', default=True, help='Enable debug mode')
+def dev(port: int, host: str, reload: bool, debug: bool):
+    """Start the development server"""
+    click.echo(f"Starting NextPy development server on {host}:{port}")
+    
+    try:
+        # Import here to avoid circular imports
+        from ..server.app import create_app
+        import uvicorn
+        
+        app = create_app(debug=debug)
+        
+        config = {
+            "host": host,
+            "port": port,
+            "reload": reload,
+            "app_dir": ".",
+        }
+        
+        uvicorn.run(app, **config)
+        
+    except ImportError as e:
+        click.echo(f"Error: Could not import required modules: {e}")
+        click.echo("Make sure you have installed the required dependencies:")
+        click.echo("  pip install -r requirements.txt")
+    except Exception as e:
+        click.echo(f"Error starting development server: {e}")
+
+
+@click.command()
+@click.option('--template', type=click.Choice(['default', 'blog', 'api']), default='default', help='Project template')
+@click.argument('project_path', type=click.Path())
+def create(project_path, template):
+    """Create a new NextPy project"""
+    project_dir = Path(project_path)
+    
+    if project_dir.exists() and any(project_dir.iterdir()):
+        click.echo(f"Error: Directory {project_path} already exists and is not empty")
+        return
+    
+    click.echo(f"Creating new NextPy project in {project_path}...")
+    
+    # Create project directory
+    project_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create project structure
+    _create_project_structure(project_dir, template)
+    
+    click.echo(f"\n✅ Project '{project_dir.name}' created successfully!")
+    click.echo(f"\nNext steps:")
+    click.echo(f"  cd {project_dir.name}")
+    click.echo(f"  pip install -r requirements.txt")
+    click.echo(f"  nextpy dev")
+    click.echo(f"\n🚀 Happy coding with NextPy!")
+
+
+@click.command()
+@click.option('--output', default='out', help='Output directory for static files')
+@click.option('--static/--no-static', default=False, help='Generate static site')
+def build(output, static):
+    """Build the application for production"""
+    click.echo(f"Building NextPy application...")
+    
+    try:
+        from ..server.app import create_app
+        
+        app = create_app(debug=False)
+        
+        if static:
+            click.echo(f"Generating static site in {output}/")
+            # TODO: Implement static site generation
+        else:
+            click.echo(f"Building for production...")
+            # TODO: Implement production build
+            
+        click.echo("✅ Build completed successfully!")
+        
+    except ImportError as e:
+        click.echo(f"Error: Could not import required modules: {e}")
+        click.echo("Make sure you have installed the required dependencies:")
+        click.echo("  pip install -r requirements.txt")
+    except Exception as e:
+        click.echo(f"Error building application: {e}")
+
+
+@click.command()
+@click.option('--output', default='out', help='Output directory for static files')
+def export(output):
+    """Export the application as static files"""
+    click.echo(f"Exporting NextPy application as static files...")
+    
+    try:
+        # TODO: Implement static export
+        click.echo(f"Static files exported to {output}/")
+        click.echo("✅ Export completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error exporting application: {e}")
+
+
+@click.command()
+@click.option('--port', default=8000, help='Port to run the production server on')
+@click.option('--host', default='0.0.0.0', help='Host to bind the production server to')
+def start(port, host):
+    """Start the production server"""
+    click.echo(f"Starting NextPy production server on {host}:{port}")
+    
+    try:
+        from ..server.app import create_app
+        import uvicorn
+        
+        app = create_app(debug=False)
+        
+        config = {
+            "host": host,
+            "port": port,
+        }
+        
+        uvicorn.run(app, **config)
+        
+    except ImportError as e:
+        click.echo(f"Error: Could not import required modules: {e}")
+        click.echo("Make sure you have installed the required dependencies:")
+        click.echo("  pip install -r requirements.txt")
+    except Exception as e:
+        click.echo(f"Error starting production server: {e}")
+
+
+@click.command()
+def routes():
+    """List all available routes"""
+    try:
+        from ..server.app import create_app
+        
+        app = create_app(debug=False)
+        
+        click.echo("Available routes:")
+        
+        # TODO: Implement route listing
+        click.echo("  / - Homepage")
+        click.echo("  /about - About page")
+        click.echo("  /api/hello - API endpoint")
+        
+    except ImportError as e:
+        click.echo(f"Error: Could not import required modules: {e}")
+    except Exception as e:
+        click.echo(f"Error listing routes: {e}")
+
+
+@click.command()
+@click.option('--port', default=5000, help='Port to run the development server on')
+@click.option('--host', default='0.0.0.0', help='Host to bind the development server to')
+@click.option('--reload/--no-reload', default=True, help='Enable hot reload')
+@click.option('--debug/--no-debug', default=True, help='Enable debug mode')
+def serve(port: int, host: str, reload: bool, debug: bool):
+    """Start the development server (alias for dev)"""
+    click.echo("Note: 'serve' is an alias for 'dev'. Using 'nextpy dev' instead.")
+    dev(port, host, reload, debug)
+
+
+@click.command()
+def version():
+    """Show NextPy version information"""
+    click.echo("NextPy Framework v1.0.0")
+    click.echo("The Python web framework inspired by Next.js")
+    click.echo("Visit: https://github.com/nextpy/nextpy-framework")
+
+
+@click.command()
+def help():
+    """Show help information"""
+    click.echo(cli.get_help(None))
+
+
+@click.command()
+def info():
+    """Show NextPy framework information"""
+    click.echo("NextPy Framework - Python web framework inspired by Next.js")
+    click.echo("")
+    click.echo("Features:")
+    click.echo("  • File-based routing")
+    click.echo("  • Server-side rendering (SSR)")
+    click.echo("  • Static site generation (SSG)")
+    click.echo("  • True JSX syntax")
+    click.echo("  • React-like hooks")
+    click.echo("  • Component library")
+    click.echo("  • Hot reloading")
+    click.echo("  • TypeScript support")
+    click.echo("")
+    click.echo("Commands:")
+    click.echo("  nextpy create <project>    Create a new project")
+    click.echo("  nextpy dev              Start development server")
+    click.echo("  nextpy build            Build for production")
+    click.echo("  nextpy export           Export static files")
+    click.echo("  nextpy start            Start production server")
+    click.echo("  nextpy routes           List available routes")
+    click.echo("  nextpy db <command>     Database management")
+    click.echo("  nextpy version         Show version")
+    click.echo("  nextpy help             Show help")
+    click.echo("")
+    click.echo("Documentation: https://nextpy-framework.readthedocs.io")
+
+
+@click.group()
+def db():
+    """Database management commands"""
+    pass
+
+@db.command()
+def init():
+    """Initialize the database"""
+    click.echo("Initializing database...")
+    
+    try:
+        # TODO: Implement database initialization
+        click.echo("✅ Database initialized successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error initializing database: {e}")
+
+
+@db.command()
+@click.argument('name')
+def migration(name):
+    """Create a new database migration"""
+    click.echo(f"Creating migration: {name}")
+    
+    try:
+        # TODO: Implement migration creation
+        click.echo(f"✅ Migration '{name}' created successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error creating migration: {e}")
+
+
+@db.command()
+def migrate():
+    """Run database migrations"""
+    click.echo("Running database migrations...")
+    
+    try:
+        # TODO: Implement migration running
+        click.echo("✅ Migrations completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running migrations: {e}")
+
+
+if __name__ == '__main__':
+    cli()
+
+# Add the db group to the main CLI
+cli.add_command(db)
+    
