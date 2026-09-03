@@ -73,7 +73,7 @@ def getServerSideProps(context):
         total = db.query(Job).filter(Job.is_active == True).count()
         
         # 2. Query active jobs from the database session
-        jobs_query = db.query(Job).filter(Job.is_active == True).all()
+        jobs_query = db.query(Job)
         
         # 3. Convert database objects into dictionaries so Nextpy can pass them to props
         featured_jobs = []

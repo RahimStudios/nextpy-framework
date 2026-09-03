@@ -757,15 +757,414 @@ class NextPyActionRuntime {
                 return textArea.value;
             };
             
+            // FIX: Evaluate PSX expressions inside the content before setting innerHTML
+            const derived = this._deriveVariables(component.state);
+            const fullState = { ...component.state, ...derived };
+            
             // Update the element content based on condition result
             if (result) {
-                element.innerHTML = unescapeHtml(trueContent);
+                const raw = unescapeHtml(trueContent);
+                element.innerHTML = this._evaluatePSXContent(raw, fullState);
             } else {
-                element.innerHTML = unescapeHtml(falseContent);
+                const raw = unescapeHtml(falseContent);
+                element.innerHTML = this._evaluatePSXContent(raw, fullState);
             }
         } catch (error) {
             console.error('Conditional update error:', error);
         }
+    }
+
+    /**
+     * Generic PSX expression evaluator — evaluates any Python-like expression
+     * against a state object. Handles:
+     *   - Variable access: user, is_employer, my_jobs
+     *   - Attribute/dict access: user.full_name, user["key"], user.get("key", default)
+     *   - Method calls: user.get("full_name", ""), value.title(), value.strip()
+     *   - Function calls: job_type_label(x), len(x), str(x), int(x)
+     *   - Ternary / inline if: "A" if cond else "B"
+     *   - Comparison: ==, !=, <, >, <=, >=, in, not in
+     *   - Boolean: and, or, not
+     *   - F-strings: f"prefix {expr} suffix"
+     *   - String concatenation: "a" + "b"
+     *   - Subscript: x[0], x["key"], x["key"]
+     *   - None / True / False
+     */
+    _evaluatePSXExpr(expr, state) {
+        expr = expr.trim();
+        if (expr === '') return '';
+        
+        // Fast path: simple string literals
+        if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
+            return expr.slice(1, -1);
+        }
+        // Fast path: numeric literals
+        if (/^-?\d+(\.\d+)?$/.test(expr)) {
+            return Number(expr);
+        }
+        // Fast path: simple True/False/None
+        if (expr === 'True') return true;
+        if (expr === 'False') return false;
+        if (expr === 'None') return null;
+        
+        let jsExpr = expr;
+        
+        // 1. Convert Python operators to JS
+        jsExpr = jsExpr
+            .replace(/\bTrue\b/g, 'true')
+            .replace(/\bFalse\b/g, 'false')
+            .replace(/\bNone\b/g, 'null')
+            .replace(/\band\b/g, '&&')
+            .replace(/\bor\b/g, '||')
+            .replace(/\bnot\s+/g, '!');
+        
+        // 2. Handle f-strings: f"prefix {expr} suffix" → `prefix ${eval(expr)} suffix`
+        jsExpr = jsExpr.replace(/f(["'])((?:\\.|(?!\1).)*?)\1/g, (_, quote, inner) => {
+            let tmpl = inner
+                .replace(/\{\{/g, '__LBRACE__')
+                .replace(/\}\}/g, '__RBRACE__');
+            tmpl = tmpl.replace(/\{([^}]+)\}/g, (_, subExpr) => {
+                return '${' + this._evaluatePSXExpr(subExpr, state) + '}';
+            });
+            tmpl = tmpl.replace(/__LBRACE__/g, '{').replace(/__RBRACE__/g, '}');
+            return '`' + tmpl + '`';
+        });
+        
+        // 3. Handle inline if/else: "A" if cond else "B" → cond ? "A" : "B"
+        // Support both: expr if cond else expr  AND nested ternaries
+        jsExpr = this._convertTernary(jsExpr, state);
+        
+        // 4. Handle len(x) → x.length
+        jsExpr = jsExpr.replace(/\blen\(([^)]+)\)/g, '($1).length');
+        
+        // 5. Handle .get("key") and .get("key", default) → bracket notation
+        // Use balanced-paren scanning instead of regex (handles nested .get() calls)
+        let maxGetIter = 20;
+        while (jsExpr.includes('.get(') && maxGetIter-- > 0) {
+            const idx = jsExpr.indexOf('.get(');
+            if (idx === -1) break;
+            
+            // Find the object path before .get( — walk backwards from idx
+            let objStart = idx - 1;
+            while (objStart >= 0 && /[\w$\]]/.test(jsExpr[objStart])) objStart--;
+            objStart++;
+            const objPath = jsExpr.substring(objStart, idx);
+            
+            // Find the balanced closing paren for .get(
+            const argsStart = idx + 5; // position after '.get('
+            let depth = 1;
+            let ci = argsStart;
+            let inStr = false;
+            let strCh = '';
+            while (ci < jsExpr.length && depth > 0) {
+                const ch = jsExpr[ci];
+                if (inStr) {
+                    if (ch === strCh && jsExpr[ci - 1] !== '\\') inStr = false;
+                } else if (ch === '"' || ch === "'") {
+                    inStr = true;
+                    strCh = ch;
+                } else if (ch === '(') depth++;
+                else if (ch === ')') depth--;
+                ci++;
+            }
+            
+            if (depth !== 0) break; // unbalanced, skip
+            
+            const argsStr = jsExpr.substring(argsStart, ci - 1);
+            
+            // Split args by comma at depth 0
+            const parts = [];
+            let depth2 = 0;
+            let current = '';
+            inStr = false;
+            strCh = '';
+            for (let ai = 0; ai < argsStr.length; ai++) {
+                const ch = argsStr[ai];
+                if (inStr) {
+                    current += ch;
+                    if (ch === strCh && argsStr[ai - 1] !== '\\') inStr = false;
+                } else if (ch === '"' || ch === "'") {
+                    inStr = true;
+                    strCh = ch;
+                    current += ch;
+                } else if (ch === '(') { depth2++; current += ch; }
+                else if (ch === ')') { depth2--; current += ch; }
+                else if (ch === ',' && depth2 === 0) {
+                    parts.push(current.trim());
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            if (current.trim()) parts.push(current.trim());
+            
+            const key = parts[0] || '';
+            const defaultVal = parts[1];
+            
+            let replacement;
+            if (defaultVal !== undefined) {
+                replacement = '(' + objPath + '[' + key + '] !== undefined ? ' + objPath + '[' + key + '] : ' + defaultVal + ')';
+            } else {
+                replacement = objPath + '[' + key + ']';
+            }
+            
+            jsExpr = jsExpr.substring(0, objStart) + replacement + jsExpr.substring(ci);
+        }
+        
+        // 6. Handle Python string methods → JS equivalents
+        // .title() → use _title() helper (defined at eval time)
+        jsExpr = jsExpr.replace(/\.title\(\)/g, '.___psx_title()');
+        jsExpr = jsExpr.replace(/\.strip\(\)/g, '.trim()');
+        jsExpr = jsExpr.replace(/\.lower\(\)/g, '.toLowerCase()');
+        jsExpr = jsExpr.replace(/\.upper\(\)/g, '.toUpperCase()');
+        jsExpr = jsExpr.replace(/\bstr\(([^)]+)\)/g, 'String($1)');
+        jsExpr = jsExpr.replace(/\bint\(([^)]+)\)/g, 'parseInt($1)');
+        jsExpr = jsExpr.replace(/\bfloat\(([^)]+)\)/g, 'parseFloat($1)');
+        jsExpr = jsExpr.replace(/\bbool\(([^)]+)\)/g, '!!($1)');
+        
+        // 7. Handle Python slicing: x[:150] → x.substring(0, 150), x[1:5] → x.substring(1, 5), x[:] → x
+        jsExpr = jsExpr.replace(/(\w+(?:\[[^\]]+\])*)\[([^:]*?):([^)]*?)\]/g, (full, obj, start, end) => {
+            const s = start.trim() || '0';
+            const e = end.trim();
+            if (e === '') return obj + '.substring(' + s + ')';
+            return obj + '.substring(' + s + ', ' + e + ')';
+        });
+        
+        // 8. Handle x not in y → !y.includes(x), x in y → y.includes(x)
+        jsExpr = jsExpr.replace(/(\S+)\s+not\s+in\s+(\S+)/g, '!$2.includes($1)');
+        jsExpr = jsExpr.replace(/(\S+)\s+in\s+(?!=)(\S+)/g, '$2.includes($1)');
+        
+        // 9. Handle == and != (already JS compatible)
+        
+        // 10. Replace variable names with values from state
+        const replacedKeys = new Set();
+        // Sort keys by length (longest first) to avoid partial replacements
+        const sortedKeys = Object.keys(state).sort((a, b) => b.length - a.length);
+        
+        for (const key of sortedKeys) {
+            const val = state[key];
+            if (val === undefined) continue;
+            
+            // Exact match
+            if (jsExpr === key) {
+                jsExpr = typeof val === 'string' ? JSON.stringify(val) : (val === null ? 'null' : JSON.stringify(val));
+                replacedKeys.add(key);
+                continue;
+            }
+            
+            // Word boundary match — but skip if inside a string or part of a longer identifier
+            const regex = new RegExp(`(?<![\\w$.])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
+            if (regex.test(jsExpr)) {
+                const valStr = typeof val === 'string' ? JSON.stringify(val) : (val === null ? 'null' : JSON.stringify(val));
+                jsExpr = jsExpr.replace(regex, valStr);
+                replacedKeys.add(key);
+            }
+        }
+        
+        // 10. Handle remaining unknown identifiers — declare as null to avoid ReferenceError
+        const builtins = new Set(['true','false','null','undefined','NaN','Infinity','Math','JSON','String','Number','Array','Object','console','window','document']);
+        const idRegex = /(?<![\\w$.])([a-zA-Z_][a-zA-Z0-9_]*)(?![\\w$(])/g;
+        let m;
+        const unknownIds = [];
+        while ((m = idRegex.exec(jsExpr)) !== null) {
+            const id = m[1];
+            if (!replacedKeys.has(id) && !builtins.has(id) && !id.startsWith('__')) {
+                unknownIds.push(id);
+            }
+        }
+        
+        const varDecls = unknownIds.map(id => `let ${id} = null;`).join(' ');
+        
+        // 11. Evaluate
+        try {
+            // Ensure String.prototype.___psx_title is defined (for .title() support)
+            if (!String.prototype.___psx_title) {
+                String.prototype.___psx_title = function() { 
+                    return String(this).replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+                };
+            }
+            
+            // Build a closure that has all state variables available
+            const stateEntries = Object.entries(state).filter(([k, v]) => v !== undefined);
+            const paramNames = stateEntries.map(([k]) => k);
+            const paramVals = stateEntries.map(([, v]) => v);
+            
+            // Add built-in helpers as parameters
+            paramNames.push('len');
+            paramVals.push(function(x) { return x != null ? x.length : 0; });
+            
+            // Build function body: declare unknowns as null, then return the expression
+            const body = varDecls + '\nreturn (' + jsExpr + ');';
+            const factory = Function(...paramNames, body);
+            const result = factory(...paramVals);
+            return result;
+        } catch (e) {
+            // If evaluation fails, return the original expression (so at least something shows)
+            return expr;
+        }
+    }
+    
+    /**
+     * Convert Python "A" if cond else "B" ternary to JS ternary.
+     * Handles nested conditions.
+     */
+    _convertTernary(expr, state) {
+        // Find " if " pattern — but not inside strings
+        // We need to match: <then-expr> if <condition> else <else-expr>
+        // This is tricky because the else part could contain another ternary
+        // Strategy: find " if " from right to left, matching the outermost one
+        
+        let result = expr;
+        // Keep converting until no more "if...else" patterns
+        let maxIterations = 10;
+        while (result.includes(' if ') && result.includes(' else ') && maxIterations-- > 0) {
+            // Find the LAST " if " that has a matching " else "
+            const ifIdx = result.lastIndexOf(' if ');
+            if (ifIdx <= 0) break;
+            
+            // Find the matching " else " after this " if "
+            const elseIdx = result.indexOf(' else ', ifIdx + 4);
+            if (elseIdx < 0) break;
+            
+            // Extract the then-expr (everything before " if ")
+            const thenExpr = result.substring(0, ifIdx).trim();
+            // Extract the condition (between " if " and " else ")
+            const condExpr = result.substring(ifIdx + 4, elseIdx).trim();
+            // Extract the else-expr (everything after " else ")
+            let elseExpr = result.substring(elseIdx + 6).trim();
+            
+            // The else-expr might contain another ternary, so we need to find where it ends
+            // For simplicity, if elseExpr contains " if ", we'll handle it in the next iteration
+            // unless it's wrapped in parentheses
+            
+            // Convert condition
+            let condJS = condExpr
+                .replace(/\bTrue\b/g, 'true')
+                .replace(/\bFalse\b/g, 'false')
+                .replace(/\bNone\b/g, 'null')
+                .replace(/\band\b/g, '&&')
+                .replace(/\bor\b/g, '||')
+                .replace(/\bnot\s+/g, '!');
+            
+            // Replace variables in condition
+            for (const [key, value] of Object.entries(state)) {
+                if (value === undefined) continue;
+                const regex = new RegExp(`(?<![\\w$.])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
+                const valStr = typeof value === 'string' ? JSON.stringify(value) : (value === null ? 'null' : JSON.stringify(value));
+                condJS = condJS.replace(regex, valStr);
+            }
+            
+            // Build JS ternary
+            result = '(' + condJS + ') ? (' + thenExpr + ') : (' + elseExpr + ')';
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Evaluate PSX expressions inside HTML content.
+     * Finds all {expr} patterns (not inside HTML attributes) and evaluates them.
+     * Also handles escaped HTML entities like &quot; that came from data attributes.
+     */
+    _evaluatePSXContent(html, state) {
+        if (!html || typeof html !== 'string') return html || '';
+        
+        // Step 1: Unescape any HTML entities that were encoded in data attributes
+        // This handles &quot; → ", &lt; → <, &gt; → >, &amp; → &
+        let result = html;
+        
+        // Step 2: Find and evaluate {expr} patterns
+        // But we must NOT evaluate {expr} inside HTML attribute values
+        // Strategy: split by HTML tags, only evaluate expressions in text nodes
+        
+        const parts = [];
+        let i = 0;
+        
+        while (i < result.length) {
+            // Check if we're entering an HTML tag
+            if (result[i] === '<') {
+                // Find the end of this tag
+                let tagEnd = result.indexOf('>', i);
+                if (tagEnd === -1) tagEnd = result.length - 1;
+                
+                // Check if this is a self-closing tag
+                let tagStr = result.substring(i, tagEnd + 1);
+                
+                // Check for {expr} inside tag attributes (like href={f"/jobs/{job['id']}"})
+                // These need evaluation too!
+                let tagParts = this._evaluateTagAttributes(tagStr, state);
+                
+                parts.push(tagParts);
+                i = tagEnd + 1;
+            } else if (result[i] === '{' && i + 1 < result.length && result[i + 1] !== '{') {
+                // Find matching closing brace
+                let braceDepth = 1;
+                let j = i + 1;
+                while (j < result.length && braceDepth > 0) {
+                    if (result[j] === '{') braceDepth++;
+                    else if (result[j] === '}') braceDepth--;
+                    j++;
+                }
+                
+                if (braceDepth === 0) {
+                    const expr = result.substring(i + 1, j - 1).trim();
+                    
+                    // Skip if this looks like it's not a PSX expression
+                    // (e.g., CSS { } blocks, JSON, etc.)
+                    if (expr && !expr.includes('{') && !expr.includes('}')) {
+                        const val = this._evaluatePSXExpr(expr, state);
+                        if (val !== null && val !== undefined) {
+                            parts.push(String(val));
+                        } else {
+                            parts.push('');
+                        }
+                    } else {
+                        parts.push(result.substring(i, j));
+                    }
+                    i = j;
+                } else {
+                    parts.push(result[i]);
+                    i++;
+                }
+            } else if (result[i] === '{' && i + 1 < result.length && result[i + 1] === '{') {
+                // Escaped brace {{ — output single {
+                parts.push('{');
+                i += 2;
+            } else if (result[i] === '}' && i + 1 < result.length && result[i + 1] === '}') {
+                // Escaped brace }} — output single }
+                parts.push('}');
+                i += 2;
+            } else {
+                // Plain text — accumulate until next special character
+                let textEnd = i;
+                while (textEnd < result.length && result[textEnd] !== '<' && result[textEnd] !== '{') {
+                    textEnd++;
+                }
+                parts.push(result.substring(i, textEnd));
+                i = textEnd;
+            }
+        }
+        
+        return parts.join('');
+    }
+    
+    /**
+     * Evaluate PSX expressions inside HTML tag attribute values.
+     * E.g., <a href={f"/jobs/{job['id']}"}> → <a href="/jobs/123">
+     */
+    _evaluateTagAttributes(tagStr, state) {
+        // Find attribute values that contain {expr}
+        return tagStr.replace(/(\w+)=["']([^"']*?\{[^}]+[^"']*?)["']/g, (match, attrName, attrValue) => {
+            // Check if the attribute value contains {expr}
+            if (!attrValue.includes('{')) return match;
+            
+            // Evaluate the attribute value
+            let evaluated = attrValue.replace(/\{([^}]+)\}/g, (_, expr) => {
+                const val = this._evaluatePSXExpr(expr, state);
+                return val !== null && val !== undefined ? String(val) : '';
+            });
+            
+            return attrName + '="' + evaluated + '"';
+        });
     }
 
     _evaluateCondition(expr, state) {
@@ -775,51 +1174,11 @@ class NextPyActionRuntime {
         // Merge derived variables with state for evaluation
         const fullState = { ...state, ...derived };
         
-        // Convert Python operators to JS operators
-        let evalExpr = expr
-            .replace(/\bnot\s+/g, '!')          // Python 'not' -> JS '!'
-            .replace(/\band\b/g, '&&')           // Python 'and' -> JS '&&'
-            .replace(/\bor\b/g, '||')            // Python 'or' -> JS '||'
-            .replace(/\bNone\b/g, 'null')        // Python 'None' -> JS 'null'
-            .replace(/\bTrue\b/g, 'true')        // Python 'True' -> JS 'true'
-            .replace(/\bFalse\b/g, 'false')      // Python 'False' -> JS 'false'
-            .replace(/\blen\((\w+)\)/g, '$1.length')  // Python 'len(x)' -> JS 'x.length'
-            .replace(/\b(\w+)\.get\(([^)]+)\)/g, '$1[$2]');  // Python 'x.get("k")' -> JS 'x["k"]'
-        
-        // Safe condition evaluation with proper variable substitution
-        // Replace state variable names with their values
-        const replacedKeys = new Set();
-        for (const [key, value] of Object.entries(fullState)) {
-            if (evalExpr === key) {
-                evalExpr = typeof value === 'string' ? `'${value}'` : JSON.stringify(value);
-                replacedKeys.add(key);
-            } else {
-                const regex = new RegExp(`\\b${key}\\b`, 'g');
-                if (regex.test(evalExpr)) {
-                    evalExpr = evalExpr.replace(regex, typeof value === 'string' ? `'${value}'` : JSON.stringify(value));
-                    replacedKeys.add(key);
-                }
-            }
-        }
-        
-        // FIX: Treat any remaining undefined identifiers as null (like Python's None)
-        const idRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
-        let match;
-        const remainingIds = new Set();
-        while ((match = idRegex.exec(evalExpr)) !== null) {
-            const id = match[1];
-            if (!replacedKeys.has(id) && !['true', 'false', 'null', 'undefined', 'NaN', 'Infinity', 'len', 'str', 'int', 'float', 'bool', 'list', 'dict', 'abs', 'min', 'max', 'sum', 'round', 'any', 'all'].includes(id)) {
-                remainingIds.add(id);
-            }
-        }
-        
-        // Build variable declarations for undefined identifiers
-        const varDeclarations = Array.from(remainingIds).map(id => `let ${id} = null;`).join(' ');
-        
         try {
-            return Function(`"use strict"; ${varDeclarations} return (${evalExpr})`)();
+            const result = this._evaluatePSXExpr(expr, fullState);
+            return !!result; // coerce to boolean
         } catch (e) {
-            console.warn('Failed to evaluate condition:', expr, '->', evalExpr, e);
+            console.warn('Failed to evaluate condition:', expr, e);
             return false;
         }
     }

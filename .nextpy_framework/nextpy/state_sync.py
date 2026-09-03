@@ -149,7 +149,7 @@ class StateManager:
         """Notify subscribers of state changes"""
         # Broadcast via WebSocket
         try:
-            await manager.broadcast(key, {
+            await manager.broadcast({
                 "type": "STATE_CHANGE",
                 "key": key,
                 "old_value": old_value,
@@ -332,7 +332,8 @@ class DatabaseState:
     
     async def initialize(self):
         """Initialize database table for state storage"""
-        from nextpy.db import Base, get_session, Column, String, Text, DateTime
+        from nextpy.db import Base, get_session
+        from sqlalchemy import Column, String, Text, DateTime
         from sqlalchemy import text
         
         # Create table if it doesn't exist

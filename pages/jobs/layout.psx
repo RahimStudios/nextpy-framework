@@ -3,7 +3,7 @@ JobHub - Root layout. Wraps all /jobs pages with nav + footer.
 Uses useFetch to call get_me server action for auth state.
 """
 
-from nextpy.psx import component, useFetch
+from nextpy.psx import component, useFetch, Link
 from nextpy.db import get_session, User
 from nextpy.auth import get_user_id_from_request
 
@@ -32,9 +32,9 @@ def Layout(children, **props):
             <body class="min-h-screen bg-gray-50">
                 <nav class="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur-md">
                     <div class="flex items-center justify-between px-4 py-3 mx-auto max-w-7xl sm:px-6 lg:px-8">
-                        <a href="/jobs" class="flex items-center gap-2 text-xl font-bold text-indigo-600">
+                        <Link href="/jobs" class="flex items-center gap-2 text-xl font-bold text-indigo-600">
                             JobHub
-                        </a>
+                        </Link>
                         <div class="items-center hidden gap-6 text-sm font-medium text-gray-700 sm:flex">
                             <a href="/jobs" class="hover:text-indigo-600">Browse Jobs</a>
                             <a href="/jobs/dashboard" class="hover:text-indigo-600">Dashboard</a>
