@@ -5,7 +5,8 @@ Provides XSS protection and input sanitization
 
 import html
 import re
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlparse
 from markupsafe import Markup, escape
 
 
@@ -77,6 +78,39 @@ class SecurityManager:
         
         return sanitized
     
+    @staticmethod
+    def sanitize_rich_html(content: str) -> str:
+        """Conservatively sanitize rich HTML while keeping harmless markup.
+
+        This is intended for content that must render HTML (blog bodies, CMS
+        fields).  It removes script-capable elements, event handlers and
+        dangerous URL schemes.  For plain user input prefer ``sanitize_html``
+        which escapes everything.
+        """
+        if not content:
+            return ""
+
+        sanitized = str(content)
+        blocked_tags = (
+            'script', 'iframe', 'object', 'embed', 'link', 'meta', 'base',
+            'form', 'input', 'button', 'textarea', 'select', 'option',
+            'svg', 'math',
+        )
+        for tag in blocked_tags:
+            sanitized = re.sub(
+                rf'<\s*/?\s*{tag}\b[^>]*>', '', sanitized, flags=re.IGNORECASE
+            )
+        sanitized = re.sub(
+            r'\s+on[a-zA-Z0-9_-]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+            '', sanitized, flags=re.IGNORECASE,
+        )
+        sanitized = re.sub(
+            r'(href|src|action|formaction|xlink:href)\s*=\s*(["\'])\s*'
+            r'(?:javascript|vbscript|data):[^"\']*\2',
+            r'\1="#"', sanitized, flags=re.IGNORECASE,
+        )
+        return sanitized
+
     @staticmethod
     def validate_url(url: str) -> bool:
         """
@@ -206,6 +240,29 @@ class SecurityManager:
         ]
         
         return '; '.join(csp_directives)
+
+    @staticmethod
+    def is_trusted_origin(
+        origin: Optional[str],
+        request_host: str,
+        allowed_origins: Optional[List[str]] = None,
+    ) -> bool:
+        """Validate an Origin/Referer value for same-origin or allowlisted use."""
+        if not origin:
+            return False
+        try:
+            parsed = urlparse(origin)
+        except Exception:
+            return False
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        if parsed.netloc == request_host:
+            return True
+        normalized = f"{parsed.scheme}://{parsed.netloc}"
+        for allowed in (allowed_origins or []):
+            if allowed and normalized == allowed.rstrip('/'):
+                return True
+        return False
 
 
 # Global security manager instance

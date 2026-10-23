@@ -28,9 +28,12 @@ def RegisterPage(props=None):
         }
         callServerAction("register", params)
         if _server_result and _server_result.get("success"):
-            window.navigateTo("/jobs/dashboard")
+            window.nextpyHardNavigate("/jobs/dashboard")
         else:
-            setError(_server_result.get("error", "Registration failed") if _server_result else "Registration failed")
+            if _server_result:
+                setError(_server_result.get("error", "Registration failed"))
+            else:
+                setError("Registration failed")
             setLoading(False)
 
     return (
@@ -40,9 +43,7 @@ def RegisterPage(props=None):
                 <p class="mt-2 text-gray-600">Join JobHub and start your journey</p>
             </div>
             <div class="p-8 bg-white border border-gray-200 shadow-sm rounded-xl">
-                {if error:
-                    <div class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50">{error}</div>
-                }
+                <div data-state-error data-state-toggle style="display: none" class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50"></div>
                 <form onsubmit={handle_register} class="space-y-5">
                     <div>
                         <label class="block mb-2 text-sm font-medium text-gray-700">I am a...</label>

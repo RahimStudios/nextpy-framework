@@ -18,9 +18,12 @@ def LoginPage(props=None):
         setError("")
         callServerAction("login", {"email": email, "password": password})
         if _server_result and _server_result.get("success"):
-            window.navigateTo("/jobs/dashboard")
+            window.nextpyHardNavigate("/jobs/dashboard")
         else:
-            setError(_server_result.get("error", "Login failed") if _server_result else "Login failed")
+            if _server_result:
+                setError(_server_result.get("error", "Login failed"))
+            else:
+                setError("Login failed")
             setLoading(False)
 
     return (
@@ -30,19 +33,17 @@ def LoginPage(props=None):
                 <p class="mt-2 text-gray-600">Log in to your JobHub account</p>
             </div>
             <div class="p-8 bg-white border border-gray-200 shadow-sm rounded-xl">
-                {if error:
-                    <div class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50">{error}</div>
-                }
+                <div data-state-error data-state-toggle style="display: none" class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50"></div>
                 <form onsubmit={handle_login} class="space-y-5">
                     <div>
                         <label class="block mb-1 text-sm font-medium text-gray-700">Email</label>
-                        <input type="email" value={email} 
+                        <input type="email" value={email} oninput={lambda e: setEmail(e.target.value)}
                             required placeholder="you@example.com"
                             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                     </div>
                     <div>
                         <label class="block mb-1 text-sm font-medium text-gray-700">Password</label>
-                        <input type="password" value={password} oninput={e => password = e.target.value}
+                        <input type="password" value={password} oninput={lambda e: setPassword(e.target.value)}
                             required placeholder="Your password"
                             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                     </div>

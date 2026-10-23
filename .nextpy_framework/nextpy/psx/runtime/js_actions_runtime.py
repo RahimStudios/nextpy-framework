@@ -19,6 +19,7 @@ class NextPyActionRuntime {
         this.globalState = {};
         this.functions = new Map();
         this.dependencyMap = new Map(); // FIX: Track state dependencies
+        this._effectsRunning = new Set();
         this._registerBuiltinFunctions();
     }
 
@@ -49,6 +50,10 @@ class NextPyActionRuntime {
         });
         // FIX: Set up input bindings for elements with data-bind attribute
         this._setupInputBindings(componentId);
+        // Apply SSR-reactive class/style/attribute bindings on mount.
+        this._applyAttributeBindings(null, componentId);
+        // Run useEffect callbacks on mount (once per component).
+        this._runEffects(componentId, null, true);
     }
     
     _setupInputBindings(componentId) {
@@ -189,6 +194,8 @@ class NextPyActionRuntime {
                     return this._executeIf(data, componentId);
                 case 'NAVIGATE':
                     return this._executeNavigate(data, componentId);
+                case 'CONDITIONAL':
+                    return this._executeConditional(data, componentId);
                 default:
                     console.warn(`Unknown action type: ${type}`);
                     return null;
@@ -251,6 +258,12 @@ class NextPyActionRuntime {
             component.state[key] = evaluatedValue;
             this._triggerComponentUpdate(componentId, key, evaluatedValue, oldValue);
         }
+    }
+
+    _executeConditional(data, componentId) {
+        const { condition, then: thenValue, else: elseValue } = data;
+        const result = this._evaluateExpression(condition, componentId);
+        return this._evaluateExpression(result ? thenValue : elseValue, componentId);
     }
 
     _executeGetState(data, componentId) {
@@ -385,7 +398,8 @@ class NextPyActionRuntime {
         switch (op) {
             case '+': return +operandValue;
             case '-': return -operandValue;
-            case 'not': return !operandValue;
+            case 'not':
+            case '!': return !operandValue;
             case '~': return ~operandValue;
             default:
                 throw new Error(`Unknown unary operator: ${op}`);
@@ -605,6 +619,9 @@ class NextPyActionRuntime {
     async _executeCallServerAction(data, componentId) {
         let actionName = data.action;
         let params = data.params || {};
+        const loadingKey = data.loadingKey || '_server_loading';
+        const dataKey = data.dataKey || '_server_result';
+        const errorKey = data.errorKey || '_server_error';
 
         // Resolve action name if it's a dynamic value
         if (actionName && typeof actionName === 'object' && actionName.type) {
@@ -618,9 +635,9 @@ class NextPyActionRuntime {
 
         // Store loading state
         if (component) {
-            component.state['_server_loading'] = true;
-            component.state['_server_error'] = null;
-            this._triggerComponentUpdate(componentId, '_server_loading', true);
+            component.state[loadingKey] = true;
+            component.state[errorKey] = null;
+            this._triggerComponentUpdate(componentId, loadingKey, true);
         }
 
         try {
@@ -630,23 +647,45 @@ class NextPyActionRuntime {
                 body: JSON.stringify({ action: actionName, params: params }),
             });
 
-            const result = await response.json();
+            const responseData = await response.json();
+
+            // ServerAction.execute wraps every action result as
+            // {success, data, timestamp}. Handlers expect the action's own
+            // result ({success, error, user, ...}), so unwrap it; otherwise
+            // failed actions look successful and clients redirect anyway.
+            const result = (
+                responseData &&
+                responseData.success === true &&
+                Object.prototype.hasOwnProperty.call(responseData, 'data') &&
+                Object.prototype.hasOwnProperty.call(responseData, 'timestamp')
+            ) ? responseData.data : responseData;
+
+            if (!response.ok) {
+                const message = (responseData && (responseData.error || responseData.detail)) || `HTTP ${response.status}`;
+                if (component) {
+                    component.state[loadingKey] = false;
+                    component.state[errorKey] = message;
+                    this._triggerComponentUpdate(componentId, loadingKey, false);
+                    this._triggerComponentUpdate(componentId, errorKey, message);
+                }
+                return { success: false, error: message };
+            }
 
             if (component) {
-                component.state['_server_loading'] = false;
-                component.state['_server_result'] = result;
-                this._triggerComponentUpdate(componentId, '_server_loading', false);
-                this._triggerComponentUpdate(componentId, '_server_result', result);
+                component.state[loadingKey] = false;
+                component.state[dataKey] = result;
+                this._triggerComponentUpdate(componentId, loadingKey, false);
+                this._triggerComponentUpdate(componentId, dataKey, result);
             }
 
             return result;
         } catch (err) {
             console.error('CALL_SERVER_ACTION error:', err);
             if (component) {
-                component.state['_server_loading'] = false;
-                component.state['_server_error'] = err.message || String(err);
-                this._triggerComponentUpdate(componentId, '_server_loading', false);
-                this._triggerComponentUpdate(componentId, '_server_error', err.message || String(err));
+                component.state[loadingKey] = false;
+                component.state[errorKey] = err.message || String(err);
+                this._triggerComponentUpdate(componentId, loadingKey, false);
+                this._triggerComponentUpdate(componentId, errorKey, err.message || String(err));
             }
             return { success: false, error: err.message || String(err) };
         }
@@ -689,22 +728,21 @@ class NextPyActionRuntime {
     }
 
     _triggerComponentUpdate(componentId, key, newValue, oldValue) {
-        // Sync to hydration component's StateManager to trigger DOM data-bind updates
+        // Sync to hydration component's StateManager to trigger DOM data-bind updates.
+        // Guard the bridge so StateManager.set does not call back into this method
+        // and run conditionals/effects a second time.
         if (window.nextpyComponents && window.nextpyComponents[componentId]) {
             const hydComp = window.nextpyComponents[componentId];
             if (hydComp.stateManager && hydComp.stateManager.state[key] !== newValue) {
-                hydComp.stateManager.set(key, newValue);
+                this._hydrationSyncDepth = (this._hydrationSyncDepth || 0) + 1;
+                try {
+                    hydComp.stateManager.set(key, newValue);
+                } finally {
+                    this._hydrationSyncDepth = Math.max(0, (this._hydrationSyncDepth || 1) - 1);
+                }
             }
         }
 
-        // Find DOM elements that depend on this state (legacy data-state-* attributes)
-        const elements = document.querySelectorAll(`[data-state-${key}]`);
-        elements.forEach(element => {
-            if (element.dataset.componentId === componentId) {
-                element.textContent = newValue;
-            }
-        });
-        
         // FIX: Re-evaluate ALL conditional elements for this component on ANY state change.
         // Conditions reference derived Python variables (user, is_employer, etc.) that
         // don't match state keys (_fetch_data_0, etc.), so we can't rely on the
@@ -727,6 +765,27 @@ class NextPyActionRuntime {
                 }
             }
         });
+
+        // Re-apply reactive class/style/attribute bindings (theme switching,
+        // disabled states, aria attributes, ...).
+        this._applyAttributeBindings(null, componentId);
+
+        // Run useEffect callbacks whose dependency list contains this key.
+        this._runEffects(componentId, key);
+
+        // Find DOM elements that depend on this state (legacy data-state-* attributes).
+        // This must run after conditional content is (re)injected so state-driven text
+        // inside conditionals is not wiped by the template content.
+        const elements = document.querySelectorAll(`[data-state-${key}]`);
+        elements.forEach(element => {
+            if (element.dataset.componentId === componentId || !element.dataset.componentId) {
+                const text = (newValue === null || newValue === undefined) ? '' : String(newValue);
+                element.textContent = text;
+                if (element.hasAttribute('data-state-toggle')) {
+                    element.style.display = text ? '' : 'none';
+                }
+            }
+        });
         
         // Trigger custom event
         const event = new CustomEvent('nextpy:stateChange', {
@@ -744,7 +803,7 @@ class NextPyActionRuntime {
         
         try {
             // FIX: Safe expression evaluation
-            const result = this._evaluateCondition(condition, component.state);
+            const result = this._evaluateCondition(condition, component.state, componentId);
             
             // Get the true and false branches from data attributes
             const trueContent = element.dataset.ifTrue || '';
@@ -758,19 +817,145 @@ class NextPyActionRuntime {
             };
             
             // FIX: Evaluate PSX expressions inside the content before setting innerHTML
-            const derived = this._deriveVariables(component.state);
+            const derived = this._deriveVariables(component.state, componentId);
             const fullState = { ...component.state, ...derived };
             
             // Update the element content based on condition result
             if (result) {
                 const raw = unescapeHtml(trueContent);
-                element.innerHTML = this._evaluatePSXContent(raw, fullState);
+                element.innerHTML = this._sanitizeHTML(this._evaluatePSXContent(raw, fullState));
             } else {
                 const raw = unescapeHtml(falseContent);
-                element.innerHTML = this._evaluatePSXContent(raw, fullState);
+                element.innerHTML = this._sanitizeHTML(this._evaluatePSXContent(raw, fullState));
             }
+            this._applyStateBindings(element, componentId);
+            this._applyAttributeBindings(element, componentId);
         } catch (error) {
             console.error('Conditional update error:', error);
+        }
+    }
+
+    _sanitizeHTML(html) {
+        if (typeof window.nextpySanitizeHTML === 'function') {
+            return window.nextpySanitizeHTML(html);
+        }
+        const template = document.createElement('template');
+        template.innerHTML = String(html == null ? '' : html);
+        const blocked = 'script,iframe,object,embed,link,meta,base,svg,math';
+        template.content.querySelectorAll(blocked).forEach(node => node.remove());
+        const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT, null);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach(node => {
+            Array.from(node.attributes).forEach(attr => {
+                const name = attr.name.toLowerCase();
+                const value = String(attr.value || '').trim().toLowerCase();
+                const dangerousUrl = /^(javascript|vbscript|data:text\/html|data:image\/svg\+xml):/.test(value);
+                if (name.startsWith('on') || name === 'srcdoc' ||
+                    ((name === 'href' || name === 'src' || name === 'xlink:href' ||
+                      name === 'formaction' || name === 'action') && dangerousUrl)) {
+                    node.removeAttribute(attr.name);
+                }
+            });
+        });
+        return template.innerHTML;
+    }
+
+    _runEffects(componentId, changedKey = null, mount = false) {
+        const component = this.components.get(componentId);
+        if (!component || !Array.isArray(component.effects) || !component.effects.length) return;
+        if (this._effectsRunning.has(componentId)) return;
+        if (!component._effectState) component._effectState = {};
+        this._effectsRunning.add(componentId);
+        try {
+            component.effects.forEach((effect, index) => {
+                const deps = effect.deps;
+                const previous = component._effectState[index];
+                let shouldRun = false;
+                if (mount && previous === undefined) {
+                    shouldRun = true;
+                } else if (deps === null || deps === undefined) {
+                    shouldRun = true;
+                } else if (Array.isArray(deps)) {
+                    if (deps.length === 0) {
+                        shouldRun = previous === undefined;
+                    } else if (changedKey !== null) {
+                        shouldRun = deps.includes(changedKey);
+                    }
+                }
+                if (!shouldRun) return;
+                component._effectState[index] = {
+                    deps: Array.isArray(deps) ? deps.slice() : deps,
+                };
+                try {
+                    this.executeActions(effect.actions || [], componentId);
+                } catch (error) {
+                    console.error('Effect execution error:', error);
+                }
+            });
+        } finally {
+            this._effectsRunning.delete(componentId);
+        }
+    }
+
+    _evaluateAttributeTemplate(template, state) {
+        if (template === null || template === undefined) return '';
+        const text = String(template);
+        if (!text.includes('{')) {
+            return this._evaluatePSXExpr(text, state);
+        }
+        return text.replace(/\{([^{}]+)\}/g, (_, expr) => {
+            const value = this._evaluatePSXExpr(expr.trim(), state);
+            return value === null || value === undefined ? '' : String(value);
+        });
+    }
+
+    _applyAttributeBindings(root, componentId) {
+        const component = this.components.get(componentId);
+        if (!component) return;
+        const scope = { ...component.state, ...this._deriveVariables(component.state, componentId) };
+        const candidates = root ? root.querySelectorAll('*') : document.querySelectorAll('*');
+        candidates.forEach(element => {
+            const owner = element.closest('[data-component-id]');
+            if (owner && owner.dataset.componentId !== componentId) return;
+            let bindName = null;
+            for (const name of element.getAttributeNames()) {
+                if (name.startsWith('data-bind-') && name !== 'data-bind') {
+                    bindName = name;
+                    break;
+                }
+            }
+            if (!bindName) return;
+            const spec = bindName.slice('data-bind-'.length);
+            const template = element.getAttribute(bindName);
+            try {
+                const value = this._evaluateAttributeTemplate(template, scope);
+                if (spec === 'class') {
+                    element.className = String(value);
+                } else if (spec === 'style') {
+                    element.setAttribute('style', String(value));
+                } else if (spec.startsWith('attr-')) {
+                    element.setAttribute(spec.slice(5), String(value));
+                }
+            } catch (error) {
+                console.warn('Attribute binding update failed:', bindName, error);
+            }
+        });
+    }
+
+    _applyStateBindings(root, componentId) {
+        const component = this.components.get(componentId);
+        if (!component) return;
+        for (const [stateKey, stateValue] of Object.entries(component.state)) {
+            const nodes = root.querySelectorAll(`[data-state-${stateKey}]`);
+            if (!nodes.length) continue;
+            const text = (stateValue === null || stateValue === undefined) ? '' : String(stateValue);
+            nodes.forEach(node => {
+                node.textContent = text;
+                if (node.hasAttribute('data-state-toggle')) {
+                    node.style.display = text ? '' : 'none';
+                }
+            });
         }
     }
 
@@ -793,9 +978,15 @@ class NextPyActionRuntime {
         expr = expr.trim();
         if (expr === '') return '';
         
-        // Fast path: simple string literals
+        // Fast path: simple string literals.  Do not mistake a ternary such
+        // as ``'a' if cond else 'b'`` for one quoted string — it starts and
+        // ends with a quote but contains inner quotes.
         if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
-            return expr.slice(1, -1);
+            const quote = expr[0];
+            const inner = expr.slice(1, -1);
+            if (!inner.includes(quote) && !inner.includes('\\' + quote)) {
+                return inner;
+            }
         }
         // Fast path: numeric literals
         if (/^-?\d+(\.\d+)?$/.test(expr)) {
@@ -972,7 +1163,8 @@ class NextPyActionRuntime {
             }
         }
         
-        const varDecls = unknownIds.map(id => `let ${id} = null;`).join(' ');
+        const uniqueUnknownIds = [...new Set(unknownIds)];
+        const varDecls = uniqueUnknownIds.map(id => `let ${id} = null;`).join(' ');
         
         // 11. Evaluate
         try {
@@ -1167,9 +1359,9 @@ class NextPyActionRuntime {
         });
     }
 
-    _evaluateCondition(expr, state) {
+    _evaluateCondition(expr, state, componentId = null) {
         // Derive common Python variables from fetch data before evaluating
-        const derived = this._deriveVariables(state);
+        const derived = this._deriveVariables(state, componentId);
         
         // Merge derived variables with state for evaluation
         const fullState = { ...state, ...derived };
@@ -1183,7 +1375,7 @@ class NextPyActionRuntime {
         }
     }
 
-    _deriveVariables(state) {
+    _deriveVariables(state, componentId = null) {
         // Derive common Python variables from fetch data
         // This bridges the gap between Python server-side derived variables
         // and client-side state that only has raw fetch data
@@ -1237,6 +1429,25 @@ class NextPyActionRuntime {
             } else if (data.applications && Array.isArray(data.applications) && !derived.my_apps) {
                 derived.my_apps = data.applications;
                 derived.has_my_apps = data.applications.length > 0;
+            }
+        }
+
+        // Re-evaluate source-level derived expressions captured during SSR.
+        // This is what makes values like ``bg_color = ... if theme == ...``
+        // (flattened by Python f-strings before rendering) reactive again.
+        const runtimeComponent = componentId ? this.components.get(componentId) : null;
+        const expressions = runtimeComponent && runtimeComponent.derivedExpressions
+            ? runtimeComponent.derivedExpressions
+            : {};
+        const scope = { ...state, ...derived };
+        for (const [name, expr] of Object.entries(expressions)) {
+            try {
+                const value = this._evaluatePSXExpr(expr, scope);
+                scope[name] = value;
+                derived[name] = value;
+            } catch (error) {
+                // Keep SSR value if the client evaluator cannot handle an
+                // expression (e.g. a server-only helper call).
             }
         }
         
@@ -1388,6 +1599,12 @@ window.navigateTo = function(url) {
     } else {
         window.location.href = url;
     }
+};
+
+// Full navigation — used after auth changes so SSR layout (nav/auth state)
+// is refreshed along with the page.
+window.nextpyHardNavigate = function(url) {
+    window.location.href = url;
 };
 
 // SPA-style reload — re-fetches current page content without full reload

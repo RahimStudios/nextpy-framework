@@ -327,6 +327,13 @@ class DatabaseState:
     """State manager with database persistence"""
     
     def __init__(self, table_name: str = "app_state"):
+        import re
+        if not isinstance(table_name, str) or not re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*", table_name
+        ):
+            raise ValueError(
+                "table_name must be a simple SQL identifier (letters, digits, underscore)"
+            )
         self.table_name = table_name
         self._cache: Dict[str, Any] = {}
     

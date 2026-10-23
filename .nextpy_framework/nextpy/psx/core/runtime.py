@@ -340,15 +340,46 @@ class PSXRuntime:
                 continue
 
             # Handle different value types
+            binding_expr = None
             if isinstance(value, str):
                 # Evaluate {expr} attribute values (preserved by process_python_logic fix)
                 if value.startswith('{') and value.endswith('}'):
                     inner = value[1:-1].strip()
+                    binding_expr = inner
                     try:
                         evaluated = self.evaluate_expression(inner)
                         value = str(evaluated) if evaluated is not None else ''
                     except Exception:
                         value = inner
+                else:
+                    # Python f-strings flatten derived values before PSX ever
+                    # sees them.  Reconstruct a small template for reactive
+                    # attributes (class/style/aria/data) by replacing values
+                    # that came from known state or derived variables.
+                    dynamic_vars = self.context.get('_psx_dynamic_vars') or []
+                    should_bind = (
+                        html_key in ('class', 'style')
+                        or html_key.startswith('aria-')
+                        or (html_key.startswith('data-') and not html_key.startswith(
+                            ('data-if-', 'data-bind', 'data-handler-', 'data-component-id')
+                        ))
+                    )
+                    if should_bind and dynamic_vars:
+                        template = value
+                        changed = False
+                        for var_name in dynamic_vars:
+                            if str(var_name).startswith('_'):
+                                continue
+                            var_value = self.context.get(var_name)
+                            if isinstance(var_value, str) and var_value and var_value in template:
+                                template = template.replace(var_value, '{' + str(var_name) + '}')
+                                changed = True
+                        if changed:
+                            binding_expr = template
+                if (binding_expr and html_key not in ('value', 'code')
+                        and not html_key.startswith(('data-if-', 'data-bind', 'data-handler-', 'data-component-id'))):
+                    bind_suffix = html_key if html_key in ('class', 'style') else f'attr-{html_key}'
+                    attrs.append(f'data-bind-{bind_suffix}="{html.escape(binding_expr, quote=True)}"')
                 # Special handling for 'code' attribute - render as raw text without escaping
                 if html_key == 'code' and node.attributes.get('_raw_code'):
                     attrs.append(f'{html_key}="{value}"')

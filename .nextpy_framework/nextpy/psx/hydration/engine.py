@@ -21,6 +21,8 @@ class HydrationContext:
     data_bindings: Dict[str, str] = field(default_factory=dict)  # {elementId: {prop: binding}}
     mount_actions: List[Dict[str, Any]] = field(default_factory=list)
     registered_functions: Dict[str, Any] = field(default_factory=dict)
+    derived_expressions: Dict[str, str] = field(default_factory=dict)
+    client_effects: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class HydrationEngine:
@@ -39,14 +41,29 @@ class HydrationEngine:
         """Register a component for hydration"""
         component_id = self.generate_component_id()
         
+        # SSR props must be available to client-side conditionals and
+        # expressions (``user``, ``jobs``, ...). Only copy JSON-safe values so
+        # request objects and other server-only state never reach the client.
+        initial_state = dict(component_data.get('state') or {})
+        for key, value in (component_data.get('props') or {}).items():
+            if key.startswith('_') or key in initial_state:
+                continue
+            try:
+                json.dumps(value)
+            except (TypeError, ValueError):
+                continue
+            initial_state[key] = value
+        
         context = HydrationContext(
             component_id=component_id,
             component_name=component_data.get('name', 'Component'),
-            initial_state=component_data.get('state', {}),
+            initial_state=initial_state,
             event_handlers=component_data.get('handlers', {}),
             use_effects=component_data.get('effects', []),
             mount_actions=component_data.get('mount_actions', []),
             registered_functions=component_data.get('registered_functions', {}),
+            derived_expressions=component_data.get('derived_expressions', {}),
+            client_effects=component_data.get('client_effects', []),
         )
         
         self.contexts[component_id] = context
@@ -64,7 +81,35 @@ class HydrationEngine:
             return f"""
 (function() {{
     'use strict';
-    
+
+    // Shared conservative HTML sanitizer for client-side innerHTML updates.
+    if (!window.nextpySanitizeHTML) {{
+        window.nextpySanitizeHTML = function(html) {{
+            const template = document.createElement('template');
+            template.innerHTML = String(html == null ? '' : html);
+            const blocked = 'script,iframe,object,embed,link,meta,base,svg,math';
+            template.content.querySelectorAll(blocked).forEach(node => node.remove());
+            const walker = document.createTreeWalker(
+                template.content, NodeFilter.SHOW_ELEMENT, null
+            );
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach(node => {{
+                Array.from(node.attributes).forEach(attr => {{
+                    const name = attr.name.toLowerCase();
+                    const value = String(attr.value || '').trim().toLowerCase();
+                    const dangerousUrl = /^(javascript|vbscript|data:text\\/html|data:image\\/svg\\+xml):/.test(value);
+                    if (name.startsWith('on') || name === 'srcdoc' ||
+                        ((name === 'href' || name === 'src' || name === 'xlink:href' ||
+                          name === 'formaction' || name === 'action') && dangerousUrl)) {{
+                        node.removeAttribute(attr.name);
+                    }}
+                }});
+            }});
+            return template.innerHTML;
+        }};
+    }}
+
     // Component: {context.component_name}
     const componentId = '{component_id}';
     
@@ -88,8 +133,36 @@ class HydrationEngine:
         }}
         
         set(key, value) {{
+            // Accept camelCase aliases from lambda setters even when useState
+            // declared a snake_case variable (setFullName -> full_name).
+            if (!(key in this.state)) {{
+                const normalized = String(key).replace(/_/g, '').toLowerCase();
+                const match = Object.keys(this.state).find(
+                    (candidate) => candidate.replace(/_/g, '').toLowerCase() === normalized
+                );
+                if (match) key = match;
+            }}
             const oldValue = this.state[key];
             this.state[key] = value;
+
+            // Keep the action runtime's state in sync with DOM input bindings.
+            // Input lambdas update StateManager directly, while server-action
+            // params are evaluated from NextPyActionRuntime state.
+            try {{
+                const runtime = window.NextPyActionRuntime;
+                const actionComponent = runtime && runtime.components && this.component && runtime.components.get(this.component.id);
+                if (actionComponent) {{
+                    actionComponent.state[key] = value;
+                    // Re-evaluate conditionals, attribute bindings and derived
+                    // expressions through the shared action runtime.  Without
+                    // this bridge legacy ``create_on*`` handlers updated only
+                    // ``data-bind`` text while ``data-if-condition`` blocks
+                    // stayed frozen at their SSR state.
+                    if (typeof runtime._triggerComponentUpdate === 'function' && !runtime._hydrationSyncDepth) {{
+                        runtime._triggerComponentUpdate(this.component.id, key, value, oldValue);
+                    }}
+                }}
+            }} catch (error) {{}}
             
             // CRITICAL: ONLY ONE UPDATE PATH - notify subscribers which triggers updateBindings
             this.notifySubscribers(key, value, oldValue);
@@ -146,6 +219,12 @@ class HydrationEngine:
             // Register with global action runtime so _executeVariable resolves state
             if (window.NextPyActionRuntime) {{
                 window.NextPyActionRuntime.registerComponent(id, {{ ...initialState }});
+                const _derivedExpressions = {json.dumps(context.derived_expressions)};
+                const _runtimeComponent = window.NextPyActionRuntime.components.get(id);
+                if (_runtimeComponent) {{
+                    _runtimeComponent.derivedExpressions = _derivedExpressions;
+                    _runtimeComponent.effects = {json.dumps(context.client_effects)};
+                }}
                 // FIX: Rebuild dependency map after DOM is ready
                 setTimeout(() => {{
                     window.NextPyActionRuntime.rebuildDependencyMap(id);
@@ -209,12 +288,16 @@ class HydrationEngine:
                 if (property === 'innerHTML') {{
                     // Safe innerHTML with basic sanitization
                     if (typeof value === 'string') {{
-                        element.innerHTML = value.replace(/<script[^>]*>.*?<\\/script>/gi, '');
+                        element.innerHTML = window.nextpySanitizeHTML(value);
+                    }} else if (value !== null && typeof value === 'object') {{
+                        element.innerHTML = window.nextpySanitizeHTML(JSON.stringify(value));
                     }} else {{
-                        element.innerHTML = String(value);
+                        element.innerHTML = window.nextpySanitizeHTML(value === null || value === undefined ? '' : String(value));
                     }}
                 }} else if (property === 'textContent') {{
-                    element.textContent = String(value);
+                    element.textContent = value !== null && typeof value === 'object'
+                        ? JSON.stringify(value)
+                        : (value === null || value === undefined ? '' : String(value));
                 }} else if (property === 'value') {{
                     // Special handling for input value to ensure it updates
                     element.value = String(value);
@@ -277,7 +360,80 @@ class HydrationEngine:
         }}
         
         setupEffects() {{
-            // Effects setup would go here
+            if (!this.element) return;
+            this.mountEffects = [];
+            this.dependentEffects = [];
+            const effectEls = this.element.querySelectorAll('[data-effect]');
+            effectEls.forEach(effectEl => {{
+                const effectJson = effectEl.getAttribute('data-effect');
+                if (!effectJson) return;
+                try {{
+                    const effect = JSON.parse(effectJson);
+                    this.runEffect(effect);
+                }} catch (e) {{
+                    console.error('Failed to parse effect:', e);
+                }}
+            }});
+            const depEls = this.element.querySelectorAll('[data-effect-deps]');
+            depEls.forEach(effectEl => {{
+                const effectJson = effectEl.getAttribute('data-effect-deps');
+                const depsAttr = effectEl.getAttribute('data-deps');
+                if (!effectJson) return;
+                try {{
+                    const effect = JSON.parse(effectJson);
+                    const deps = depsAttr ? depsAttr.split(',').map(d => d.trim()) : [];
+                    this.registerDependentEffect(effect, deps);
+                }} catch (e) {{
+                    console.error('Failed to parse dependent effect:', e);
+                }}
+            }});
+        }}
+        
+        runEffect(effect) {{
+            try {{
+                if (effect.type === 'FETCH') {{
+                    const {{ url, options, dataKey, loadingKey, errorKey }} = effect;
+                    if (loadingKey) this.stateManager.set(loadingKey, true);
+                    if (errorKey) this.stateManager.set(errorKey, null);
+                    fetch(url, options || {{}})
+                        .then(resp => {{
+                            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                            const ct = resp.headers.get('content-type') || '';
+                            return ct.includes('application/json') ? resp.json() : resp.text();
+                        }})
+                        .then(result => {{
+                            if (dataKey) this.stateManager.set(dataKey, result);
+                        }})
+                        .catch(err => {{
+                            if (errorKey) this.stateManager.set(errorKey, err.message || String(err));
+                        }})
+                        .finally(() => {{
+                            if (loadingKey) this.stateManager.set(loadingKey, false);
+                        }});
+                }} else if (effect.type === 'TIMER') {{
+                    const {{ interval, stateKey, incrementBy }} = effect;
+                    const timerId = setInterval(() => {{
+                        if (stateKey) {{
+                            const current = this.stateManager.get(stateKey) || 0;
+                            this.stateManager.set(stateKey, current + (incrementBy || 1));
+                        }}
+                    }}, interval || 1000);
+                    this.unsubscribers.push(() => clearInterval(timerId));
+                }} else if (effect.type === 'CUSTOM_JS' && effect.code) {{
+                    try {{ new Function(effect.code).call(this); }} catch (e) {{ console.error('Custom effect error:', e); }}
+                }}
+            }} catch (e) {{
+                console.error('Effect execution error:', e);
+            }}
+        }}
+        
+        registerDependentEffect(effect, deps) {{
+            deps.forEach(dep => {{
+                const unsub = this.stateManager.subscribe((key) => {{
+                    if (key === dep) this.runEffect(effect);
+                }});
+                this.unsubscribers.push(unsub);
+            }});
         }}
         
         updateBindings() {{
@@ -297,13 +453,15 @@ class HydrationEngine:
 
                 try {{
                     if (property === 'textContent') {{
-                        el.textContent = String(value);
+                        el.textContent = value !== null && typeof value === 'object'
+                            ? JSON.stringify(value)
+                            : (value === null || value === undefined ? '' : String(value));
                     }} else if (property === 'innerHTML') {{
                         // For innerHTML, convert arrays/objects to JSON for proper display
-                        if (Array.isArray(value) || typeof value === 'object') {{
-                            el.innerHTML = JSON.stringify(value);
+                        if (Array.isArray(value) || (value !== null && typeof value === 'object')) {{
+                            el.innerHTML = window.nextpySanitizeHTML(JSON.stringify(value));
                         }} else {{
-                            el.innerHTML = String(value);
+                            el.innerHTML = window.nextpySanitizeHTML(value === null || value === undefined ? '' : String(value));
                         }}
                     }} else if (property in el) {{
                         el[property] = value;
@@ -314,15 +472,21 @@ class HydrationEngine:
         }}
         
         destroy() {{
-            // Cleanup all subscriptions
             this.unsubscribers.forEach(unsub => {{
                 try {{
-                    unsub();
+                    if (typeof unsub === 'function') unsub();
+                    else if (unsub && typeof unsub === 'object' && unsub.callback) {{
+                        const idx = this.stateManager.subscribers.indexOf(unsub.callback);
+                        if (idx > -1) this.stateManager.subscribers.splice(idx, 1);
+                    }}
                 }} catch (error) {{
                 }}
             }});
             this.unsubscribers = [];
             this.bindings.clear();
+            if (window.nextpyComponents && window.nextpyComponents[this.id]) {{
+                delete window.nextpyComponents[this.id];
+            }}
         }}
     }}
     
@@ -433,11 +597,8 @@ class HydrationEngine:
                 'name': 'Component',
                 'state': state
             })
-            # Update the component ID to match the registered one
             registered_id = list(self.contexts.keys())[-1]
-            print('this is is', registered_id)
             if registered_id != component_id:
-                # Move the context to the correct ID
                 self.contexts[component_id] = self.contexts.pop(registered_id)
                 self.contexts[component_id].component_id = component_id
         

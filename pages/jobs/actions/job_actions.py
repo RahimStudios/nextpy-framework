@@ -4,7 +4,7 @@ All use the generic CRUD pattern with WebSocket broadcasts.
 """
 
 from fastapi import Request
-from nextpy.db import get_session, Job, Application, User
+from nextpy.db import get_session, Job, Application, User, apply_filters, paginate, count_by
 from nextpy.auth import get_user_id_from_request
 from nextpy.server_actions import server_action
 
@@ -41,18 +41,24 @@ def _job_to_dict(job):
     }
 
 
-def _application_to_dict(app, db=None):
-    """Serialize an Application model to a dict."""
+def _application_to_dict(app):
+    """Serialize an Application model without per-row database queries.
+
+    ``Application.applicant`` and ``Application.job`` are joined eagerly by the
+    ORM, so this is safe to call in a loop after a normal query.
+    """
     applicant = None
-    if db and app.applicant_id:
-        u = db.query(User).filter(User.id == app.applicant_id).first()
-        if u:
-            applicant = {"id": u.id, "full_name": u.full_name or u.username, "email": u.email}
+    if getattr(app, "applicant", None) is not None:
+        u = app.applicant
+        applicant = {
+            "id": u.id,
+            "full_name": u.full_name or u.username,
+            "email": u.email,
+        }
     job = None
-    if db and app.job_id:
-        j = db.query(Job).filter(Job.id == app.job_id).first()
-        if j:
-            job = {"id": j.id, "title": j.title, "company": j.company}
+    if getattr(app, "job", None) is not None:
+        j = app.job
+        job = {"id": j.id, "title": j.title, "company": j.company}
     return {
         "id": app.id,
         "job_id": app.job_id,
@@ -137,8 +143,8 @@ async def update_job(
     company: str = "",
     location: str = "",
     description: str = "",
-    salary_min: int = 0,
-    salary_max: int = 0,
+    salary_min: str = "",
+    salary_max: str = "",
     job_type: str = "full_time",
     experience_level: str = "mid",
 ):
@@ -147,20 +153,39 @@ async def update_job(
     if user_id is None:
         return {"success": False, "error": "Not authenticated"}
 
+    title = (title or "").strip()
+    company = (company or "").strip()
+    description = (description or "").strip()
+    if not title or not company or not description:
+        return {"success": False, "error": "Title, company and description are required"}
+
+    try:
+        job_id = int(job_id)
+    except (ValueError, TypeError):
+        return {"success": False, "error": "Invalid job"}
+
+    try:
+        salary_min = int(salary_min) if str(salary_min).strip() else 0
+        salary_max = int(salary_max) if str(salary_max).strip() else 0
+    except (ValueError, TypeError):
+        return {"success": False, "error": "Salary must be a number"}
+
     db = get_session()
     try:
         job = db.query(Job).filter(Job.id == job_id, Job.employer_id == user_id).first()
         if not job:
             return {"success": False, "error": "Job not found or not yours"}
 
-        if title: job.title = title.strip()
-        if company: job.company = company.strip()
-        if location: job.location = location.strip()
-        if description: job.description = description.strip()
-        if salary_min: job.salary_min = max(salary_min, 0)
-        if salary_max: job.salary_max = max(salary_max, 0)
-        if job_type in ("full_time", "part_time", "contract", "internship"): job.job_type = job_type
-        if experience_level in ("entry", "mid", "senior", "lead"): job.experience_level = experience_level
+        job.title = title
+        job.company = company
+        job.location = (location or "").strip()
+        job.description = description
+        job.salary_min = max(salary_min, 0)
+        job.salary_max = max(salary_max, 0)
+        if job_type in ("full_time", "part_time", "contract", "internship"):
+            job.job_type = job_type
+        if experience_level in ("entry", "mid", "senior", "lead"):
+            job.experience_level = experience_level
 
         db.commit()
         db.refresh(job)
@@ -208,34 +233,45 @@ async def get_my_jobs(request: Request):
     db = get_session()
     try:
         jobs = db.query(Job).filter(Job.employer_id == user_id).order_by(Job.created_at.desc()).all()
+        job_ids = [job.id for job in jobs]
+        counts = count_by(
+            db, Application, "job_id", {"job_id": job_ids} if job_ids else None
+        )
         result = []
-        for j in jobs:
-            d = _job_to_dict(j)
-            d["app_count"] = db.query(Application).filter(Application.job_id == j.id).count()
-            result.append(d)
+        for job in jobs:
+            data = _job_to_dict(job)
+            data["app_count"] = counts.get(job.id, 0)
+            result.append(data)
         return {"success": True, "data": result}
     finally:
         db.close()
 
 
 @server_action()
-async def list_jobs(search: str = "", job_type: str = "", experience_level: str = ""):
-    """List all active jobs with optional filters."""
+async def list_jobs(
+    search: str = "",
+    job_type: str = "",
+    experience_level: str = "",
+    page: int = 1,
+    per_page: int = 20,
+):
+    """List active jobs with filters and pagination."""
     db = get_session()
     try:
-        q = db.query(Job).filter(Job.is_active == True)
-        if search:
-            term = f"%{search}%"
-            q = q.filter(
-                (Job.title.ilike(term)) | (Job.company.ilike(term)) | (Job.description.ilike(term))
-            )
-        if job_type:
-            q = q.filter(Job.job_type == job_type)
-        if experience_level:
-            q = q.filter(Job.experience_level == experience_level)
-
-        jobs = q.order_by(Job.created_at.desc()).limit(50).all()
-        return {"success": True, "data": [_job_to_dict(j) for j in jobs]}
+        query = apply_filters(
+            db.query(Job),
+            Job,
+            {"is_active": True, "job_type": job_type, "experience_level": experience_level},
+            allowed=("is_active", "job_type", "experience_level"),
+            search=search,
+            search_fields=("title", "company", "description"),
+        )
+        result = paginate(query.order_by(Job.created_at.desc()), page, per_page)
+        return {
+            "success": True,
+            "data": [_job_to_dict(job) for job in result.items],
+            "pagination": result.to_dict(),
+        }
     finally:
         db.close()
 
@@ -275,7 +311,7 @@ async def apply_to_job(request: Request, job_id: int = 0, cover_letter: str = ""
         db.commit()
         db.refresh(application)
 
-        data = _application_to_dict(application, db)
+        data = _application_to_dict(application)
         _broadcast("applications", "APPLICATION_CHANGED", data, "created")
         return {"success": True, "data": data}
     except Exception as e:
@@ -300,7 +336,7 @@ async def get_my_applications(request: Request):
             .order_by(Application.created_at.desc())
             .all()
         )
-        return {"success": True, "data": [_application_to_dict(a, db) for a in apps]}
+        return {"success": True, "data": [_application_to_dict(a) for a in apps]}
     finally:
         db.close()
 
@@ -324,7 +360,7 @@ async def get_job_applications(request: Request, job_id: int = 0):
             .order_by(Application.created_at.desc())
             .all()
         )
-        return {"success": True, "data": [_application_to_dict(a, db) for a in apps]}
+        return {"success": True, "data": [_application_to_dict(a) for a in apps]}
     finally:
         db.close()
 
@@ -352,7 +388,7 @@ async def update_application_status(request: Request, application_id: int = 0, s
         db.commit()
         db.refresh(app)
 
-        data = _application_to_dict(app, db)
+        data = _application_to_dict(app)
         _broadcast("applications", "APPLICATION_CHANGED", data, "updated")
         return {"success": True, "data": data}
     except Exception as e:

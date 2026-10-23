@@ -15,7 +15,13 @@ from nextpy.core.data_fetching import (
 from nextpy.components.head import Head
 from nextpy.components.link import Link
 from nextpy.server.app import create_app, get_api_app
-from nextpy.db import Base, Model, Database, get_db, get_session, session, init_db
+from nextpy.db import (
+    Base, Model, Database, get_db, get_session, session, init_db,
+    Page, paginate, transaction, get_or_none, get_or_404, batch_get,
+    apply_filters, eager_load, serialize_model, count_by,
+)
+from nextpy.cache import MemoryCache, cached, get_cache, invalidate
+from nextpy.tasks import BackgroundQueue, get_queue, enqueue, task as background_task
 from nextpy.api import api, fetch_api
 from nextpy.admin import AdminSite, admin, register
 from nextpy.auth import (
@@ -23,6 +29,7 @@ from nextpy.auth import (
     get_session as get_auth_session, delete_session,
     hash_password, verify_password,
     set_session_cookie, get_user_id_from_request, clear_session_cookie,
+    get_user_from_request, current_user_id, require_user, require_role,
 )
 
 # Enhanced full-stack features
@@ -57,7 +64,7 @@ from nextpy.psx import (
     useDebugValue, useTransition, useDeferredValue, useId,
     
     # Custom Hooks
-    useCounter, useToggle, useLocalStorage, useFetch, useDebounce,
+    useCounter, useToggle, useLocalStorage, useFetch, useAction, useDebounce,
     useInterval, usePrevious, useAsync, useMediaQuery, useGeolocation, usePerformance,
     
     # Server action bridge
@@ -107,8 +114,13 @@ __all__ = [
     # Core NextPy
     'Router', 'Route', 'DynamicRoute', 'Renderer', 'create_app', 'get_api_app',
     'Base', 'Model', 'Database', 'init_db', 'get_db', 'get_session', 'session', 'api', 'fetch_api',
+    'Page', 'paginate', 'transaction', 'get_or_none', 'get_or_404', 'batch_get',
+    'apply_filters', 'eager_load', 'serialize_model', 'count_by',
+    'MemoryCache', 'cached', 'get_cache', 'invalidate',
+    'BackgroundQueue', 'get_queue', 'enqueue', 'background_task',
     'AuthManager', 'require_auth', 'create_session', 'get_auth_session', 'delete_session',
     'hash_password', 'verify_password', 'set_session_cookie', 'get_user_id_from_request', 'clear_session_cookie',
+    'get_user_from_request', 'current_user_id', 'require_user', 'require_role',
     'get_server_side_props', 'get_static_props', 'get_static_paths',
     'Head', 'Link', 'AdminSite', 'admin', 'register',
     
@@ -138,7 +150,7 @@ __all__ = [
     'useDebugValue', 'useTransition', 'useDeferredValue', 'useId',
     
     # PSX Custom Hooks
-    'useCounter', 'useToggle', 'useLocalStorage', 'useFetch', 'useDebounce',
+    'useCounter', 'useToggle', 'useLocalStorage', 'useFetch', 'useAction', 'useDebounce',
     'useInterval', 'usePrevious', 'useAsync', 'useMediaQuery', 'useGeolocation', 'usePerformance',
     
     # PSX Event Handlers

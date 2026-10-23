@@ -12,7 +12,7 @@ from datetime import datetime
 
 from fastapi import Request, HTTPException
 from nextpy.db import get_session
-from nextpy.auth import AuthManager
+from nextpy.auth import AuthManager, get_user_from_request
 
 T = TypeVar('T')
 
@@ -41,21 +41,41 @@ class ServerAction:
     
     _actions: Dict[str, Callable] = {}
     _validators: Dict[str, Callable] = {}
-    
+    _schemas: Dict[str, Any] = {}
+    _auth: Dict[str, Any] = {}
+    _roles: Dict[str, Any] = {}
+
     @classmethod
-    def register(cls, name: Optional[str] = None, validate: Optional[Callable] = None):
+    def register(
+        cls,
+        name: Optional[str] = None,
+        validate: Optional[Callable] = None,
+        *,
+        schema: Any = None,
+        auth: bool = False,
+        roles: Optional[tuple] = None,
+    ):
         """
-        Decorator to register a server action
-        
+        Decorator to register a server action.
+
         Args:
             name: Custom action name (defaults to function name)
             validate: Optional validation function
+            schema: Optional Pydantic model or :class:`ActionSchema`
+            auth: Require an authenticated user
+            roles: Optional tuple/set of allowed user roles
         """
         def decorator(func: Callable) -> Callable:
             action_name = name or func.__name__
             cls._actions[action_name] = func
             if validate:
                 cls._validators[action_name] = validate
+            if schema is not None:
+                cls._schemas[action_name] = schema
+            if auth or roles:
+                cls._auth[action_name] = True
+            if roles:
+                cls._roles[action_name] = set(roles)
             
             @wraps(func)
             async def wrapper(*args, **kwargs):
@@ -150,47 +170,129 @@ class ServerAction:
         """
         if params is None:
             params = {}
-        
+        if not isinstance(params, dict):
+            raise HTTPException(status_code=400, detail="Action params must be an object")
+
         action = cls.get_action(name)
         if not action:
             raise HTTPException(status_code=404, detail=f"Action '{name}' not found")
-        
-        # Build kwargs from params
-        kwargs = dict(params)
-        
+
+        func = getattr(action, '_original_func', action)
+        sig = inspect.signature(func)
+        kwargs = cls._filter_params(sig, params)
+
+        schema = cls._schemas.get(name)
+        if schema is not None:
+            validated = cls._validate_schema(schema, kwargs)
+            if validated is not None:
+                return validated
+
+        if cls._auth.get(name):
+            user = get_user_from_request(request)
+            if user is None:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            allowed_roles = cls._roles.get(name)
+            if allowed_roles and getattr(user, 'role', None) not in allowed_roles:
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
+            request.state.user = user
+            request.state.user_id = user.id
+            if 'user' in sig.parameters:
+                kwargs['user'] = user
+
         # Add request context if function accepts it
-        sig = inspect.signature(action)
         if 'request' in sig.parameters:
             kwargs['request'] = request
-        
+
         # Add response context if function accepts it
         if response is not None and 'response' in sig.parameters:
             kwargs['response'] = response
-        
+
         # Add database session if function accepts it
+        session_obj = None
         if 'session' in sig.parameters or 'db' in sig.parameters:
-            kwargs['session'] = get_session()
-        
-        # Execute the wrapped function
-        wrapper = cls._actions[name]
-        if hasattr(wrapper, '_original_func'):
-            # Call the wrapper with error handling
-            if inspect.iscoroutinefunction(wrapper):
-                return await wrapper(**kwargs)
-            else:
+            session_obj = get_session()
+            if 'session' in sig.parameters:
+                kwargs['session'] = session_obj
+            if 'db' in sig.parameters:
+                kwargs['db'] = session_obj
+
+        try:
+            wrapper = cls._actions[name]
+            if hasattr(wrapper, '_original_func'):
+                if inspect.iscoroutinefunction(wrapper):
+                    return await wrapper(**kwargs)
                 return wrapper(**kwargs)
-        else:
-            # Direct execution for backwards compatibility
+
             if inspect.iscoroutinefunction(action):
                 result = await action(**kwargs)
             else:
                 result = action(**kwargs)
-            
             return {
                 "success": True,
                 "data": result,
                 "timestamp": datetime.utcnow().isoformat()
             }
+        finally:
+            if session_obj is not None:
+                session_obj.close()
+
+    @staticmethod
+    def _filter_params(sig: inspect.Signature, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop unknown keys and client-supplied context arguments."""
+        injected = {'request', 'response', 'session', 'db', 'user'}
+        accepts_kwargs = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        )
+        allowed = {
+            p.name for p in sig.parameters.values()
+            if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        }
+        return {
+            key: value for key, value in params.items()
+            if key not in injected and (accepts_kwargs or key in allowed)
+        }
+
+    @staticmethod
+    def _validate_schema(schema: Any, kwargs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Validate against Pydantic v1/v2 or :class:`ActionSchema`.
+
+        Returns ``None`` when validation succeeds, otherwise a serialized error
+        response.  On success the validated data is stored in ``kwargs``.
+        """
+        try:
+            if hasattr(schema, 'model_validate'):
+                model = schema.model_validate(kwargs)
+                kwargs.clear()
+                kwargs.update(model.model_dump())
+                return None
+            if hasattr(schema, 'parse_obj'):
+                model = schema.parse_obj(kwargs)
+                kwargs.clear()
+                kwargs.update(model.dict())
+                return None
+            if isinstance(schema, ActionSchema):
+                valid, errors = schema.validate(kwargs)
+                if not valid:
+                    return {
+                        "success": False,
+                        "error": {
+                            "type": "validation",
+                            "fields": errors or {},
+                            "message": "Validation failed",
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                return None
+        except Exception as exc:
+            return {
+                "success": False,
+                "error": {
+                    "type": "validation",
+                    "message": str(exc),
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        return None
 
 
 # Convenience decorator
@@ -210,17 +312,17 @@ async def get_health_status():
 
 @server_action()
 async def get_current_user(request: Request):
-    """Get currently authenticated user"""
+    """Get the currently authenticated user, or ``None``."""
     try:
-        token = AuthManager.get_token_from_request(request)
-        if token:
-            user = AuthManager.verify_token(token)
-            return {
-                "id": user.get("id"),
-                "email": user.get("email"),
-                "username": user.get("username")
-            }
-        return None
+        user = get_user_from_request(request)
+        if user is None:
+            return None
+        return {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "role": getattr(user, "role", None),
+        }
     except Exception:
         return None
 

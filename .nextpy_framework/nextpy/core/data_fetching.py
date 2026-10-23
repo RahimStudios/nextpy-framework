@@ -184,25 +184,23 @@ def get_static_paths(func: T) -> T:
     return wrapper
 
 
-async def execute_data_fetching(
+async def execute_data_fetching_result(
     module: Any,
     context: PageContext
-) -> Dict[str, Any]:
-    """
-    Execute the appropriate data fetching function for a page module
-    Returns the props to pass to the template
-    """
-    props = {}
-    
+) -> tuple[Dict[str, Any], Optional[int]]:
+    """Execute page data fetching and return ``(props, revalidate)``."""
+    props: Dict[str, Any] = {}
+    revalidate: Optional[int] = None
+
     for name in ["getServerSideProps", "get_server_side_props", "getStaticProps", "get_static_props"]:
         if hasattr(module, name):
             func = getattr(module, name)
-            
+
             if asyncio.iscoroutinefunction(func):
                 result = await func(context)
             else:
                 result = func(context)
-                
+
             if isinstance(result, PropsResult):
                 if result.not_found:
                     raise PageNotFoundError()
@@ -212,6 +210,7 @@ async def execute_data_fetching(
                         result.redirect.get("permanent", False)
                     )
                 props.update(result.props)
+                revalidate = result.revalidate
             elif isinstance(result, dict):
                 if result.get("not_found"):
                     raise PageNotFoundError()
@@ -224,11 +223,23 @@ async def execute_data_fetching(
                     props.update(result["props"])
                 else:
                     props.update(result)
+                revalidate = result.get("revalidate")
             break
-            
+
+    if revalidate is None:
+        revalidate = getattr(module, "revalidate", None)
     if context._session is not None:
         context._session.close()
         context._session = None
+    return props, revalidate
+
+
+async def execute_data_fetching(
+    module: Any,
+    context: PageContext
+) -> Dict[str, Any]:
+    """Execute the appropriate data fetching function for a page module."""
+    props, _ = await execute_data_fetching_result(module, context)
     return props
 
 

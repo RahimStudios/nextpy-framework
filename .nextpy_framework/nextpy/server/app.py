@@ -4,14 +4,18 @@ Handles routing, SSR, API routes, and static file serving using PSX for everythi
 """
 
 import os
+import re
 import sys
 import asyncio
+import hashlib
 import importlib.util
+import types
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
@@ -31,10 +35,11 @@ from nextpy.core.component_renderer import ComponentRenderer, render_api, render
 from nextpy.core.data_fetching import (
     PageContext,
     execute_data_fetching,
+    execute_data_fetching_result,
     PageNotFoundError,
     RedirectError,
 )
-from nextpy.server.middleware import NextPyMiddleware
+from nextpy.server.middleware import NextPyMiddleware, CSRFMiddleware, RateLimitMiddleware
 from nextpy.security import security_manager
 from nextpy.jsx_preprocessor import JSXSyntaxError
 from nextpy.websocket import manager, handle_websocket
@@ -79,6 +84,8 @@ class NextPyApp:
             self.router = Router(str(self.pages_dir), str(self.templates_dir))
         else:
             self.router = ComponentRouter(str(self.pages_dir), str(self.templates_dir))
+            if hasattr(self.router, "renderer"):
+                self.router.renderer.debug = debug
         # keep separate renderers for templates (Jinja) and components
         from ..core import Renderer
         self.template_renderer = Renderer(
@@ -124,33 +131,74 @@ class NextPyApp:
                 print(f"Tailwind check/build failed: {e}")
         
     def _setup_middleware(self) -> None:
-        """Configure middleware"""
+        """Configure middleware with secure defaults."""
+        cors_env = os.getenv("CORS_ORIGINS", "").strip()
+        cors_origins = [origin.strip() for origin in cors_env.split(",") if origin.strip()]
+        if not cors_origins:
+            cors_origins = ["*"]
+        allow_credentials = cors_origins != ["*"]
+
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
+            allow_origins=cors_origins,
+            allow_credentials=allow_credentials,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["*"],
         )
-        
+
         self.app.add_middleware(NextPyMiddleware)
-        
+
+        csrf_origins = [
+            origin for origin in cors_origins if origin != "*"
+        ]
+        csrf_env = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
+        if csrf_env:
+            csrf_origins.extend(
+                origin.strip() for origin in csrf_env.split(",") if origin.strip()
+            )
+        self.app.add_middleware(
+            CSRFMiddleware,
+            allowed_origins=csrf_origins,
+            enabled=os.getenv("CSRF_PROTECTION", "true").lower()
+            in {"1", "true", "yes", "on"},
+        )
+
+        try:
+            rate_limit = int(os.getenv("RATE_LIMIT_PER_MINUTE", "240"))
+            auth_rate_limit = int(os.getenv("AUTH_RATE_LIMIT_PER_MINUTE", "60"))
+        except ValueError:
+            rate_limit, auth_rate_limit = 240, 60
+        self.app.add_middleware(
+            RateLimitMiddleware,
+            limit_per_minute=rate_limit,
+            auth_limit_per_minute=auth_rate_limit,
+            enabled=os.getenv("RATE_LIMIT_ENABLED", "true").lower()
+            in {"1", "true", "yes", "on"},
+        )
+
         # Add security headers middleware
         @self.app.middleware("http")
         async def add_security_headers(request: Request, call_next):
             response = await call_next(request)
-            
+
             # Add Content Security Policy
             csp_header = security_manager.create_csp_header()
             response.headers["Content-Security-Policy"] = csp_header
-            
+
             # Add other security headers
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["X-XSS-Protection"] = "1; mode=block"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
             response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-            
+            response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+            response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+            response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+            if request.url.scheme == "https":
+                response.headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains"
+                )
+
             return response
         
     def _setup_static_files(self) -> None:
@@ -199,6 +247,17 @@ class NextPyApp:
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             """Handle WebSocket connections for live development"""
+            origin = websocket.headers.get("origin")
+            trusted = [
+                origin_value.strip()
+                for origin_value in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+                if origin_value.strip()
+            ]
+            if origin and not security_manager.is_trusted_origin(
+                origin, websocket.url.netloc, trusted
+            ):
+                await websocket.close(code=1008)
+                return
             await handle_websocket(websocket)
     
     def _load_project_api(self) -> None:
@@ -477,6 +536,11 @@ Allow: /
                 
                 return json_response
                 
+            except HTTPException as exc:
+                return JSONResponse(
+                    {"error": exc.detail, "success": False},
+                    status_code=exc.status_code,
+                )
             except Exception as e:
                 if self.debug:
                     import traceback
@@ -492,7 +556,8 @@ Allow: /
                 
                 # Get type hints for schema
                 import inspect
-                hints = inspect.get_type_hints(action)
+                original = getattr(action, '_original_func', action)
+                hints = inspect.get_type_hints(original)
                 
                 return JSONResponse({
                     "name": action_name,
@@ -528,16 +593,23 @@ Allow: /
                 # API routes - FIXED: use default argument to capture route correctly
                 from fastapi import Request
                 def create_api_handler(route_obj):
-                    async def api_handler(request: Request, route=route_obj, **path_params):
-                        # delegate to async handler
-                        return await self._handle_api_request(request, route, path_params)
+                    async def api_handler(request: Request):
+                        # ``route_obj`` is captured in the closure.  Using it as
+                        # a default parameter made FastAPI treat the Route as a
+                        # query default and try to deepcopy it, which fails for
+                        # routes that reference modules.  ``**kwargs`` is not
+                        # supported by FastAPI dependency injection either, so
+                        # read path params from the request.
+                        return await self._handle_api_request(
+                            request, route_obj, dict(request.path_params)
+                        )
                     return api_handler
                 
                 fastapi_path = self._convert_route_to_fastapi_path(route.path)
                 self.app.add_api_route(
                     fastapi_path,
                     create_api_handler(route),
-                    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+                    methods=["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
                 )
             else:
                 # Page routes - FIXED: use default argument to capture route correctly
@@ -553,7 +625,7 @@ Allow: /
                 self.app.add_route(
                     fastapi_path,
                     create_page_handler(route.path),
-                    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+                    methods=["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
                 )
         
     def _load_module_from_file(self, file_path: Path, module_name: Optional[str] = None) -> Any:
@@ -569,8 +641,14 @@ Allow: /
             return self._modules_cache[cache_key]
         
         try:
-            # Check if this is a PSX/JSX file before trying PSX loader
-            is_psx_file = file_path.suffix in ['.psx'] or file_path.name.endswith('.jsx')
+            # Check if this is a PSX/JSX file before trying PSX loader.
+            # API modules must use the normal Python/JSX transformer so
+            # ``get``/``post`` handlers remain importable; the PSX page
+            # compiler returns a callable component wrapper instead.
+            is_api_file = "api" in file_path.parts
+            is_psx_file = (
+                file_path.suffix in ['.psx'] or file_path.name.endswith('.jsx')
+            ) and not is_api_file
             
             # Try PSX loader only for PSX files (preferred method)
             if is_psx_file:
@@ -604,6 +682,22 @@ Allow: /
                 except Exception:
                     pass  # PSX compilation failed, fall back to other methods
             
+            # API modules written as .psx are plain Python handlers. Compile
+            # them directly because spec_from_file_location does not recognize
+            # the .psx extension.
+            if is_api_file and file_path.suffix == ".psx":
+                module = types.ModuleType(module_name)
+                module.__file__ = str(file_path)
+                code = compile(
+                    file_path.read_text(encoding="utf-8"),
+                    str(file_path),
+                    "exec",
+                )
+                exec(code, module.__dict__)
+                if not self.debug:
+                    self._modules_cache[cache_key] = module
+                return module
+
             # Try JSX transformer for backward compatibility
             try:
                 from nextpy.jsx_transformer import JSXTransformer
@@ -637,6 +731,96 @@ Allow: /
                 print(f"Error loading module from {file_path}: {e}")
             return None
         
+    @staticmethod
+    def _mark_internal_links(html_text: str) -> str:
+        """Add SPA navigation attributes to internal anchors.
+
+        Also strips HTMX navigation attributes so the client router is the
+        single navigation mechanism (prevents duplicate requests).
+        """
+        def _replace(match):
+            full_tag = match.group(0)
+            if 'data-nextpy-link' in full_tag:
+                return full_tag
+            href_match = re.search(r'href=["\']([^"\']*)["\']', full_tag)
+            if not href_match:
+                return full_tag
+            href = href_match.group(1)
+            if not (href.startswith('/') or href.startswith('#')):
+                return full_tag
+            target_match = re.search(r'(?<![-\w])target=["\']([^"\']*)["\']', full_tag)
+            if target_match and target_match.group(1) != '_self':
+                return full_tag
+
+            cleaned = re.sub(
+                r'\s(?:hx-get|hx-target|hx-swap|hx-push-url|hx-trigger|preload)=["\'][^"\']*["\']',
+                '',
+                full_tag,
+            )
+            return cleaned.replace(
+                '<a ',
+                '<a data-nextpy-link="true" data-nextpy-prefetch="true" ',
+                1,
+            )
+
+        return re.sub(r'<a\b[^>]*>', _replace, html_text)
+
+    @staticmethod
+    def _inject_inline_script(
+        html: str, script: str, name: str = "runtime", marker: Optional[str] = None
+    ) -> str:
+        """Insert an inline script before </body> instead of after </html>.
+
+        Injected scripts carry ``data-nextpy-runtime`` so the client router
+        never re-executes them during a full-page swap.
+        """
+        marker = marker or f'data-nextpy-runtime="{name}"'
+        if marker in html:
+            return html
+        tag = f'<script data-nextpy-runtime="{name}">{script}</script>'
+        index = html.lower().rfind('</body>')
+        if index != -1:
+            return html[:index] + tag + html[index:]
+        return html + tag
+
+    @staticmethod
+    def _inject_layout_signature(html: str, signature: str) -> str:
+        """Expose the layout signature so the client can request fragments."""
+        if 'nextpy-layout' in html:
+            return html
+        marker = f'<meta name="nextpy-layout" content="{signature}">'
+        lower = html.lower()
+        index = lower.find('</head>')
+        if index != -1:
+            return html[:index] + marker + html[index:]
+        return marker + html
+
+    @staticmethod
+    def _page_headers(cacheable: bool, html: str) -> Dict[str, str]:
+        etag = '"' + hashlib.md5(html.encode('utf-8')).hexdigest() + '"'
+        if cacheable:
+            return {
+                'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+                'ETag': etag,
+                'X-NextPy-Cacheable': 'true',
+            }
+        return {
+            'Cache-Control': 'no-store',
+            'ETag': etag,
+            'X-NextPy-Cacheable': 'false',
+        }
+
+    @staticmethod
+    def _not_modified(request: Request, headers: Dict[str, str]) -> Optional[Response]:
+        etag = headers.get('ETag')
+        if not etag:
+            return None
+        if_none_match = request.headers.get('if-none-match', '')
+        candidates = {value.strip() for value in if_none_match.split(',')}
+        if etag in candidates or if_none_match.strip() == '*':
+            return Response(status_code=304, headers=headers)
+        return None
+
     async def _handle_request(self, request: Request, path: str) -> Response:
         """Handle a page request"""
         match = self.router.match(path)
@@ -659,7 +843,7 @@ Allow: /
                 "query": dict(request.query_params),
                 "request": request,
             }
-            
+
             module = self._load_module_from_file(route.file_path)
             if module:
                 try:
@@ -668,39 +852,110 @@ Allow: /
                         query=dict(request.query_params),
                         req=request,
                     )
-                    fetched_props = await execute_data_fetching(module, page_context)
+                    fetched_props, page_revalidate = await execute_data_fetching_result(module, page_context)
                     context.update(fetched_props)
+                    context["__nextpy_props_loaded"] = True
+                    if page_revalidate is not None and hasattr(route, "renderer"):
+                        route.renderer.revalidate_cache[str(route.file_path)] = int(page_revalidate)
                 except Exception as e:
                     if self.debug:
                         print(f"Data fetching error for component route: {e}")
-            
-            html = self.router.render_route(route, context)
-            # Auto-add data-nextpy-link to internal <a> tags
-            import re
-            def _mark_internal_links(html_text):
-                def _replace_link(match):
-                    full_tag = match.group(0)
-                    href = match.group(1)
-                    if href.startswith('/') or href.startswith('#'):
-                        if 'data-nextpy-link' not in full_tag:
-                            return full_tag.replace('<a ', '<a data-nextpy-link="true" ', 1)
-                    return full_tag
-                return re.sub(r'<a\s+([^>]*?)href="([^"]*)"', _replace_link, html_text)
-            
-            if '<a ' in html:
-                html = _mark_internal_links(html)
-            if 'data-nextpy-crud' in html:
-                html = f"{html}<script>{CRUD_RUNTIME_SCRIPT}</script>"
-            if 'data-nextpy-link' in html:
-                html = f"{html}<script>{CLIENT_ROUTER_SCRIPT}</script>"
-            return HTMLResponse(
-                content=html,
-                headers={
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0",
-                },
+
+            layout_sig = self.router.get_layout_signature(route)
+            want_fragment = (
+                request.headers.get("x-nextpy-fragment", "").lower() == "true"
+                and request.headers.get("x-nextpy-layout-sig", "") == layout_sig
             )
+            cacheable = self.router.is_cacheable(route, context)
+
+            stream_enabled = bool(getattr(module, "streaming", False)) if module else False
+            custom_stream = bool(module and callable(getattr(module, "stream", None)))
+            if (stream_enabled or custom_stream) and not want_fragment:
+                from nextpy.core.streaming import chunk_html
+
+                if custom_stream:
+                    async def _stream_body():
+                        async for chunk in self.router.render_route_stream(
+                            route, context, include_layout=True
+                        ):
+                            yield chunk
+                else:
+                    stream_html = self.router.render_route(
+                        route, context, include_layout=True
+                    )
+                    if '<a ' in stream_html:
+                        stream_html = self._mark_internal_links(stream_html)
+                    stream_html = self._inject_layout_signature(stream_html, layout_sig)
+                    if 'data-nextpy-crud' in stream_html:
+                        stream_html = self._inject_inline_script(
+                            stream_html, CRUD_RUNTIME_SCRIPT, 'crud'
+                        )
+                    stream_html = self._inject_inline_script(
+                        stream_html, CLIENT_ROUTER_SCRIPT, 'router'
+                    )
+
+                    async def _stream_body():
+                        for chunk in chunk_html(stream_html):
+                            yield chunk
+
+                headers = {
+                    "Cache-Control": "no-cache",
+                    "X-NextPy-Streaming": "true",
+                    "X-NextPy-Layout-Sig": layout_sig,
+                }
+                if cacheable:
+                    isr_ttl = self.router.get_revalidate(route) or self.router._cache_ttl
+                    headers["Cache-Control"] = (
+                        f"public, max-age=0, s-maxage={int(isr_ttl)}, "
+                        f"stale-while-revalidate={int(isr_ttl)}"
+                    )
+                    headers["X-NextPy-ISR"] = "true"
+                return StreamingResponse(
+                    _stream_body(), media_type="text/html", headers=headers
+                )
+
+            html = self.router.render_route(
+                route, context, include_layout=not want_fragment
+            )
+
+            if '<a ' in html:
+                html = self._mark_internal_links(html)
+
+            if not want_fragment:
+                html = self._inject_layout_signature(html, layout_sig)
+                if 'data-nextpy-crud' in html:
+                    html = self._inject_inline_script(
+                        html, CRUD_RUNTIME_SCRIPT, 'crud'
+                    )
+                html = self._inject_inline_script(
+                    html, CLIENT_ROUTER_SCRIPT, 'router'
+                )
+
+            is_error_html = (
+                'data-nextpy-error-overlay="true"' in html
+                or 'data-nextpy-error="true"' in html
+                or html.lstrip().startswith("<h1>Error rendering route:")
+            )
+            if is_error_html:
+                cacheable = False
+
+            headers = self._page_headers(cacheable, html)
+            headers["X-NextPy-Layout-Sig"] = layout_sig
+            if want_fragment:
+                headers["X-NextPy-Fragment"] = "true"
+                title = context.get("title")
+                if title:
+                    headers["X-NextPy-Title"] = str(title)
+
+            status_code = 500 if is_error_html else 200
+            if status_code == 500:
+                headers["Cache-Control"] = "no-store"
+
+            not_modified = self._not_modified(request, headers)
+            if not_modified is not None:
+                return not_modified
+
+            return HTMLResponse(content=html, headers=headers, status_code=status_code)
             
         context = PageContext(
             params=params,
@@ -710,10 +965,12 @@ Allow: /
         
         try:
             props = {}
+            component_props = {"params": params}
             module = self._load_module_from_file(route.file_path)
             
             if module:
                 props = await execute_data_fetching(module, context)
+                component_props = {**props, "params": params}
                 
                 # Execute the page component to get JSX
                 content = ""
@@ -763,33 +1020,26 @@ Allow: /
             )
             
             # Auto-add data-nextpy-link to internal <a> tags for client-side navigation
-            import re
-            host = request.headers.get('host', 'localhost')
-            def _mark_internal_links(html_text):
-                def _replace_link(match):
-                    full_tag = match.group(0)
-                    href = match.group(1)
-                    if href.startswith('/') or href.startswith('#'):
-                        if 'data-nextpy-link' not in full_tag:
-                            return full_tag.replace('<a ', '<a data-nextpy-link="true" ', 1)
-                    return full_tag
-                return re.sub(r'<a\s+([^>]*?)href="([^"]*)"', _replace_link, html_text)
-            
             if '<a ' in html:
-                html = _mark_internal_links(html)
-            
-            # Inject client-side router if internal links exist
-            if 'data-nextpy-link' in html:
-                html = f"{html}<script>{CLIENT_ROUTER_SCRIPT}</script>"
-            
-            return HTMLResponse(
-                content=html,
-                headers={
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0",
-                },
+                html = self._mark_internal_links(html)
+
+            # Inject the client-side router on every full page so SPA
+            # navigation works even when the first page has no anchors.
+            html = self._inject_inline_script(
+                html, CLIENT_ROUTER_SCRIPT, 'router'
             )
+
+            cacheable = (
+                not request.cookies
+                and not request.headers.get('authorization')
+                and not (module is not None and hasattr(module, 'getServerSideProps'))
+            )
+            headers = self._page_headers(cacheable, html)
+            not_modified = self._not_modified(request, headers)
+            if not_modified is not None:
+                return not_modified
+
+            return HTMLResponse(content=html, headers=headers)
             
         except PageNotFoundError:
             return await self._render_404(request)
@@ -810,50 +1060,164 @@ Allow: /
         route,
         params: Optional[Dict[str, str]] = None
     ) -> Response:
-        """Handle an API route request"""
+        """Dispatch a file-based API request to the correct HTTP method.
+
+        Supports GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, dynamic path
+        parameters, tuple returns ``(body, status)`` / ``(body, status, headers)``
+        and FastAPI ``HTTPException`` responses.
+        """
         params = params or {}
-        
+
         module = self._load_module_from_file(route.file_path)
         if not module:
             return JSONResponse(
                 {"error": "Module not found"},
                 status_code=500,
             )
-            
-        method = request.method.lower()
-        handler = getattr(module, method, None) or getattr(module, method.upper(), None)
-        
-        if not handler:
-            handler = getattr(module, "handler", None) or getattr(module, "default", None)
-            
-        if not handler:
+
+        method = request.method.upper()
+        handler = (
+            getattr(module, method.lower(), None)
+            or getattr(module, method, None)
+        )
+
+        # A module-level ``handler`` is an explicit catch-all; ``default`` is a
+        # page component and must never be used as an API fallback.
+        if handler is None and method != "OPTIONS":
+            handler = getattr(module, "handler", None)
+
+        if handler is None and method == "HEAD":
+            handler = getattr(module, "get", None) or getattr(module, "GET", None)
+
+        if handler is None:
+            allowed = self._api_allowed_methods(module)
+            if method == "OPTIONS":
+                return Response(status_code=204, headers={"Allow": ", ".join(allowed)})
             return JSONResponse(
-                {"error": f"No handler for {request.method}"},
+                {"error": f"Method {method} not allowed for this endpoint"},
                 status_code=405,
+                headers={"Allow": ", ".join(allowed)},
             )
-            
+
         try:
-            if asyncio.iscoroutinefunction(handler):
-                result = await handler(request, params)
-            else:
-                result = handler(request, params)
-                
+            result = await self._call_api_handler(handler, request, params)
+
+            status_code = 200
+            headers = None
+            if isinstance(result, tuple):
+                if len(result) == 2:
+                    result, status_code = result
+                elif len(result) == 3:
+                    result, status_code, headers = result
+
             if isinstance(result, Response):
                 return result
-            elif isinstance(result, dict):
-                return JSONResponse(result)
+            if result is None:
+                return Response(status_code=status_code if status_code != 200 else 204)
+            if isinstance(result, (dict, list, str, int, float, bool)):
+                response = JSONResponse(result, status_code=status_code)
             else:
-                return JSONResponse({"data": result})
-                
-        except Exception as e:
+                response = JSONResponse({"data": result}, status_code=status_code)
+            if headers:
+                for key, value in headers.items():
+                    response.headers[key] = str(value)
+            return response
+
+        except HTTPException as exc:
+            return JSONResponse(
+                {"detail": exc.detail},
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        except RequestValidationError as exc:
+            return JSONResponse(
+                {"detail": exc.errors()},
+                status_code=422,
+            )
+        except (KeyError, ValueError, TypeError) as exc:
             if self.debug:
                 import traceback
                 traceback.print_exc()
             return JSONResponse(
-                {"error": str(e)},
+                {"error": str(exc) if self.debug else "Invalid request"},
+                status_code=400,
+            )
+        except Exception as exc:
+            if self.debug:
+                import traceback
+                traceback.print_exc()
+            return JSONResponse(
+                {"error": str(exc) if self.debug else "Internal server error"},
                 status_code=500,
             )
-        
+
+    @staticmethod
+    def _api_allowed_methods(module: Any) -> list:
+        methods = []
+        for method in ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"):
+            if hasattr(module, method.lower()) or hasattr(module, method):
+                methods.append(method)
+        if "GET" in methods and "HEAD" not in methods:
+            methods.append("HEAD")
+        methods.append("OPTIONS")
+        return methods
+
+    @staticmethod
+    async def _call_api_handler(handler: Callable, request: Request, params: Dict[str, str]) -> Any:
+        """Call an API handler with the arguments its signature declares."""
+        import inspect
+
+        try:
+            signature = inspect.signature(handler)
+            parameters = signature.parameters
+        except (TypeError, ValueError):
+            parameters = {}
+
+        positional = [
+            p for p in parameters.values()
+            if p.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        has_var_kwargs = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+        )
+
+        def coerce(value: Any, annotation: Any) -> Any:
+            if annotation in (int, "int"):
+                return int(value)
+            if annotation in (float, "float"):
+                return float(value)
+            if annotation in (bool, "bool"):
+                return str(value).lower() in {"1", "true", "yes", "on"}
+            return value
+
+        kwargs = {}
+        for name, value in params.items():
+            if name in parameters and parameters[name].kind in (
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            ):
+                kwargs[name] = coerce(value, parameters[name].annotation)
+
+        if has_var_kwargs:
+            call = lambda: handler(request, **kwargs)  # noqa: E731
+        elif "params" in parameters:
+            call = lambda: handler(request, params)  # noqa: E731
+        elif kwargs:
+            call = lambda: handler(request, **kwargs)  # noqa: E731
+        elif len(positional) >= 2:
+            # Backwards compatibility for ``handler(request, params)`` where
+            # the second parameter has a different name.
+            call = lambda: handler(request, params)  # noqa: E731
+        else:
+            call = lambda: handler(request)  # noqa: E731
+
+        if asyncio.iscoroutinefunction(handler):
+            return await call()
+        return call()
+
     def _ensure_tailwind_compiled(self) -> None:
         """Conditionally build Tailwind CSS if env var is set and file is outdated"""
         if os.getenv("NEXTPY_AUTO_BUILD_TAILWIND", "false").lower() != "true":
@@ -932,6 +1296,14 @@ Allow: /
         
     async def _render_error(self, request: Request, error: Exception) -> HTMLResponse:
         """Render enhanced error pages based on error type"""
+        if self.debug:
+            from nextpy.server.debug import render_debug_error_html
+
+            return HTMLResponse(
+                content=render_debug_error_html(error, request_path=request.url.path),
+                status_code=500,
+                headers={"Cache-Control": "no-store"},
+            )
         try:
             # Handle specific error types
             if isinstance(error, JSXSyntaxError):
@@ -1486,6 +1858,8 @@ Allow: /
     def reload_routes(self) -> None:
         """Reload all routes (for hot reload)"""
         self._modules_cache.clear()
+        if hasattr(self.router, "invalidate_cache"):
+            self.router.invalidate_cache()
         if demo_router.should_serve_demo():
             self.router = Router(str(self.pages_dir), str(self.templates_dir))
             self.router.enable_demo_mode()

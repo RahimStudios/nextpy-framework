@@ -195,8 +195,8 @@ class ComponentHydrator:
         })
         wrapped_html = self.engine.generate_html_wrapper(component_id, html, metadata['state'])
         
-        # Generate hydration script for all components
-        hydration_script = self.engine.generate_hydration_script()
+        # Emit only this component's hydration script.
+        hydration_script = self.engine.generate_hydration_script(component_id)
         
         # Combine HTML and script
         return f"{wrapped_html}\n<script type='text/javascript'>\n{hydration_script}\n</script>"
@@ -206,9 +206,9 @@ class ComponentHydrator:
         """Wrap component HTML with hydration data"""
         return self.engine.generate_html_wrapper(component_id, html, state)
     
-    def generate_hydration_script(self) -> str:
-        """Generate complete hydration script"""
-        return self.engine.generate_hydration_script()
+    def generate_hydration_script(self, component_id: Optional[str] = None) -> str:
+        """Generate hydration script for one component (or all if omitted)."""
+        return self.engine.generate_hydration_script(component_id)
 
 
 # Global component hydrator instance

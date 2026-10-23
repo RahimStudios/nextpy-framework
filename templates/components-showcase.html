@@ -13,7 +13,7 @@
                 <span class="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold">{{ category.count }}</span>
             </div>
             <ul class="space-y-2">
-                {% for item in category.items %}
+                {% for item in category['items'] %}
                 <li class="text-gray-700 flex items-center">
                     <span class="text-blue-600 mr-2">•</span>
                     {{ item }}

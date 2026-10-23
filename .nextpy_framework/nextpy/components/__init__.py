@@ -26,20 +26,15 @@ from nextpy.components.navigation import (
     SearchBar, BreadcrumbNav
 )
 
-# Legacy feedback components
-from nextpy.components.feedback import Alert as LegacyAlert, Badge as LegacyBadge, Progress as LegacyProgress
-
-# Legacy loader components
-from nextpy.components.loader import spinner, skeleton, progress_bar, loading_screen
-
-# Legacy toast components
-from nextpy.components.toast import Toast, get_toast, toast_html
-
-# Legacy visual components
-from nextpy.components.visual import (
-    Tabs as LegacyTabs, Accordion, Dropdown as LegacyDropdown, Modal, 
-    Card as LegacyCard, Breadcrumb as LegacyBreadcrumb, Pagination as LegacyPagination
-)
+# Legacy aliases for components that were renamed/consolidated
+LegacyAlert = Alert
+LegacyBadge = Badge
+LegacyProgress = Progress
+LegacyTabs = Tabs
+LegacyDropdown = Dropdown
+LegacyCard = Card
+LegacyBreadcrumb = Breadcrumb
+LegacyPagination = Pagination
 
 # Hooks provider
 from nextpy.components.hooks_provider import HooksProvider, HooksContext, with_hooks
@@ -64,11 +59,9 @@ __all__ = [
     "Navbar", "NavSidebar", "Menu", "Dropdown", "Tabs", "Pagination", 
     "SearchBar", "BreadcrumbNav",
     
-    # Legacy components (still available)
+    # Legacy aliases (still available)
     "LegacyAlert", "LegacyBadge", "LegacyProgress",
-    "spinner", "skeleton", "progress_bar", "loading_screen",
-    "Toast", "get_toast", "toast_html",
-    "LegacyTabs", "Accordion", "LegacyDropdown", "Modal", 
-    "LegacyCard", "LegacyBreadcrumb", "LegacyPagination",
+    "LegacyTabs", "LegacyDropdown", "LegacyCard",
+    "LegacyBreadcrumb", "LegacyPagination",
     "HooksProvider", "HooksContext", "with_hooks"
 ]

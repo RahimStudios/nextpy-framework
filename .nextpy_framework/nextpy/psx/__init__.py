@@ -20,7 +20,7 @@ from .components.component import (
     useImperativeHandle, useLayoutEffect, useDebugValue, useTransition,
     useDeferredValue, useId,
     # Custom Hooks
-    useCounter, useToggle, useLocalStorage, useFetch, useCrudEvent, useDebounce,
+    useCounter, useToggle, useLocalStorage, useFetch, useAction, useCrudEvent, useDebounce,
     useInterval, usePrevious, useAsync, useMediaQuery, useGeolocation, usePerformance,
     # Server action bridge
     callServerAction,
@@ -58,91 +58,373 @@ CLIENT_ROUTER_SCRIPT = r"""
 (function () {
     if (window.__nextpyRouterInstalled) return;
     window.__nextpyRouterInstalled = true;
-    var cache = new Map();
-    var navigating = false;
+
+    var FRESH_MS = 5 * 60 * 1000;        // serve from cache without revalidation
+    var STALE_MS = 15 * 60 * 1000;       // serve stale, then revalidate in background
+    var MAX_ENTRIES = 40;
+    var MAX_PARALLEL_PREFETCH = 3;
+
+    var cache = new Map();               // href -> {html, ts, fragment, title, sig, stale}
+    var inflight = new Map();            // key -> Promise
+    var executedSrc = new Set();
+    var scrollPositions = new Map();
+    var prefetchQueue = [];
+    var prefetchActive = 0;
+    var observedLinks = new Set();
+    var observer = null;
+    var navToken = 0;
+    // The URL currently rendered in the DOM. Location changes before popstate
+    // fires, so compare against this instead of window.location.
+    var renderedHref = window.location.pathname + window.location.search;
 
     function isInternal(url) {
         return url.origin === window.location.origin &&
             (url.protocol === 'http:' || url.protocol === 'https:');
     }
 
-    async function load(url, replace, scroll) {
-        if (navigating) return;
-        navigating = true;
-        try {
-            var response = await fetch(url.href, {
-                headers: {'X-NextPy-Navigation': 'true', 'Accept': 'text/html'}
-            });
-            if (!response.ok) throw new Error('Navigation failed: ' + response.status);
-            var documentText = await response.text();
-            var parsed = new DOMParser().parseFromString(documentText, 'text/html');
-            if (!parsed.body) throw new Error('Navigation returned invalid HTML');
-            document.body.replaceWith(parsed.body);
-            document.title = parsed.title || document.title;
-            if (replace) history.replaceState({}, '', url.href);
-            else history.pushState({}, '', url.href);
-            if (scroll !== false) window.scrollTo(0, 0);
-            // Re-execute scripts in the new body for hydration + interactivity
-            var scripts = document.querySelectorAll('script');
-            scripts.forEach(function(oldScript) {
-                var newScript = document.createElement('script');
-                if (oldScript.src) newScript.src = oldScript.src;
-                else newScript.textContent = oldScript.textContent;
-                oldScript.parentNode.replaceChild(newScript, oldScript);
-            });
-            document.dispatchEvent(new CustomEvent('nextpy:navigate', {detail: {url: url.href}}));
-        } catch (error) {
-            console.error('[NextPy] client navigation failed; using browser navigation', error);
-            window.location.href = url.href;
-        } finally {
-            navigating = false;
+    function currentUrl() {
+        return window.location.pathname + window.location.search;
+    }
+
+    function layoutSig() {
+        var meta = document.querySelector('meta[name="nextpy-layout"]');
+        return meta ? (meta.getAttribute('content') || '') : '';
+    }
+
+    function updateLayoutSig(sig) {
+        if (!sig) return;
+        var meta = document.querySelector('meta[name="nextpy-layout"]');
+        if (!meta) {
+            meta = document.createElement('meta');
+            meta.setAttribute('name', 'nextpy-layout');
+            document.head.appendChild(meta);
+        }
+        meta.setAttribute('content', sig);
+    }
+
+    function cacheGet(href) {
+        var entry = cache.get(href);
+        if (!entry) return null;
+        var age = Date.now() - entry.ts;
+        if (age > STALE_MS) {
+            cache.delete(href);
+            return null;
+        }
+        cache.delete(href);
+        cache.set(href, entry);
+        // Personalized (uncacheable) pages paint instantly from cache but are
+        // always revalidated in the background.
+        entry.stale = entry.personal === true || age > FRESH_MS;
+        return entry;
+    }
+
+    function cacheSet(href, entry) {
+        entry.ts = Date.now();
+        entry.stale = false;
+        if (cache.has(href)) cache.delete(href);
+        cache.set(href, entry);
+        while (cache.size > MAX_ENTRIES) {
+            cache.delete(cache.keys().next().value);
         }
     }
 
+    function fetchPage(href, opts) {
+        opts = opts || {};
+        var key = href + (opts.fragment ? '|fragment' : '|full');
+        if (inflight.has(key)) return inflight.get(key);
+
+        var headers = {'X-NextPy-Navigation': 'true', 'Accept': 'text/html'};
+        if (opts.fragment) {
+            headers['X-NextPy-Fragment'] = 'true';
+            var sig = layoutSig();
+            if (sig) headers['X-NextPy-Layout-Sig'] = sig;
+        }
+
+        var promise = fetch(href, {headers: headers})
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                var fragment = response.headers.get('X-NextPy-Fragment') === 'true';
+                var title = response.headers.get('X-NextPy-Title') || '';
+                var sig = response.headers.get('X-NextPy-Layout-Sig') || '';
+                var personal = response.headers.get('X-NextPy-Cacheable') === 'false';
+                return response.text().then(function (html) {
+                    return {
+                        html: html,
+                        fragment: fragment,
+                        title: title,
+                        sig: sig,
+                        personal: personal,
+                    };
+                });
+            })
+            .finally(function () { inflight.delete(key); });
+
+        inflight.set(key, promise);
+        return promise;
+    }
+
+    function runScripts(root) {
+        var scripts = (root || document).querySelectorAll('script');
+        scripts.forEach(function (oldScript) {
+            // Framework runtimes are already executing in this document.
+            if (oldScript.hasAttribute('data-nextpy-runtime')) {
+                oldScript.parentNode.removeChild(oldScript);
+                return;
+            }
+            // External scripts already loaded once need not be fetched/executed again.
+            if (oldScript.src) {
+                if (executedSrc.has(oldScript.src)) return;
+                executedSrc.add(oldScript.src);
+            }
+            var newScript = document.createElement('script');
+            for (var i = 0; i < oldScript.attributes.length; i++) {
+                newScript.setAttribute(oldScript.attributes[i].name, oldScript.attributes[i].value);
+            }
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+    }
+
+    function finishNavigation(href, opts) {
+        if (opts.replace) {
+            history.replaceState({}, '', href);
+        } else if (opts.push !== false) {
+            history.pushState({}, '', href);
+        }
+        renderedHref = href;
+        if (opts.scroll !== false) {
+            var y = opts.restoreScroll ? (scrollPositions.get(href) || 0) : 0;
+            window.scrollTo(0, y);
+        }
+        document.dispatchEvent(new CustomEvent('nextpy:navigate', {detail: {url: href}}));
+        scanLinks();
+    }
+
+    function applyEntry(entry, href, opts) {
+        if (entry.fragment) {
+            // Fragments only contain page content, not the layout. Applying a
+            // cached fragment from another layout would keep the previous
+            // layout (e.g. docs sidebar) around an unrelated page.
+            if (!entry.sig || entry.sig !== layoutSig()) return false;
+            var target = document.getElementById('nextpy-page');
+            if (!target) return false;
+            var holder = document.createElement('div');
+            holder.innerHTML = entry.html;
+            var incoming = holder.querySelector('#nextpy-page');
+            var node = incoming || holder;
+            target.replaceWith(node);
+            runScripts(node);
+            if (entry.title) document.title = entry.title;
+            if (entry.sig) updateLayoutSig(entry.sig);
+            finishNavigation(href, opts);
+            return true;
+        }
+
+        var parsed = new DOMParser().parseFromString(entry.html, 'text/html');
+        if (!parsed.body) throw new Error('Navigation returned invalid HTML');
+        document.body.replaceWith(parsed.body);
+        if (parsed.title && parsed.title.textContent) {
+            document.title = parsed.title.textContent;
+        }
+        var meta = parsed.querySelector('meta[name="nextpy-layout"]');
+        if (meta) updateLayoutSig(meta.getAttribute('content'));
+        runScripts(document.body);
+        finishNavigation(href, opts);
+        return true;
+    }
+
+    async function load(url, opts) {
+        opts = opts || {};
+        var target = new URL(url, window.location.href);
+        if (!isInternal(target)) {
+            window.location.href = target.href;
+            return;
+        }
+
+        // Same rendered document: only the hash changed. Do not compare with
+        // window.location here; on popstate the URL has already changed while
+        // the DOM still shows the previous page.
+        if (target.pathname + target.search === renderedHref) {
+            if (target.hash) {
+                var el = document.querySelector(target.hash);
+                if (el) el.scrollIntoView();
+                else window.location.hash = target.hash;
+                if (opts.push !== false) history.pushState({}, '', target.href);
+            } else if (opts.scroll !== false) {
+                window.scrollTo(0, 0);
+            }
+            return;
+        }
+
+        var href = target.pathname + target.search;
+        var token = ++navToken;
+        scrollPositions.set(currentUrl(), window.scrollY);
+
+        var cached = cacheGet(href);
+        if (cached) {
+            var applied = applyEntry(cached, href, opts);
+            if (applied === false) {
+                // Cached fragment belongs to a different layout; discard it
+                // and fetch the page for the current layout.
+                cache.delete(href);
+                cached = null;
+            }
+        }
+        if (cached && !cached.stale) {
+            return;
+        }
+
+        if (cached && cached.stale) {
+            // Instant paint from cache, refresh in the background.
+            fetchPage(href, {fragment: cached.fragment})
+                .then(function (fresh) {
+                    cacheSet(href, fresh);
+                    if (token === navToken && currentUrl() === href) {
+                        applyEntry(fresh, href, {replace: true, scroll: false});
+                    }
+                })
+                .catch(function () {});
+            return;
+        }
+
+        try {
+            var entry;
+            try {
+                entry = await fetchPage(href, {fragment: !!layoutSig()});
+            } catch (fragmentError) {
+                entry = await fetchPage(href, {fragment: false});
+            }
+            if (token !== navToken) return;
+            cacheSet(href, entry);
+            var applied = applyEntry(entry, href, opts);
+            if (applied === false) {
+                entry = await fetchPage(href, {fragment: false});
+                if (token !== navToken) return;
+                cacheSet(href, entry);
+                applyEntry(entry, href, opts);
+            }
+        } catch (error) {
+            console.error('[NextPy] client navigation failed; using browser navigation', error);
+            window.location.href = target.href;
+        }
+    }
+
+    function enqueuePrefetch(href) {
+        if (prefetchQueue.indexOf(href) !== -1) return;
+        prefetchQueue.push(href);
+        pumpPrefetch();
+    }
+
+    function pumpPrefetch() {
+        while (prefetchActive < MAX_PARALLEL_PREFETCH && prefetchQueue.length) {
+            var href = prefetchQueue.shift();
+            if (cache.has(href)) continue;
+            prefetchActive++;
+            fetchPage(href, {fragment: !!layoutSig()})
+                .then(function (entry) { cacheSet(href, entry); })
+                .catch(function () {})
+                .finally(function () {
+                    prefetchActive--;
+                    pumpPrefetch();
+                });
+        }
+    }
+
+    function prefetch(url) {
+        var target;
+        try { target = new URL(url, window.location.href); } catch (e) { return; }
+        if (!isInternal(target)) return;
+        if (target.pathname === window.location.pathname &&
+            target.search === window.location.search) return;
+        var href = target.pathname + target.search;
+        if (cache.has(href)) return;
+        enqueuePrefetch(href);
+    }
+
+    function idlePrefetch(href) {
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(function () { prefetch(href); }, {timeout: 1500});
+        } else {
+            setTimeout(function () { prefetch(href); }, 200);
+        }
+    }
+
+    function scanLinks() {
+        var links = document.querySelectorAll('a[data-nextpy-link], a[data-nextpy-prefetch]');
+        if (!links.length || !('IntersectionObserver' in window)) return;
+
+        if (!observer) {
+            observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (!entry.isIntersecting) return;
+                    observer.unobserve(entry.target);
+                    var href = entry.target.getAttribute('href');
+                    if (href) idlePrefetch(href);
+                });
+            }, {rootMargin: '200px'});
+        }
+
+        links.forEach(function (link) {
+            if (observedLinks.has(link)) return;
+            observedLinks.add(link);
+            observer.observe(link);
+        });
+    }
+
     document.addEventListener('click', function (event) {
-        var link = event.target.closest('[data-nextpy-link]');
-        if (!link || event.defaultPrevented || event.button !== 0 ||
-            event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
-            link.target === '_blank') return;
+        if (event.defaultPrevented || event.button !== 0 ||
+            event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        var target = event.target;
+        if (!target || typeof target.closest !== 'function') return;
+        var link = target.closest('a[data-nextpy-link], a[href]');
+        if (!link) return;
+        if (link.target && link.target !== '_self') return;
+        if (link.hasAttribute('download')) return;
+
+        var raw = link.getAttribute('href');
+        if (!raw || raw.indexOf('mailto:') === 0 || raw.indexOf('tel:') === 0) return;
+
         var url = new URL(link.href, window.location.href);
         if (!isInternal(url)) return;
+
         event.preventDefault();
-        load(url, link.dataset.nextpyReplace === 'true', link.dataset.nextpyScroll !== 'false');
-    });
+        // Prevent HTMX's bubbling click handler from issuing a second request.
+        event.stopPropagation();
 
-    document.addEventListener('mouseenter', function(event) {
-        // FIX: Safely check if event.target exists and supports closest()
-        if (!event.target || typeof event.target.closest !== 'function')
-            return;
-
-        var link = event.target.closest('[data-nextpy-prefetch]');
-        if (!link)
-            return;
-        var url = new URL(link.href, window.location.href);
-        if (isInternal(url) && !cache.has(url.href)) {
-            fetch(url.href, {
-                headers: {
-                    'X-NextPy-Navigation': 'true',
-                    'Accept': 'text/html'
-                }
-            }).then(function(response) {
-                return response.ok ? response.text() : null;
-            }).then(function(text) {
-                if (text)
-                    cache.set(url.href, text);
-            }).catch(function() {});
-        }
+        load(url.href, {
+            replace: link.dataset.nextpyReplace === 'true',
+            scroll: link.dataset.nextpyScroll !== 'false'
+        });
     }, true);
 
+    document.addEventListener('mouseenter', function (event) {
+        var target = event.target;
+        if (!target || typeof target.closest !== 'function') return;
+        var link = target.closest('a[data-nextpy-prefetch], a[data-nextpy-link]');
+        if (!link) return;
+        var href = link.getAttribute('href');
+        if (href) prefetch(link.href);
+    }, true);
 
     window.addEventListener('popstate', function () {
-        load(new URL(window.location.href), true, false);
+        load(window.location.href, {push: false, restoreScroll: true});
     });
 
-    // Expose navigate function globally for programmatic SPA navigation
-    window.__nextpyNavigate = function(url, replace, scroll) {
-        load(new URL(url, window.location.href), replace || false, scroll !== false);
+    window.__nextpyNavigate = function (url, replace, scroll) {
+        load(url, {replace: !!replace, scroll: scroll !== false});
     };
+
+    window.__nextpyRouter = {
+        navigate: window.__nextpyNavigate,
+        prefetch: prefetch,
+        cacheSize: function () { return cache.size; },
+        clearCache: function () { cache.clear(); }
+    };
+
+    document.addEventListener('nextpy:navigate', scanLinks);
+    if (document.readyState !== 'loading') scanLinks();
+    else document.addEventListener('DOMContentLoaded', scanLinks);
 })();
 """
 
@@ -596,7 +878,7 @@ __all__ = [
     'useDebugValue', 'useTransition', 'useDeferredValue', 'useId',
     
     # Custom Hooks
-    'useCounter', 'useToggle', 'useLocalStorage', 'useFetch', 'useCrudEvent', 'useDebounce',
+    'useCounter', 'useToggle', 'useLocalStorage', 'useFetch', 'useAction', 'useCrudEvent', 'useDebounce',
     'useInterval', 'usePrevious', 'useAsync', 'useMediaQuery', 'useGeolocation', 'usePerformance',
     
     # Event Handlers

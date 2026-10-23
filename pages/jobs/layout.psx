@@ -1,25 +1,46 @@
 """
 JobHub - Root layout. Wraps all /jobs pages with nav + footer.
-Uses useFetch to call get_me server action for auth state.
+Resolves the authenticated user during SSR so the nav matches the page state.
 """
 
-from nextpy.psx import component, useFetch, Link
+from nextpy.psx import component, Link, psx
 from nextpy.db import get_session, User
 from nextpy.auth import get_user_id_from_request
+import html as _html
 
 
 @component
 def Layout(children, **props):
-    props=props or {}
-    
-    me = useFetch("/__nextpy/actions/execute", {
-        "method": "POST",
-        "headers": {"Content-Type": "application/json", "Accept": "application/json"},
-        "body": '{"action":"get_me","params":{}}',
-    })
-    me_key = me["_dataKey"]
-    user_data = me.get("data", {})
-    user = user_data.get("user") if isinstance(user_data, dict) else None
+    props = props or {}
+    request = props.get("request") or props.get("req")
+    user = None
+    user_id = get_user_id_from_request(request) if request else None
+    if user_id is not None:
+        db = get_session()
+        try:
+            account = db.query(User).filter(User.id == user_id).first()
+            if account is not None:
+                user = {
+                    "full_name": account.full_name or "",
+                    "username": account.username or "",
+                }
+        finally:
+            db.close()
+
+    if user:
+        display_name = _html.escape(user.get("full_name") or user.get("username") or "")
+        auth_section = psx(
+            '<div class="flex items-center gap-3"><span class="text-sm text-gray-600">Hi, '
+            + display_name
+            + '</span><form method="post" action="/api/logout" class="inline"><button type="submit" class="px-3 py-2 text-sm font-medium text-red-600 rounded-md hover:bg-red-50">Logout</button></form></div>'
+        )
+    else:
+        auth_section = psx(
+            '<div class="flex items-center gap-3">'
+            '<a href="/jobs/login" class="px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100">Log in</a>'
+            '<a href="/jobs/register" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Sign up</a>'
+            '</div>'
+        )
 
     return (
         <html lang="en">
@@ -40,24 +61,7 @@ def Layout(children, **props):
                             <a href="/jobs/dashboard" class="hover:text-indigo-600">Dashboard</a>
                         </div>
                         <div class="flex items-center gap-3">
-                            {if user:
-                                <span class="text-sm text-gray-600">Hi, {user.get("full_name", user.get("username", ""))}</span>
-                            }
-                            {if user:
-                                <a href="/jobs/logout" class="px-3 py-2 text-sm font-medium text-red-600 rounded-md hover:bg-red-50">
-                                    Logout
-                                </a>
-                            }
-                            {if not user:
-                                <a href="/jobs/login" class="px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100">
-                                    Log in
-                                </a>
-                            }
-                            {if not user:
-                                <a href="/jobs/register" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
-                                    Sign up
-                                </a>
-                            }
+                            {auth_section}
                         </div>
                     </div>
                 </nav>

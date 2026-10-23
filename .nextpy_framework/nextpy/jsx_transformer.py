@@ -36,33 +36,20 @@ class JSXTransformer:
         
         transformed_content = preprocess_content(original_content)
         
-        # Create a temporary file with transformed content
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as temp_file:
-            temp_file.write(transformed_content)
-            temp_file_path = temp_file.name
-        
-        try:
-            # Load the transformed module
-            spec = importlib.util.spec_from_file_location(module_name, temp_file_path)
-            module = importlib.util.module_from_spec(spec)
-            
-            # Store the original file path BEFORE exec so decorators can access it
-            module.__original_file__ = str(file_path)
-            module.__is_jsx__ = True
-            
-            spec.loader.exec_module(module)
-            
-            # Add to sys.modules so it can be accessed later
-            sys.modules[module_name] = module
-            
-            return module
-            
-        finally:
-            # Clean up temporary file
-            try:
-                os.unlink(temp_file_path)
-            except:
-                pass
+        # Compile against the original filename so tracebacks point at the
+        # file the developer is editing (not a deleted temporary file).
+        import types
+
+        module = types.ModuleType(module_name)
+        module.__file__ = str(file_path)
+        module.__original_file__ = str(file_path)
+        module.__is_jsx__ = True
+
+        code = compile(transformed_content, str(file_path), "exec")
+        exec(code, module.__dict__)
+
+        sys.modules[module_name] = module
+        return module
     
     def reload_jsx_module(self, file_path: Path, module_name: str = None):
         """Reload a JSX module"""

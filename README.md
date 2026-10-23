@@ -83,19 +83,21 @@ Write component-based user interfaces using NextPy's Python Syntax Extension.
 ## Example psx 
 
 ```python
-from nextpy.psx import component, useState, create_onclick
+from nextpy.psx import component, useState
 
 @component
 def Home(props=None):
     props = props or {}
     [count, setCount] = useState(0)
-    handle_count = create_onclick(lambda e: setCount(count + 1))
+
+    def handle_increment(e):
+        setCount(count + 1)
 
     return (
         <div>
             <h1>Welcome to NextPy</h1>
 
-            <button create_onclick={handle_count}>
+            <button onclick={handle_increment}>
                 Count: {count}
             </button>
         </div>
@@ -124,7 +126,7 @@ And call it from client PSX:
 
 ```python
 
-from nextpy.psx import component, create_onclick
+from nextpy.psx import component
 from nextpy.db import Todo, get_session
 from nextpy import fetch_api
 

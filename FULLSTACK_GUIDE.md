@@ -142,6 +142,69 @@ const unsubscribe = window.nextpy.subscribe("user_theme", (newValue, oldValue, m
 unsubscribe();
 ```
 
+### Declaring Models and the Database
+
+A new NextPy app puts SQLAlchemy models in `models/` and initializes the
+database in `main.py`. Import the shared `Base` from `nextpy.db` so every model
+is registered before tables are created.
+
+```python
+# models/User.py
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
+
+from nextpy.db import Base
+
+
+class User(Base):
+    # The framework owns the "users" table; use a distinct table name for
+    # application-specific models.
+    __tablename__ = "app_users"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+```
+
+```python
+# models/__init__.py
+from models.User import User
+
+__all__ = ["User"]
+```
+
+```python
+# main.py
+from nextpy.config import settings
+from nextpy.db import init_db
+
+import models  # registers every model on Base
+
+init_db(settings["database_url"])
+
+app = nx.create_app(...)
+```
+
+Set the connection string in the project `.env`:
+
+```bash
+DATABASE_URL=sqlite:///./app.db
+# PostgreSQL: postgresql+psycopg://user:password@host:5432/dbname
+# MySQL:      mysql+pymysql://user:password@host:3306/dbname
+```
+
+Query through ORM sessions (never concatenate user input into SQL):
+
+```python
+from nextpy.db import get_session
+
+with get_session() as session:
+    user = session.query(User).filter(User.email == email).first()
+```
+
 ### Database-Backed State
 
 For persistent state that survives server restarts:

@@ -3,11 +3,14 @@ NextPy PSX Compiler - Structured Actions System
 Replacing regex-based compilation with AST-based action generation
 """
 
+import os
 import ast
 import re
 from typing import Dict, List, Any, Union, Optional
 from dataclasses import dataclass
 from enum import Enum
+
+_DEBUG = os.environ.get("NEXTPY_DEBUG") == "1"
 
 
 class ActionType(Enum):
@@ -120,7 +123,7 @@ class ActionCompiler:
         
         # FIX: Store state setter map for this compilation
         self.state_setter_map = state_setter_map or {}
-        print(f"DEBUG compile_handler: state_setter_map = {self.state_setter_map}")
+        if _DEBUG: print(f"DEBUG compile_handler: state_setter_map = {self.state_setter_map}")
         
         try:
             # Handle lambda expressions by wrapping them
@@ -204,6 +207,8 @@ class ActionCompiler:
             return self._compile_attribute(node)
         elif isinstance(node, ast.Lambda):
             return self._compile_lambda(node)
+        elif isinstance(node, ast.IfExp):
+            return self._compile_conditional(node)
         
         return None
 
@@ -383,11 +388,11 @@ class ActionCompiler:
             # Special handling for common functions
             # FIX: Use state_setter_map to identify state setters regardless of naming
             # This supports patterns like [show, change] = useState(False)
-            print(f"DEBUG _compile_call: func_name={func_name}, state_setter_map={self.state_setter_map}")
+            if _DEBUG: print(f"DEBUG _compile_call: func_name={func_name}, state_setter_map={self.state_setter_map}")
             if func_name in self.state_setter_map:
                 # This function is a state setter
                 state_key = self.state_setter_map[func_name]
-                print(f"DEBUG _compile_call: Found state setter {func_name} -> {state_key}")
+                if _DEBUG: print(f"DEBUG _compile_call: Found state setter {func_name} -> {state_key}")
                 return Action(
                     type=ActionType.SET_STATE,
                     data={
@@ -657,6 +662,21 @@ class ActionCompiler:
             data={
                 "args": args,
                 "body": body.to_dict() if body else None
+            }
+        )
+
+    def _compile_conditional(self, node: ast.IfExp) -> Action:
+        """Compile Python's inline ``A if cond else B`` expression."""
+        condition = self._compile_expression(node.test)
+        then_value = self._compile_expression(node.body)
+        else_value = self._compile_expression(node.orelse)
+
+        return Action(
+            type=ActionType.CONDITIONAL,
+            data={
+                "condition": condition.to_dict() if condition else None,
+                "then": then_value.to_dict() if then_value else None,
+                "else": else_value.to_dict() if else_value else None,
             }
         )
     

@@ -91,11 +91,6 @@ app = nx.create_app(
     admin_site=admin_site,
 )
 
-print([
-    (route.path, route.methods)
-    for route in app.routes
-    if "admin" in route.path
-])
 
 
 

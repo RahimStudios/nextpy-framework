@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextpy-framework"
-version = "4.1.0"
+version = "5.0.0"
 description = "The Python Web Framework introducing file-based routing, SSR, and SSG and more"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "NextPy Team"}
+    {name = "RahimStudios"}
 ]
 keywords = [
     "web framework",
@@ -23,7 +23,7 @@ keywords = [
     "jinja2"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -59,9 +59,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/IBRAHIMFONYUY/nextpy-framework"
+Homepage = "https://github.com/RahimStudios/nextpy-framework"
 Documentation = "https://nextpy-framework.readthedocs.io"
-Repository = "https://github.com/IBRAHIMFONYUY/nextpy-framework"
+Repository = "https://github.com/RahimStudios/nextpy-framework"
 
 [project.scripts]
 nextpy = "nextpy.cli:cli"

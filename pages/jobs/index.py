@@ -66,32 +66,40 @@ def JobsHome(props=None):
         </div>
     )
 
-def getServerSideProps(context):
+# Incremental static regeneration: anonymous visitors get a cached page that
+# is refreshed in the background after 30 seconds.
+revalidate = 30
+streaming = True
+
+
+def getStaticProps(context):
     db = get_session()
     try:
-        # 1. Count active jobs
         total = db.query(Job).filter(Job.is_active == True).count()
-        
-        # 2. Query active jobs from the database session
-        jobs_query = db.query(Job)
-        
-        # 3. Convert database objects into dictionaries so Nextpy can pass them to props
-        featured_jobs = []
-        for job in jobs_query:
-            featured_jobs.append({
+        jobs = (
+            db.query(Job)
+            .filter(Job.is_active == True)
+            .order_by(Job.created_at.desc())
+            .limit(6)
+            .all()
+        )
+        featured_jobs = [
+            {
                 "id": job.id,
                 "title": job.title,
                 "company": job.company,
                 "job_type": job.job_type,
                 "experience_level": job.experience_level,
-                "location": job.location
-            })
-            
+                "location": job.location,
+            }
+            for job in jobs
+        ]
         return {
             "props": {
                 "total_jobs": total,
-                "featured_jobs": featured_jobs
-            }
+                "featured_jobs": featured_jobs,
+            },
+            "revalidate": revalidate,
         }
     finally:
         db.close()

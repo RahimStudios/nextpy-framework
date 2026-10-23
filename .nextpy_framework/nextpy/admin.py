@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, Numeric, Text, inspect, select, func
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, Numeric, Text, inspect, or_, select, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeMeta, Session
 
@@ -77,19 +77,64 @@ class AdminSite:
         self.model_options.pop(name, None)
 
     def _authenticate(self, credentials: Optional[HTTPBasicCredentials]) -> None:
-        username = os.getenv("NEXTPY_ADMIN_USERNAME")
-        password = os.getenv("NEXTPY_ADMIN_PASSWORD")
-        if not username or not password:
+        """Authenticate an admin using env credentials or a DB superuser."""
+        import secrets
+
+        env_username = os.getenv("NEXTPY_ADMIN_USERNAME")
+        env_password = os.getenv("NEXTPY_ADMIN_PASSWORD")
+        env_configured = bool(env_username and env_password)
+
+        if credentials:
+            if env_configured:
+                username_ok = secrets.compare_digest(credentials.username, env_username)
+                password_ok = secrets.compare_digest(credentials.password, env_password)
+                if username_ok and password_ok:
+                    return
+
+            try:
+                from .auth import verify_password
+                from .db import User
+
+                db = get_session()
+                try:
+                    user = (
+                        db.query(User)
+                        .filter(
+                            or_(
+                                User.username == credentials.username,
+                                User.email == credentials.username,
+                            )
+                        )
+                        .first()
+                    )
+                    if (
+                        user
+                        and getattr(user, "is_active", True)
+                        and (user.role or "").lower() in {"superuser", "admin", "staff"}
+                        and user.hashed_password
+                        and verify_password(credentials.password, user.hashed_password)
+                    ):
+                        return
+                finally:
+                    db.close()
+            except Exception:
+                pass
+
+        if not credentials and not env_configured:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Set NEXTPY_ADMIN_USERNAME and NEXTPY_ADMIN_PASSWORD to enable admin access",
+                detail=(
+                    "No admin credentials configured. Run "
+                    "'nextpy createsuperuser' or set NEXTPY_ADMIN_USERNAME "
+                    "and NEXTPY_ADMIN_PASSWORD."
+                ),
             )
-        if not credentials or credentials.username != username or credentials.password != password:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Admin authentication required",
-                headers={"WWW-Authenticate": "Basic"},
-            )
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
     def _model(self, name: str) -> Type[Any]:
         model = self.models.get(name)

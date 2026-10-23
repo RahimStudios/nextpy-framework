@@ -3,6 +3,7 @@
 # Complete component system with decorators, hooks, and optimized Virtual DOM
 """
 
+import os
 import time
 import threading
 import uuid
@@ -18,6 +19,8 @@ from functools import wraps
 from ..vdom.vnode import VNode, create_element, render, update
 from ..core.parser import PSXElement, psx, render_psx
 
+_PSX_DEBUG = os.environ.get("NEXTPY_DEBUG") == "1"
+
 
 @dataclass
 class ComponentState:
@@ -29,6 +32,7 @@ class ComponentState:
     hook_index: int = 0
     cleanup_functions: List[Callable] = field(default_factory=list)
     mount_actions: List[Dict[str, Any]] = field(default_factory=list)
+    registered_functions: Dict[str, Any] = field(default_factory=dict)
 
 
 # Thread-local storage for component state
@@ -50,13 +54,23 @@ def get_current_component() -> ComponentState:
 
 
 def reset_component_state():
-    """Reset component state for new render"""
+    """Reset per-render state before a component function runs.
+
+    The hook list is thread-local and shared by every component rendered on
+    the same thread.  Keeping the old list meant a component could reuse a
+    hook slot created by a *different* component (for example a ``useState``
+    dict being read by ``useEffect``), which raised ``KeyError: deps_hash``.
+    Clearing the slots gives every component invocation its own hook order.
+    """
     if hasattr(_component_state, 'current'):
         thread_id = threading.get_ident()
         if thread_id in _component_state.current:
             state = _component_state.current[thread_id]
+            state.hooks.clear()
             state.hook_index = 0
             state.cleanup_functions.clear()
+            state.mount_actions.clear()
+            state.registered_functions.clear()
 
 
 class PSXComponent:
@@ -158,7 +172,8 @@ def component(func):
         # Create context with props and local variables (excluding internal ones)
         # IMPORTANT: Don't reset context - props already contains the full context
         context = props.copy() if props else {}
-        print(f"DEBUG: Props before context creation: {list(context.keys())}")
+        if _PSX_DEBUG:
+            if _PSX_DEBUG: print(f"DEBUG: Props before context creation: {list(context.keys())}")
         for key, value in component_locals.items():
             if not key.startswith('_') and key not in ['func', 'props', 'result', 'execution_result', 'execute_component', 'wrapper', 'execute_with_locals', 'component_locals', 'component_frame', 'frame', 'current_frame', 'original_globals']:
                 context[key] = value
@@ -169,7 +184,8 @@ def component(func):
             if key not in context and callable(value) and not key.startswith('_'):
                 context[key] = value
         
-        print(f"DEBUG: Context after creation: {list(context.keys())}")
+        if _PSX_DEBUG:
+            if _PSX_DEBUG: print(f"DEBUG: Context after creation: {list(context.keys())}")
         
         # FIX: Add component_id to context if not present (fallback mechanism)
         if '_component_id' not in context:
@@ -177,12 +193,14 @@ def component(func):
             global _current_component_id
             if _current_component_id:
                 context['_component_id'] = _current_component_id
-                print(f"DEBUG: Added component_id from module-level to context: {_current_component_id}")
+                if _PSX_DEBUG:
+                    if _PSX_DEBUG: print(f"DEBUG: Added component_id from module-level to context: {_current_component_id}")
             else:
                 # Generate a fallback component_id
                 import uuid
                 context['_component_id'] = f"psx_component_{uuid.uuid4().hex[:8]}"
-                print(f"DEBUG: Generated fallback component_id: {context['_component_id']}")
+                if _PSX_DEBUG:
+                    if _PSX_DEBUG: print(f"DEBUG: Generated fallback component_id: {context['_component_id']}")
         
         # CRITICAL FIX: Add useState hook values to context
         # This ensures variables like 'count' from useState are available in expressions
@@ -206,18 +224,22 @@ def component(func):
                     # FIX: Use actual extracted state variable name if available
                     if i < len(state_var_names):
                         context[state_var_names[i]] = hook_data['value']
-                        print(f"DEBUG: Added state variable {state_var_names[i]} = {hook_data['value']}")
+                        if _PSX_DEBUG:
+                            if _PSX_DEBUG: print(f"DEBUG: Added state variable {state_var_names[i]} = {hook_data['value']}")
                     else:
                         # Fallback to common names only if actual names not found
                         common_state_names = ['count', 'name', 'value', 'data', 'items', 'index', 'loading', 'error', 'success', 'user', 'message', 'text', 'visible', 'active', 'selected', 'theme']
                         if i < len(common_state_names):
                             context[common_state_names[i]] = hook_data['value']
-                            print(f"DEBUG: Fallback to common name {common_state_names[i]} = {hook_data['value']}")
+                            if _PSX_DEBUG:
+                                if _PSX_DEBUG: print(f"DEBUG: Fallback to common name {common_state_names[i]} = {hook_data['value']}")
         
         # Store context in component state for expression evaluation
         component_state.state.update(context)
-        print(f"DEBUG: Final context keys: {list(context.keys())}")
-        print(f"DEBUG: 'count' in context: {'count' in context}")
+        if _PSX_DEBUG:
+            if _PSX_DEBUG: print(f"DEBUG: Final context keys: {list(context.keys())}")
+        if _PSX_DEBUG:
+            if _PSX_DEBUG: print(f"DEBUG: 'count' in context: {'count' in context}")
         
         # Handle different return types
         if isinstance(result, PSXElement):
@@ -848,6 +870,59 @@ class CustomHooks:
             "loading": loading,
             "error": error,
             "refetch": refetch_action,
+            "_dataKey": data_key,
+            "_loadingKey": loading_key,
+            "_errorKey": error_key,
+        }
+
+    @staticmethod
+    def use_action(
+        action_name: str,
+        params: Optional[Dict[str, Any]] = None,
+        *,
+        immediate: bool = False,
+    ) -> Dict[str, Any]:
+        """Run a server action with loading/data/error state.
+
+        By default the action is lazy: call the returned ``run`` action from an
+        event handler.  Set ``immediate=True`` to execute on mount.
+        """
+        component = get_current_component()
+        data_key = f"_action_data_{component.hook_index}"
+        loading_key = f"_action_loading_{component.hook_index}"
+        error_key = f"_action_error_{component.hook_index}"
+        func_key = f"_action_run_{component.hook_index}"
+
+        data, _ = PSXHooks.use_state(None)
+        loading, _ = PSXHooks.use_state(bool(immediate))
+        error, _ = PSXHooks.use_state(None)
+
+        action = {
+            "type": "CALL_SERVER_ACTION",
+            "data": {
+                "action": action_name,
+                "params": params or {},
+                "dataKey": data_key,
+                "loadingKey": loading_key,
+                "errorKey": error_key,
+            },
+        }
+
+        if not hasattr(component, "mount_actions"):
+            component.mount_actions = []
+        if immediate:
+            component.mount_actions.append(action)
+
+        if not hasattr(component, "registered_functions"):
+            component.registered_functions = {}
+        component.registered_functions[func_key] = action
+
+        return {
+            "data": data,
+            "loading": loading,
+            "error": error,
+            "run": {"type": "CALL_FUNCTION", "function": func_key},
+            "action": action,
             "_dataKey": data_key,
             "_loadingKey": loading_key,
             "_errorKey": error_key,
@@ -1570,17 +1645,17 @@ def _create_python_call_placeholder(handler_func: Callable, prefix: str = 'pytho
             lambda_src = ast.unparse(handler_func).strip()
             normalized = re.sub(r'\s+', ' ', lambda_src)
             digest = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
-            print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={digest}")
+            if _PSX_DEBUG: print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={digest}")
             return f"{prefix}_lambda_{digest}"
         except Exception as e:
             # Fallback to UUID if AST parsing fails
             import uuid
             handler_id = uuid.uuid4().hex[:16]
-            print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={handler_id}")
+            if _PSX_DEBUG: print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={handler_id}")
             return f"{prefix}_lambda_{handler_id}"
     
     handler_id = abs(id(handler_func))
-    print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={handler_id}")
+    if _PSX_DEBUG: print(f"DEBUG _create_python_call_placeholder: func_name={func_name}, handler_id={handler_id}")
     return f"{prefix}_{func_name}"
 
 
@@ -2082,6 +2157,10 @@ def useFetch(url: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
     """useFetch custom hook"""
     return CustomHooks.use_fetch(url, options)
 
+def useAction(action_name: str, params: Dict[str, Any] = None, *, immediate: bool = False) -> Dict[str, Any]:
+    """Run a server action with loading/data/error state."""
+    return CustomHooks.use_action(action_name, params, immediate=immediate)
+
 def useCrudEvent(resource: Optional[str] = None) -> Dict[str, Any]:
     """useCrudEvent custom hook - subscribe to CRUD events"""
     return CustomHooks.use_crud_event(resource)
@@ -2480,16 +2559,10 @@ def Link(props: Dict[str, Any]) -> PSXElement:
     if props.get('target') is not None:
         attrs['target'] = props['target']
     if not props.get('target'):
-        attrs.update({
-            'hx-get': href,
-            'hx-target': props.get('targetId', '#main-content'),
-            'hx-swap': props.get('swap', 'innerHTML'),
-            'hx-push-url': 'true',
-            'data-nextpy-link': 'true',
-        })
+        # Client-side router navigation. HTMX attributes are intentionally
+        # omitted so navigation issues exactly one request.
+        attrs['data-nextpy-link'] = 'true'
         if props.get('prefetch', True):
-            attrs['hx-trigger'] = 'mouseenter, click'
-            attrs['preload'] = 'true'
             attrs['data-nextpy-prefetch'] = 'true'
         if props.get('replace'):
             attrs['data-nextpy-replace'] = 'true'
@@ -2672,6 +2745,7 @@ __all__ = [
     'Row', 'Col', 'Form', 'Input', 'Button', 'Navbar', 'NavItem', 'Card', 'List',
     'Conditional', 'Loop', 'ErrorBoundary', 'Suspense',
     'useState', 'useEffect', 'PSXHooks',
+    'useAction',
     'map_list', 'conditional', 'and_condition', 'or_condition',
     'EventHandlers', 'ComponentRegistry', 'component_registry',
     'register_component', 'ChildrenComponent',

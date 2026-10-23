@@ -1,6 +1,6 @@
 """
 NextPy Link Component - Client-side navigation with prefetching
-Similar to Next.js's next/link with HTMX integration
+Supports both HTMX and NextPy native client-side router
 """
 
 from typing import Any, Optional
@@ -9,16 +9,18 @@ from markupsafe import Markup
 
 class Link:
     """
-    Link component for client-side navigation
-    Uses HTMX for SPA-like navigation without full page reloads
+    Link component for client-side navigation.
+    
+    Uses the NextPy client-side router for SPA navigation when available,
+    with HTMX fallback and plain anchor as final fallback.
     
     Usage in templates:
         {{ Link("/about", "About Us", prefetch=True) }}
         {{ Link("/blog/" + post.slug, post.title, class_="text-blue-500") }}
     
-    In Python:
-        link = Link("/about", "About")
-        print(link.render())
+    In PSX components:
+        <Link href="/about">About</Link>
+        <Link href="/dashboard" prefetch={True} replace={True}>Dashboard</Link>
     """
     
     def __init__(
@@ -30,7 +32,9 @@ class Link:
         scroll: bool = True,
         class_: Optional[str] = None,
         target: Optional[str] = None,
-        use_htmx: bool = True,
+        use_htmx: bool = False,
+        use_router: bool = True,
+        transition: Optional[str] = None,
         **kwargs: Any,
     ):
         self.href = href
@@ -41,6 +45,8 @@ class Link:
         self.class_ = class_
         self.target = target
         self.use_htmx = use_htmx
+        self.use_router = use_router
+        self.transition = transition
         self.extra_attrs = kwargs
         
     def render(self, children: Optional[str] = None) -> str:
@@ -55,9 +61,22 @@ class Link:
         if self.target:
             attrs.append(f'target="{self._escape(self.target)}"')
             
-        if self.use_htmx and not self.target:
+        # Client-side router attributes (primary navigation method)
+        if self.use_router and not self.target:
+            attrs.append('data-nextpy-link="true"')
+            if self.replace:
+                attrs.append('data-nextpy-replace="true"')
+            if not self.scroll:
+                attrs.append('data-nextpy-scroll="false"')
+            if self.transition:
+                attrs.append(f'data-nextpy-transition="{self._escape(self.transition)}"')
+            if self.prefetch:
+                attrs.append('data-prefetch="true"')
+                
+        # HTMX fallback (when router is disabled)
+        elif self.use_htmx and not self.target:
             attrs.append(f'hx-get="{self._escape(self.href)}"')
-            attrs.append('hx-target="#main-content"')
+            attrs.append('hx-target="#app"')
             attrs.append('hx-swap="innerHTML"')
             attrs.append('hx-push-url="true"')
             
@@ -67,12 +86,6 @@ class Link:
                 
         elif self.prefetch:
             attrs.append('data-prefetch="true"')
-            
-        if self.replace:
-            attrs.append('data-replace="true"')
-            
-        if not self.scroll:
-            attrs.append('data-scroll="false"')
             
         for key, value in self.extra_attrs.items():
             attr_name = key.replace("_", "-")

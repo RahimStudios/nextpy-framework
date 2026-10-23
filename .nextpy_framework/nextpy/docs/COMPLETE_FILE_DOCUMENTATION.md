@@ -1,7 +1,7 @@
 # NextPy Framework - Complete File Documentation
 
-**Documentation Date:** August 4, 2026  
-**Framework Version:** 4.1.0
+**Documentation Date:** October 22, 2026  
+**Framework Version:** 5.0.0
 
 ---
 

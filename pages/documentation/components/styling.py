@@ -98,7 +98,7 @@ def ResponsiveGrid(props):
 }
 
 // In your component
-<link rel="stylesheet" href="/styles/custom.css" />
+&lt;link rel="stylesheet" href="/styles/custom.css" /&gt;
 
 <button class="custom-button">
     Click me

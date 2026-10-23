@@ -189,6 +189,13 @@ def _node_to_child(
     if isinstance(node, ExpressionNode):
         try:
             result = PSXRuntime(context).evaluate_ast_expression(node)
+            # Keep PSXElement trees lazy. Rendering them here makes layout
+            # composition render the whole child tree eagerly, then the final
+            # AST render renders it again -- duplicating hydration scripts and
+            # interactive component markup. The PSXElement already carries its
+            # AST, so returning it is enough for introspection/composition.
+            if isinstance(result, PSXElement):
+                return result
             return result.to_html() if hasattr(result, 'to_html') else str(result)
         except Exception:
             return node.expression

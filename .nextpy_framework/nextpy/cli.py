@@ -6,6 +6,7 @@ Commands: dev, build, start
 import os
 import sys
 import time
+import secrets
 import asyncio
 import signal
 from pathlib import Path
@@ -15,6 +16,8 @@ import click
 import uvicorn
 import subprocess
 import shutil
+
+from nextpy import __version__
 
 try:
     from watchdog.observers import Observer
@@ -214,9 +217,37 @@ else:
 
 
 def find_main_module():
-    # main.py is always expected at the project root for NextPy projects
-    # We ensure the current directory is in sys.path before calling uvicorn.run
+    """Return the ASGI target for the project entry point."""
+    main_file = Path.cwd() / "main.py"
+    if not main_file.exists():
+        raise click.ClickException(
+            "No main.py found. Run this command from a NextPy project root "
+            "or create one with 'nextpy create <name>'."
+        )
     return "main:app"
+
+
+def _prepare_project() -> None:
+    """Load the project .env and make the project importable."""
+    project_dir = Path.cwd().resolve()
+    if str(project_dir) not in sys.path:
+        sys.path.insert(0, str(project_dir))
+    from nextpy.config import reload_settings
+
+    reload_settings(str(project_dir))
+
+
+def _init_project_db():
+    """Load .env, register project models, initialize SQLAlchemy."""
+    _prepare_project()
+    try:
+        import models  # noqa: F401  (registers app tables on nextpy.db.Base)
+    except ImportError:
+        pass
+    from nextpy.config import settings
+    from nextpy.db import init_db
+
+    return init_db(settings["database_url"])
 
 
 def _format_size(size_bytes: int) -> str:
@@ -236,66 +267,52 @@ def _format_size(size_bytes: int) -> str:
 
 
 @click.group()
-@click.version_option(version="3.7.1", prog_name="NextPy")
+@click.version_option(version=__version__, prog_name="NextPy")
 def cli():
     """NextPy - The Python Web Framework"""
     pass
 
 
 @cli.command()
-@click.option("--port", "-p", default=8000, help="Port to run the server on")
-@click.option("--host", "-h", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", "-p", default=None, type=int, help="Port to run the server on")
+@click.option("--host", "-h", default=None, help="Host to bind to")
 @click.option("--reload/--no-reload", default=True, help="Enable hot reload")
 @click.option("--debug/--no-debug", default=True, help="Enable debug mode")
 def dev(port: int, host: str, reload: bool, debug: bool):
     """Start the development server with enhanced hot reload"""
-    click.echo(click.style("\n  NextPy Development Server", fg="cyan", bold=True))
-    click.echo(click.style("  ========================\n", fg="cyan"))
-
-    # Set debug environment variable
-    if debug:
-        os.environ["NEXTPY_DEBUG"] = "true"
-        os.environ["DEBUG"] = "true"
-        os.environ["DEVELOPMENT"] = "true"
-    else:
-        os.environ.pop("NEXTPY_DEBUG", None)
-        os.environ.pop("DEBUG", None)
-        os.environ.pop("DEVELOPMENT", None)
-
+    _prepare_project()
     _ensure_project_structure()
 
-    click.echo(f"  - Mode:     {'Development' if debug else 'Production'}")
-    click.echo(f"  - Host:     {host} (accessible at http://localhost:{port})")
-    click.echo(f"  - Port:     {port}")
-    click.echo(f"  - Reload:   {'Enabled' if reload else 'Disabled'}")
-    click.echo(f"  - Debug:    {'Enabled' if debug else 'Disabled'}")
+    from nextpy.config import settings
+    port = port or int(settings.get("port", 8000))
+    host = host or settings.get("host", "0.0.0.0")
 
-    if reload and not WATCHDOG_AVAILABLE:
-        click.echo(
-            click.style(
-                "  - Watchdog: Not Available (install: pip install watchdog)",
-                fg="yellow",
-            )
-        )
-    elif reload:
-        click.echo(f"  - Watchdog: Available")
+    debug_value = "true" if debug else "false"
+    os.environ["NEXTPY_DEBUG"] = debug_value
+    os.environ["DEBUG"] = debug_value
+    os.environ["DEVELOPMENT"] = "true"
 
-    if debug:
-        click.echo(f"  - Debug Icon:  Auto-enabled")
-        click.echo(f"  - Console Capture: Enabled")
-        click.echo(f"  - Performance Monitoring: Enabled")
-
-    click.echo(f"\n   Server ready at http://0.0.0.0:{port}")
-    click.echo(f"   Open http://localhost:{port} in your browser\n")
-
-    project_dir = Path(".")
-    os.chdir(project_dir)
-
-    # Ensure the current directory is in sys.path for module discovery
-    if str(project_dir.resolve()) not in sys.path:
-        sys.path.insert(0, str(project_dir.resolve()))
+    settings["debug"] = debug
+    settings["nextpy_debug"] = debug
+    settings["development"] = True
 
     main_module = find_main_module()
+    project_dir = Path.cwd()
+    os.chdir(project_dir)
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(project_dir), os.environ.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+
+    click.echo(click.style("\n  NextPy Development Server", fg="cyan", bold=True))
+    click.echo(click.style("  ========================\n", fg="cyan"))
+    click.echo(f"  Local:    http://localhost:{port}")
+    click.echo(f"  Network:  http://{host}:{port}")
+    click.echo(f"  Entry:    main.py")
+    click.echo(f"  Reload:   {'on' if reload else 'off'}")
+    click.echo(f"  Debug:    {'on' if debug else 'off'}")
+    if reload and not WATCHDOG_AVAILABLE:
+        click.echo(click.style("  Watchdog: not installed (using polling reload)", fg="yellow"))
+    click.echo(click.style("\n  Starting server...\n", fg="bright_black"))
 
     if reload:
         # Enhanced reload configuration with JSX support
@@ -348,6 +365,7 @@ def dev(port: int, host: str, reload: bool, debug: bool):
             host=host,
             port=port,
             reload=True,
+            app_dir=str(project_dir),
             reload_dirs=existing_reload_dirs,
             reload_includes=reload_includes,
             log_level="info",
@@ -357,6 +375,7 @@ def dev(port: int, host: str, reload: bool, debug: bool):
             main_module,
             host=host,
             port=port,
+            app_dir=str(project_dir),
             log_level="info",
         )
 
@@ -364,20 +383,34 @@ def dev(port: int, host: str, reload: bool, debug: bool):
 @cli.command()
 @click.option("--out", "-o", default="out", help="Output directory for static files")
 @click.option("--clean/--no-clean", default=True, help="Clean output directory first")
-def build(out: str, clean: bool):
+@click.option("--optimize/--no-optimize", default=True, help="Enable build optimization")
+@click.option("--minify/--no-minify", default=True, help="Minify JS/CSS assets")
+@click.option("--tree-shake/--no-tree-shake", default=True, help="Enable tree shaking")
+@click.option("--code-split/--no-code-split", default=True, help="Enable code splitting")
+def build(out: str, clean: bool, optimize: bool, minify: bool, tree_shake: bool, code_split: bool):
     """Build the project for production with enhanced feedback"""
     click.echo(click.style("\n  🔨 NextPy Static Build", fg="green", bold=True))
     click.echo(click.style("  ===================\n", fg="green"))
 
     try:
+        _prepare_project()
         from nextpy.core.builder import Builder
 
         click.echo(f"Output directory: {out}/")
         if clean:
             click.echo(f"Cleaning output directory...")
 
+        if optimize:
+            click.echo(f"Optimization enabled: minify={minify}, tree_shake={tree_shake}, code_split={code_split}")
+
         click.echo(f"Initializing builder...")
-        builder = Builder(out_dir=out)
+        builder = Builder(
+            out_dir=out,
+            optimize=optimize,
+            minify=minify,
+            tree_shaking=tree_shake,
+            code_splitting=code_split,
+        )
 
         click.echo(f"Building static files...")
 
@@ -390,6 +423,7 @@ def build(out: str, clean: bool):
         pages_count = len(manifest.get("pages", {}))
         assets_count = len(manifest.get("assets", []))
         total_size = manifest.get("total_size", 0)
+        optimization = manifest.get("optimization", {})
 
         click.echo()
         click.echo(
@@ -398,6 +432,13 @@ def build(out: str, clean: bool):
         click.echo(f"Pages built: {pages_count}")
         click.echo(f"Assets processed: {assets_count}")
         click.echo(f"Total size: {_format_size(total_size)}")
+        if optimization:
+            ts = optimization.get("tree_shaking", {})
+            cs = optimization.get("code_splitting", {})
+            mn = optimization.get("minification", {})
+            click.echo(f"Tree shaking: {ts.get('unused_count', 0)} unused modules flagged (report only)")
+            click.echo(f"Code splitting: {cs.get('chunk_count', 0)} chunks")
+            click.echo(f"Minification: {mn.get('bytes_saved', 0)} bytes saved")
         click.echo(f"Output: {out}/")
         click.echo()
         click.echo(click.style(f"Ready for deployment!", fg="cyan", bold=True))
@@ -415,32 +456,43 @@ def build(out: str, clean: bool):
 
 
 @cli.command()
-@click.option("--port", "-p", default=5000, help="Port to run the server on")
-@click.option("--host", "-h", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", "-p", default=None, type=int, help="Port to run the server on")
+@click.option("--host", "-h", default=None, help="Host to bind to")
 def start(port: int, host: str):
     """Start the production server with enhanced feedback"""
-    click.echo(click.style("\n🚀 NextPy Production Server", fg="green", bold=True))
-    click.echo(click.style("========================\n", fg="green"))
+    _prepare_project()
+    from nextpy.config import settings
+    port = port or int(settings.get("port", 5000))
+    host = host or settings.get("host", "0.0.0.0")
+    main_module = find_main_module()
+    project_dir = Path.cwd()
+    os.chdir(project_dir)
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(project_dir), os.environ.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    os.environ["DEBUG"] = "false"
+    os.environ["NEXTPY_DEBUG"] = "false"
+    os.environ["DEVELOPMENT"] = "false"
 
-    click.echo(f"Mode:     Production")
-    click.echo(f"Host:     {host} (accessible at http://localhost:{port})")
-    click.echo(f"Port:     {port}")
-    click.echo(f"Workers:   4 (multi-process)")
-    click.echo(f"Logging:  Warning level only")
+    settings["debug"] = False
+    settings["nextpy_debug"] = False
+    settings["development"] = False
 
-    click.echo(f"\n Production server ready at http://0.0.0.0:{port}")
-    click.echo(f"Open http://localhost:{port} in your browser\n")
-    click.echo(click.style(f"Press Ctrl+C to stop the server", fg="yellow"))
-    click.echo()
+    click.echo(click.style("\n  NextPy Production Server", fg="green", bold=True))
+    click.echo(click.style("  ========================\n", fg="green"))
+    click.echo(f"  Local:    http://localhost:{port}")
+    click.echo(f"  Network:  http://{host}:{port}")
+    click.echo(f"  Entry:    main.py")
+    click.echo(f"  Workers:  4")
+    click.echo(click.style("\n  Starting server...\n", fg="bright_black"))
 
     try:
-        os.chdir(Path.cwd())
-
         uvicorn.run(
-            "main:app",
+            main_module,
             host=host,
             port=port,
             workers=4,
+            app_dir=str(project_dir),
             log_level="warning",
         )
 
@@ -454,6 +506,106 @@ def start(port: int, host: str):
                 fg="yellow",
             )
         )
+
+
+@cli.command()
+@click.option("--username", prompt="Username", help="Superuser username")
+@click.option("--email", prompt="Email", help="Superuser email")
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="Superuser password")
+def createsuperuser(username: str, email: str, password: str):
+    """Create or update an admin superuser in the project database."""
+    username = username.strip()
+    email = email.strip().lower()
+    if not username or not email or not password:
+        raise click.ClickException("Username, email, and password are required.")
+
+    try:
+        db = _init_project_db()
+        from nextpy.auth import hash_password
+        from nextpy.db import User, get_session
+        from sqlalchemy import or_
+
+        session = get_session()
+        try:
+            user = (
+                session.query(User)
+                .filter(or_(User.username == username, User.email == email))
+                .first()
+            )
+            if user:
+                user.username = username
+                user.email = email
+                user.role = "superuser"
+                user.is_active = True
+                user.hashed_password = hash_password(password)
+                action = "Updated"
+            else:
+                user = User(
+                    username=username,
+                    email=email,
+                    full_name=username,
+                    role="superuser",
+                    is_active=True,
+                    hashed_password=hash_password(password),
+                )
+                session.add(user)
+                action = "Created"
+            session.commit()
+        finally:
+            session.close()
+    except Exception as exc:
+        raise click.ClickException(f"Could not create superuser: {exc}") from exc
+
+    click.echo(click.style(f"\n  {action} superuser '{username}'", fg="green", bold=True))
+    click.echo(f"  Sign in at /admin with these credentials.")
+
+
+@cli.command("flushdb")
+@click.option("--username", prompt="Superuser username", help="Admin username or email")
+@click.option("--password", prompt=True, hide_input=True, help="Admin password")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt")
+def flushdb(username: str, password: str, yes: bool):
+    """Drop and recreate every table after superuser verification."""
+    try:
+        db = _init_project_db()
+        from nextpy.auth import verify_password
+        from nextpy.db import User, get_session
+        from sqlalchemy import or_
+
+        session = get_session()
+        try:
+            user = (
+                session.query(User)
+                .filter(or_(User.username == username, User.email == username))
+                .first()
+            )
+            authorized = bool(
+                user
+                and getattr(user, "is_active", True)
+                and (user.role or "").lower() in {"superuser", "admin", "staff"}
+                and user.hashed_password
+                and verify_password(password, user.hashed_password)
+            )
+        finally:
+            session.close()
+
+        if not authorized:
+            raise click.ClickException("Invalid superuser credentials. Database was not changed.")
+
+        if not yes:
+            click.confirm(
+                "This deletes all tables and data in the project database. Continue?",
+                abort=True,
+            )
+
+        db.drop_tables()
+        db.create_tables()
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f"Database flush failed: {exc}") from exc
+
+    click.echo(click.style("\n  Database flushed and tables recreated.", fg="green", bold=True))
 
 
 @cli.command()
@@ -602,17 +754,17 @@ def create(name: str, psx: bool, template: str):
             f" pip install -r requirements.txt  # Install Python dependencies (if not already installed)"
         )
         click.echo(
-            f" npm run css:build  # Build Tailwind CSS (if you prefer manual build)"
+            f" npm run build:tailwind  # Build Tailwind CSS (if you prefer manual build)"
         )
-        click.echo(f" python3 main.py  # Start development server")
-        click.echo(f"  Open http://localhost:5000 in your browser")
+        click.echo(f" nextpy dev  # Start development server")
+        click.echo(f"  Open http://localhost:8000 in your browser")
 
         if psx:
             click.echo(f"\nPSX Development:")
             click.echo(f"    • All PSX utilities, hooks & components auto-imported")
             click.echo(f"    • Use: from nextpy import component, useState, useEffect")
             click.echo(f"    • Full auto-completion & IntelliSense support")
-            click.echo(f"    • Edit pages/index.py to see PSX in action")
+            click.echo(f"    • Edit pages/index.psx to see PSX in action")
             click.echo(f"    • Use @component decorator for JSX syntax")
             click.echo(f"    • Try: {{for item in items:<div>{{item}}</div>}}")
             click.echo(f"    • PSX devtools copied to .nextpy/devtools/")
@@ -705,6 +857,7 @@ def export(out: str):
     click.echo(click.style("  =============\n", fg="green"))
 
     try:
+        _prepare_project()
         from nextpy.core.builder import Builder
 
         click.echo(f"Output directory: {out}/")
@@ -715,7 +868,7 @@ def export(out: str):
         click.echo(f"Exporting static files...")
 
         async def run_export():
-            manifest = await builder.export_static()
+            manifest = await builder.build(clean=True)
             return manifest
 
         manifest = asyncio.run(run_export())
@@ -749,7 +902,7 @@ def version():
     click.echo(click.style("\nNextPy Framework Info", fg="cyan", bold=True))
     click.echo(click.style("  ===================\n", fg="cyan"))
 
-    click.echo(f"Version: 4.0.0 ")
+    click.echo(f"Version: {__version__}")
     click.echo(f"Python: {sys.version.split()[0]}")
     click.echo(f"Framework: NextPy")
     click.echo(f"Architecture: True JSX")
@@ -777,7 +930,7 @@ def info():
 
     # Framework info
     click.echo(click.style("Framework Details:", fg="blue", bold=True))
-    click.echo(f"    Version: 2.4.4")
+    click.echo(f"    Version: {__version__}")
     click.echo(f"    Architecture: True JSX")
     click.echo(f"    Python: {sys.version.split()[0]}")
 
@@ -802,13 +955,15 @@ def info():
         click.echo(f"    {dir_name}/: {status}")
 
     # Available commands
-    click.echo(click.style("\n  🛠️  Available Commands:", fg="purple", bold=True))
+    click.echo(click.style("\n  🛠️  Available Commands:", fg="magenta", bold=True))
     commands = [
         ("nextpy dev", "Start development server"),
         ("nextpy build", "Build for production"),
         ("nextpy start", "Start production server"),
         ("nextpy create <name>", "Create new project"),
         ("nextpy generate <type> <name>", "Generate components/pages/APIs"),
+        ("nextpy createsuperuser", "Create an admin superuser"),
+        ("nextpy flushdb", "Reset the project database (superuser only)"),
         ("nextpy routes", "Show all routes"),
         ("nextpy export", "Export static files"),
         ("nextpy version", "Show version info"),
@@ -1135,7 +1290,7 @@ def _create_project_structure(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or "NextPy App" }}</title>
     <!-- reference compiled Tailwind CSS rather than CDN for better integration -->
-    <link href="/public/tailwind.css" rel="stylesheet">
+    <link href="/tailwind.css" rel="stylesheet">
 </head>
 <body>
     <div id="app">
@@ -1151,7 +1306,7 @@ def _create_project_structure(
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>404 - Page Not Found</title>
-    <link href="/public/tailwind.css" rel="stylesheet">
+    <link href="/tailwind.css" rel="stylesheet">
 </head>
 <body class="flex items-center justify-center min-h-screen bg-gray-100">
     <div class="text-center">
@@ -1370,7 +1525,7 @@ def Layout(children, **props):
     return (
         <html>
             <head>
-                <title>{{props.get('title', 'My App')</title>
+                <title>{props.get('title', 'My App')}</title>
                 
                 <link href="/tailwind.css" rel="stylesheet">
             </head>
@@ -1496,7 +1651,7 @@ def Home(props=None):
                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
                     </svg>
-                    Go to nextpy.org →
+                    Go to nextpy.org
                 </a>
                 </div>
 
@@ -1527,40 +1682,41 @@ default = Home
 
     (project_dir / "components" / "ui" / "Button.psx").write_text(
         '''
-"""Button component"""
-from nextpy.psx import psx
+"""Reusable button component."""
+
+from nextpy.psx import component
 
 
-
-def Button(props = None):
-    """Reusable Button component"""
+@component
+def Button(props=None):
     props = props or {}
-    
-    variant = props.get("variant", "default")
+    variant = props.get("variant", "primary")
     children = props.get("children", "Button")
-    className = props.get("className", "")
-    
-    if variant == "primary":
-        variant_class = "bg-blue-600 text-white hover:bg-blue-700 transform hover:scale-105 transition-all duration-200"
-    elif variant == "secondary":
-        variant_class = "bg-gray-200 text-gray-900 hover:bg-gray-300 transform hover:scale-105 transition-all duration-200"
-    elif variant == "success":
-        variant_class = "bg-green-600 text-white hover:bg-green-700 transform hover:scale-105 transition-all duration-200"
-    elif variant == "danger":
-        variant_class = "bg-red-600 text-white hover:bg-red-700 transform hover:scale-105 transition-all duration-200"
-    else:
-        variant_class = "bg-gray-600 text-white hover:bg-gray-700 transform hover:scale-105 transition-all duration-200"
-    
-    class_attr = f"px-6 py-3 rounded-lg font-medium transition-all duration-200 transform hover:scale-105 {variant_class} {className}"
-    
-    return psx(f"
-        <button class={class_attr} 
-                id={props.get("id")}
-                disabled={props.get("disabled", False)}
-                onclick={props.get("onClick", "")}>
+    class_name = props.get("className", "")
+
+    variants = {
+        "primary": "bg-blue-600 text-white hover:bg-blue-700",
+        "secondary": "bg-gray-200 text-gray-900 hover:bg-gray-300",
+        "success": "bg-green-600 text-white hover:bg-green-700",
+        "danger": "bg-red-600 text-white hover:bg-red-700",
+    }
+    variant_class = variants.get(variant, variants["primary"])
+    class_attr = (
+        "px-6 py-3 rounded-lg font-medium transition-all duration-200 "
+        f"transform hover:scale-105 {variant_class} {class_name}"
+    )
+
+    return (
+        <button
+            class={class_attr}
+            id={props.get("id")}
+            disabled={props.get("disabled", False)}
+            onclick={props.get("onClick", "")}
+        >
             {children}
         </button>
-    ")
+    )
+
 
 default = Button
 '''
@@ -1643,28 +1799,90 @@ async def delete(request: Request, id: int):
     )
     click.echo("  Created: pages/api/users/[id].py")
 
-    # Create database models
-    (project_dir / "models" / "User.py").write_text('''"""User model example"""
+    # Create database models.  Every model must import the framework Base so
+    # init_db() sees it when creating tables.
+    (project_dir / "models" / "User.py").write_text('''"""User model example."""
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
-Base = declarative_base()
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 
-class User(Base):
-    __tablename__ = "users"
-    
+from nextpy.db import Base
+
+
+class AppUser(Base):
+    # The framework already owns the "users" table, so app models need a
+    # distinct table name and class name to avoid SQLAlchemy registry
+    # collisions with nextpy.db.User.
+    __tablename__ = "app_users"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
-    
+
     def __repr__(self):
-        return f"<User(id={self.id}, name='{self.name}', email='{self.email}')>"
+        return f"<AppUser(id={self.id}, name='{self.name}', email='{self.email}')>"
+
+
+User = AppUser
 ''')
     click.echo("  Created: models/User.py")
+
+    (project_dir / "models" / "__init__.py").write_text('''"""Import every model here so init_db() can create its table."""
+
+from models.User import AppUser, User
+
+__all__ = ["AppUser", "User"]
+''')
+    click.echo("  Created: models/__init__.py")
+
+    # Create the application entry point.  init_db() is called here, after all
+    # models have been imported, so SQLAlchemy knows every table.
+    (project_dir / "main.py").write_text('''"""NextPy application entry point."""
+
+import sys
+from pathlib import Path
+
+# Support running from a source checkout that vendors the framework.
+_framework_dir = Path(__file__).parent / ".nextpy_framework"
+if _framework_dir.exists():
+    sys.path.insert(0, str(_framework_dir))
+
+import nextpy as nx
+from nextpy.admin import AdminSite
+from nextpy.config import settings
+from nextpy.db import User, init_db
+
+# Importing models registers them on nextpy.db.Base.
+import models  # noqa: F401
+
+init_db(settings["database_url"])
+
+admin_site = AdminSite()
+admin_site.register(User)
+
+app = nx.create_app(
+    pages_dir="pages",
+    templates_dir="templates",
+    public_dir="public",
+    out_dir="out",
+    debug=settings["debug"],
+    admin_site=admin_site,
+)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host=settings["host"],
+        port=settings["port"],
+        reload=settings["development"],
+    )
+''')
+    click.echo("  Created: main.py")
 
     # Blog listing page
     (project_dir / "pages" / "blog" / "index.py").write_text('''
@@ -1995,11 +2213,13 @@ The framework now adds a set of security headers by default (CSP, X-Frame-Option
 """)
     click.echo("  Created: docs/README.md")
 
-    (project_dir / "requirements.txt").write_text("""fastapi>=0.100.0
+    (project_dir / "requirements.txt").write_text("""fastapi>=0.104.0
 nextpy-framework>=2.5.0
 uvicorn[standard]>=0.24.0
-fastapi>=0.104.0
 pydantic>=2.0.0
+email-validator>=2.0.0
+SQLAlchemy>=2.0.0
+PyJWT>=2.8.0
 jinja2>=3.1.0
 watchdog>=2.3.0
 click>=8.1.0
@@ -2086,8 +2306,12 @@ Thumbs.db
     click.echo("  Created: .gitignore")
 
 
-    # Create .env file for development
-    (project_dir / ".env").write_text("""# NextPy Development Environment
+    # Create .env file for development.  Secrets are generated per project so
+    # new apps never ship with the framework's placeholder secrets.
+    _secret_key = secrets.token_urlsafe(48)
+    _jwt_secret = secrets.token_urlsafe(48)
+    _session_secret = secrets.token_urlsafe(48)
+    (project_dir / ".env").write_text(f"""# NextPy Development Environment
 DEVELOPMENT=true
 DEBUG=true
 NEXTPY_DEBUG=true
@@ -2096,11 +2320,18 @@ NEXTPY_DEBUG=true
 HOST=0.0.0.0
 PORT=8000
 
-# Database (if needed)
+# Database
 DATABASE_URL=sqlite:///./app.db
 
-# Secret Key
-SECRET_KEY=your-secret-key-here
+# Secrets (generated for this project)
+SECRET_KEY={_secret_key}
+JWT_SECRET={_jwt_secret}
+SESSION_SECRET={_session_secret}
+
+# Security
+CSRF_PROTECTION=true
+RATE_LIMIT_ENABLED=true
+CORS_ORIGINS=
 
 # NextPy Settings
 NEXTPY_DEBUG_ICON=true
@@ -2214,43 +2445,7 @@ NEXTPY_LOG_LEVEL=info
 
 
 def _create_psx_homepage(project_dir: Path):
-    """Create PSX homepage with True JSX syntax"""
-    (project_dir / "pages" / "index.py").write_text('''"""
-NextPy PSX Homepage - True JSX in Python
-All PSX utilities, hooks, and components are auto-imported
-"""
-
-from nextpy import component, psx
-
-@component
-def Home(props=None):
-    props = props or {}
-    title = props.get("title", "Welcome to NextPy")
-    message = props.get("message", "Your Python-powered web framework with True JSX")
-    
-    return (
-        <div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
-            <div class="text-center text-white">
-                <h1 class="mb-4 text-5xl font-bold">{title}</h1>
-                <p class="text-xl">{message}</p>
-                <a href="/about" class="inline-block px-6 py-3 mt-8 font-semibold text-blue-600 transition-all duration-300 transform bg-white rounded-lg shadow-lg hover:bg-gray-100 hover:text-blue-700 hover:scale-105">
-                    Learn More
-                </a>
-            </div>
-        </div>
-    )
-
-def getServerSideProps(context):
-    return {
-        "props": {
-            "title": "Welcome to NextPy",
-            "message": "Your Python-powered web framework with True JSX"
-        }
-    }
-
-default = Home
-''')
-    click.echo("  Created: pages/index.py (PSX homepage)")
+    """Create PSX sample components (the homepage is written as index.psx)."""
 
     # Create sample components
     (project_dir / "components" / "Button.py").write_text('''"""
@@ -2349,22 +2544,22 @@ def About(props=None):
                             {
                                 "title": "True JSX Syntax",
                                 "content": "Write exact JSX syntax in Python with no compilation step needed",
-                                "code": "@component\\ndef Component():\\n    return (<div>Hello JSX</div>)"
+                                "code": "Use @component on a Python function and return JSX."
                             },
                             {
                                 "title": "Python Logic in JSX",
                                 "content": "Use real Python for loops, if conditions, and try-catch in your JSX",
-                                "code": "{for item in items:\\n    <div>{item}</div>}"
+                                "code": "Use a Python for loop directly inside JSX braces."
                             },
                             {
                                 "title": "Virtual DOM",
                                 "content": "Optimized rendering with diffing and patching for maximum performance",
-                                "code": "vnode = create_element('div', {}, children)"
+                                "code": "The renderer builds and diffs virtual nodes for you."
                             },
                             {
                                 "title": "Server-Side Rendering",
                                 "content": "Full SSR support with getServerSideProps and getStaticProps",
-                                "code": "def getServerSideProps(context):\\n    return {\"props\": data}"
+                                "code": "Return props from getServerSideProps(context)."
                             }
                         ]:
                             <div class="p-6 bg-white rounded-lg shadow-lg">
@@ -2437,7 +2632,7 @@ def Examples(props=None):
                             
                             <div class="p-6 bg-white rounded-lg shadow">
                                 <h3 class="mb-3 font-semibold">Conditional Rendering</h3>
-                                {True:
+                                {if True:
                                     <div class="p-3 bg-green-100 rounded">
                                         This is shown when condition is true
                                     </div>

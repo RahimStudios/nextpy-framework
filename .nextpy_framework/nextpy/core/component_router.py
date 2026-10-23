@@ -5,11 +5,18 @@ Supports both template-based and component-based rendering
 
 import os
 import re
+import json
+import time
+import hashlib
 import importlib.util
+import threading
+from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List, Optional, Callable, Any, Tuple
+from typing import AsyncIterator, Dict, List, Optional, Callable, Any, Tuple
 from dataclasses import dataclass, field
 from pydantic import BaseModel
+
+_DEBUG = os.environ.get("NEXTPY_DEBUG") == "1"
 
 from .router import Route, DynamicRoute, RouteParams
 from .component_renderer import ComponentRenderer
@@ -43,6 +50,192 @@ class ComponentRouter:
         self.api_routes: List[Route] = []
         self._route_cache: Dict[str, Route] = {}
         self.renderer = ComponentRenderer()
+
+        # Caches (per-process). Page HTML caching is what makes repeat SPA
+        # navigations to dynamic routes fast: the expensive component/layout
+        # render only runs on a miss.
+        self._layout_cache: Dict[str, Tuple[float, Optional[Callable]]] = {}
+        self._metadata_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._page_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+        self._layout_sig_cache: Dict[str, Tuple[str, str]] = {}
+        self._cache_ttl = float(os.environ.get("NEXTPY_PAGE_CACHE_TTL", "30"))
+        self._cache_max = int(os.environ.get("NEXTPY_PAGE_CACHE_SIZE", "128"))
+
+    # ------------------------------------------------------------------
+    # Cache management
+    # ------------------------------------------------------------------
+    def invalidate_cache(self) -> None:
+        """Drop all render/layout caches (used by hot reload / tests)."""
+        self._layout_cache.clear()
+        self._metadata_cache.clear()
+        self._page_cache.clear()
+        self._layout_sig_cache.clear()
+
+    def is_cacheable(self, route: Route, context: Optional[Dict[str, Any]] = None) -> bool:
+        """Return ``True`` when a rendered page may be safely reused.
+
+        Personalised responses (cookies / Authorization) and pages using
+        ``getServerSideProps`` are never cached.
+        """
+        context = context or {}
+        request = context.get("request")
+        if request is not None:
+            if getattr(request, "cookies", None):
+                return False
+            headers = getattr(request, "headers", {}) or {}
+            if headers.get("authorization") or headers.get("cookie"):
+                return False
+
+        try:
+            module = route.renderer.load_component_module(route.file_path)
+        except Exception:
+            return False
+
+        if module is not None and (
+            hasattr(module, "getServerSideProps")
+            or hasattr(module, "get_server_side_props")
+        ):
+            return False
+        return True
+
+    def _route_cache_key(self, route: Route, context: Dict[str, Any]) -> str:
+        params = context.get("params") or {}
+        query = context.get("query") or {}
+        return "|".join(
+            (
+                str(route.file_path),
+                json.dumps(params, sort_keys=True, default=str),
+                json.dumps(query, sort_keys=True, default=str),
+            )
+        )
+
+    def _page_dependencies(self, route: Route) -> List[Tuple[str, float]]:
+        paths = [route.file_path]
+        paths.extend(getattr(route, "layout_chain", []) or [])
+        deps: List[Tuple[str, float]] = []
+        for path in paths:
+            try:
+                deps.append((str(path), Path(path).stat().st_mtime))
+            except OSError:
+                continue
+        return deps
+
+    def _cache_lookup(self, key: str, route: Route) -> Tuple[Optional[str], bool]:
+        """Return ``(html, stale)`` without deleting stale ISR entries."""
+        entry = self._page_cache.get(key)
+        if not entry:
+            return None, False
+
+        # Invalidate when the page or any layout changed on disk.
+        for path, mtime in entry["deps"]:
+            try:
+                if Path(path).stat().st_mtime != mtime:
+                    self._page_cache.pop(key, None)
+                    return None, False
+            except OSError:
+                self._page_cache.pop(key, None)
+                return None, False
+
+        age = time.time() - entry["timestamp"]
+        revalidate = entry.get("revalidate")
+        ttl = self._cache_ttl if revalidate is None else float(revalidate)
+        stale = age > ttl
+        self._page_cache.move_to_end(key)
+        return entry["html"], stale
+
+    def _cache_get(self, key: str, route: Route) -> Optional[str]:
+        html, stale = self._cache_lookup(key, route)
+        return None if stale else html
+
+    def _cache_set(
+        self,
+        key: str,
+        route: Route,
+        html: str,
+        revalidate: Optional[int] = None,
+    ) -> None:
+        self._page_cache[key] = {
+            "html": html,
+            "timestamp": time.time(),
+            "deps": self._page_dependencies(route),
+            "revalidate": revalidate,
+            "refreshing": False,
+        }
+        self._page_cache.move_to_end(key)
+        while len(self._page_cache) > self._cache_max:
+            self._page_cache.popitem(last=False)
+
+    def get_revalidate(self, route: Route) -> Optional[int]:
+        """Return the page's ISR interval (``None`` means use global TTL)."""
+        renderer = getattr(route, "renderer", None)
+        if renderer is not None and hasattr(renderer, "get_revalidate"):
+            try:
+                value = renderer.get_revalidate(route.file_path)
+                if value is not None:
+                    return int(value)
+            except Exception:
+                pass
+        try:
+            module = route.renderer.load_component_module(route.file_path)
+            value = getattr(module, "revalidate", None)
+            return int(value) if value is not None else None
+        except Exception:
+            return None
+
+    def _schedule_refresh(
+        self,
+        key: str,
+        route: Route,
+        context: Dict[str, Any],
+        include_layout: bool,
+        revalidate: Optional[int],
+    ) -> None:
+        """Refresh a stale ISR entry in the background (stale-while-revalidate)."""
+        entry = self._page_cache.get(key)
+        if entry is None or entry.get("refreshing"):
+            return
+        entry["refreshing"] = True
+        safe_context = {
+            name: value for name, value in context.items()
+            if name not in ("request", "response", "req")
+        }
+
+        def _refresh() -> None:
+            try:
+                html = self._render_component_route(route, safe_context, include_layout)
+                if not self._is_error_html(html):
+                    self._cache_set(key, route, html, revalidate)
+            finally:
+                current = self._page_cache.get(key)
+                if current is not None:
+                    current["refreshing"] = False
+
+        threading.Thread(
+            target=_refresh,
+            name=f"nextpy-isr-{hashlib.md5(key.encode()).hexdigest()[:8]}",
+            daemon=True,
+        ).start()
+
+    def get_layout_signature(self, route: Route) -> str:
+        """Stable signature of a route's layout chain (path + mtime)."""
+        cache_key = str(route.file_path)
+        chain = [str(p) for p in (getattr(route, "layout_chain", []) or [])]
+
+        parts: List[str] = []
+        for path in chain:
+            try:
+                parts.append(f"{path}:{Path(path).stat().st_mtime}")
+            except OSError:
+                parts.append(path)
+        stamp = "|".join(parts)
+
+        cached = self._layout_sig_cache.get(cache_key)
+        if cached and cached[0] == stamp:
+            return cached[1]
+
+        signature = hashlib.md5(stamp.encode("utf-8")).hexdigest()[:16]
+        self._layout_sig_cache[cache_key] = (stamp, signature)
+        return signature
         
     def scan_pages(self) -> None:
         """Scan pages directory and register all routes"""
@@ -53,7 +246,8 @@ class ComponentRouter:
         extensions = ["*.py", "*.py.jsx", "*.psx"]
         for ext in extensions:
             for file_path in self.pages_dir.rglob(ext):
-                if file_path.name.startswith("_"):
+                relative_parts = file_path.relative_to(self.pages_dir).parts
+                if any(part.startswith("_") or part == "actions" for part in relative_parts):
                     continue
                 
                 # Skip special files - they're handled separately
@@ -207,7 +401,7 @@ class ComponentRouter:
                 'props.get(',
                 'props = props or',
                 'function.*Component',
-                'const.*=.*\(.*\)',
+                r'const.*=.*\(.*\)',
                 'className=',
                 'htmlFor=',
                 'onClick=',
@@ -432,7 +626,18 @@ class ComponentRouter:
         return special_chains['layout']
     
     def _load_layout(self, layout_path: Path) -> Optional[Callable]:
-        """Load a layout function from a layout file"""
+        """Load a layout function, caching it by file modification time."""
+        try:
+            mtime = layout_path.stat().st_mtime
+        except OSError:
+            return None
+
+        cache_key = str(layout_path)
+        cached = self._layout_cache.get(cache_key)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+
+        layout_func: Optional[Callable] = None
         try:
             # For .psx files, use JSX transformer to compile first
             if layout_path.suffix == '.psx':
@@ -440,51 +645,61 @@ class ComponentRouter:
                     from ..jsx_transformer import JSXTransformer
                     transformer = JSXTransformer()
                     module = transformer.load_jsx_module(layout_path, layout_path.stem)
-                    
+
                     if module:
                         if hasattr(module, "Layout"):
-                            return getattr(module, "Layout")
+                            layout_func = getattr(module, "Layout")
                         elif hasattr(module, "layout"):
-                            return getattr(module, "layout")
+                            layout_func = getattr(module, "layout")
                 except Exception as e:
                     print(f"Warning: Failed to load .psx layout with JSX transformer: {e}")
-            
-            # For .py files, import normally
-            spec = importlib.util.spec_from_file_location(
-                layout_path.stem, 
-                layout_path
-            )
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                
-                # Look for Layout function
-                if hasattr(module, "Layout"):
-                    return getattr(module, "Layout")
-                elif hasattr(module, "layout"):
-                    return getattr(module, "layout")
-                        
-        except Exception as e:
-            print(f"Warning: Failed to load layout from {layout_path}: {e}")
-            import traceback
-            traceback.print_exc()
-                
-        return None
-    
-    def _extract_layout_metadata(self, layout_path: Path) -> Dict[str, Any]:
-        """Extract metadata from a layout file (title, description, theme, etc.)"""
-        metadata = {}
-        try:
-            # For .py files, check for metadata variables
-            if layout_path.suffix == '.py':
+
+            if layout_func is None:
+                # For .py files, import normally
                 spec = importlib.util.spec_from_file_location(
-                    layout_path.stem, 
+                    layout_path.stem,
                     layout_path
                 )
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
-                    
+
+                    # Look for Layout function
+                    if hasattr(module, "Layout"):
+                        layout_func = getattr(module, "Layout")
+                    elif hasattr(module, "layout"):
+                        layout_func = getattr(module, "layout")
+
+        except Exception as e:
+            print(f"Warning: Failed to load layout from {layout_path}: {e}")
+
+        self._layout_cache[cache_key] = (mtime, layout_func)
+        return layout_func
+    
+    def _extract_layout_metadata(self, layout_path: Path) -> Dict[str, Any]:
+        """Extract metadata from a layout file (title, description, theme, etc.)"""
+        try:
+            mtime = layout_path.stat().st_mtime
+        except OSError:
+            return {}
+
+        cache_key = str(layout_path)
+        cached = self._metadata_cache.get(cache_key)
+        if cached is not None and cached[0] == mtime:
+            return dict(cached[1])
+
+        metadata: Dict[str, Any] = {}
+        try:
+            # For .py files, check for metadata variables
+            if layout_path.suffix == '.py':
+                spec = importlib.util.spec_from_file_location(
+                    layout_path.stem,
+                    layout_path
+                )
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+
                     # Check for common metadata variables
                     if hasattr(module, 'metadata'):
                         metadata.update(module.metadata)
@@ -496,7 +711,8 @@ class ComponentRouter:
                         metadata['theme'] = module.theme
         except Exception as e:
             print(f"Warning: Failed to extract metadata from {layout_path}: {e}")
-        
+
+        self._metadata_cache[cache_key] = (mtime, dict(metadata))
         return metadata
     
     def _merge_route_metadata(self, special_chains: Dict[str, List[Path]]) -> Dict[str, Any]:
@@ -544,26 +760,170 @@ class ComponentRouter:
                 
         return None
         
-    def render_route(self, route: Route, context: Dict[str, Any] = None) -> str:
-        """Render a route using the appropriate renderer with support for loading/error states"""
+    def render_route(
+        self,
+        route: Route,
+        context: Dict[str, Any] = None,
+        include_layout: bool = True,
+    ) -> str:
+        """Render a route using the appropriate renderer with support for loading/error states.
+
+        Args:
+            route: The matched route.
+            context: Rendering context (params, query, request, ...).
+            include_layout: When ``False`` only the page component is rendered
+                (used for SPA fragment responses where the client keeps the
+                existing layout).
+        """
         if context is None:
             context = {}
-            
+
         if isinstance(route, ComponentRoute) and route.use_components:
-            # Import render_psx here (before the try block) so it is available in
-            # both the success path and the except/error-boundary path.
-            from ..psx import render_psx
+            cacheable = self.is_cacheable(route, context)
+            cache_key = None
+            revalidate = self.get_revalidate(route)
+            if cacheable:
+                mode = "full" if include_layout else "frag"
+                cache_key = self._route_cache_key(route, context) + "|" + mode
+                cached, stale = self._cache_lookup(cache_key, route)
+                if cached is not None:
+                    if stale:
+                        self._schedule_refresh(
+                            cache_key, route, context, include_layout, revalidate
+                        )
+                    return cached
+
+            html = self._render_component_route(route, context, include_layout)
+
+            # Never cache error pages; they should be retried next time.
+            if cache_key is not None and not self._is_error_html(html):
+                resolved_revalidate = self.get_revalidate(route)
+                if resolved_revalidate is not None:
+                    revalidate = resolved_revalidate
+                self._cache_set(cache_key, route, html, revalidate)
+            return html
+
+        elif route.handler and callable(route.handler):
+            return route.handler(context)
+        else:
+            return f"<h1>Route {route.path} has no handler</h1>"
+
+    async def render_route_stream(
+        self,
+        route: Route,
+        context: Dict[str, Any] = None,
+        include_layout: bool = True,
+    ) -> AsyncIterator[str]:
+        """Render a route as a stream of HTML chunks.
+
+        A page can define ``streaming = True`` for chunked output, or provide
+        its own ``stream(context)`` generator for true data streaming.
+        """
+        from .streaming import stream_route
+
+        context = context or {}
+        module = None
+        if isinstance(route, ComponentRoute):
             try:
-                # Merge layout metadata into context
-                if hasattr(route, 'special_chains') and route.special_chains:
-                    metadata = self._merge_route_metadata(route.special_chains)
-                    context.update(metadata)
-                    print(f"DEBUG: Merged metadata: {metadata}")
-                
-                # Get the page component (not rendered HTML)
-                page_element = route.renderer.get_page_element(route.file_path, context)
-                print(f"DEBUG: Page element type: {type(page_element)}, value: {page_element}")
-                
+                module = route.renderer.load_component_module(route.file_path)
+            except Exception:
+                module = None
+        if module is not None and hasattr(module, "stream"):
+            async for chunk in stream_route(module, context, ""):
+                yield chunk
+            return
+
+        html = self.render_route(route, context, include_layout)
+        async for chunk in stream_route(module, context, html):
+            yield chunk
+
+    @staticmethod
+    def _is_full_document(element: Any) -> bool:
+        """Return True when a rendered layout is a complete HTML document."""
+        ast = getattr(element, "_ast_node", None)
+        tag = getattr(ast, "tag", None)
+        if tag == "html":
+            return True
+        html = getattr(element, "html", None)
+        if isinstance(html, str):
+            return html.lstrip().lower().startswith("<html")
+        return False
+
+    @staticmethod
+    def _is_error_html(html: str) -> bool:
+        stripped = html.lstrip()
+        return (
+            stripped.startswith("<h1>Error rendering route:")
+            or "data-nextpy-error-overlay=\"true\"" in stripped
+            or "data-nextpy-error=\"true\"" in stripped
+        )
+
+    def _render_component_route(
+        self,
+        route: ComponentRoute,
+        context: Dict[str, Any],
+        include_layout: bool = True,
+    ) -> str:
+        """Render a component route (uncached implementation)."""
+        from ..psx import render_psx
+        from ..psx.core.parser import PSXElement
+
+        debug = bool(getattr(route.renderer, "debug", False))
+
+        try:
+            # Merge layout metadata into context
+            if hasattr(route, 'special_chains') and route.special_chains:
+                metadata = self._merge_route_metadata(route.special_chains)
+                context.update(metadata)
+                if debug:
+                    if _DEBUG: print(f"DEBUG: Merged metadata: {metadata}")
+
+            # Get the page component (not rendered HTML)
+            page_element = route.renderer.get_page_element(route.file_path, context)
+            if debug:
+                if _DEBUG: print(f"DEBUG: Page element type: {type(page_element)}")
+
+            # Wrapper gives the client router a stable, layout-independent
+            # node to swap during SPA fragment navigation.
+            #
+            # IMPORTANT: preserve the page's AST node. Re-wrapping a PSXElement
+            # without ``_ast_node`` makes rendering fall back to ``to_ast()``,
+            # which turns ComponentNodes (e.g. <Introduction />) into plain
+            # HTML tags and breaks registered/imported components.
+            from ..psx.core.ast_nodes import ElementNode, TextNode
+
+            if page_element is None:
+                raise ValueError("Page component returned None")
+
+            page_ast = getattr(page_element, '_ast_node', None)
+            if page_ast is None and hasattr(page_element, 'to_ast'):
+                page_ast = page_element.to_ast()
+
+            if page_ast is not None:
+                wrapper_children = [page_ast]
+            elif hasattr(page_element, 'to_html'):
+                # interactive_component returns a rendered result that has no
+                # PSX AST. Preserve its HTML instead of wrapping ``None``.
+                wrapper_children = [TextNode(content=page_element.to_html())]
+            else:
+                wrapper_children = [TextNode(content=str(page_element))]
+
+            wrapper = PSXElement(
+                tag='div',
+                props={'id': 'nextpy-page'},
+                children=[page_element],
+            )
+            wrapper._ast_node = ElementNode(
+                tag='div',
+                attributes={'id': 'nextpy-page'},
+                events={},
+                children=wrapper_children,
+                self_closing=False,
+            )
+            wrapper._psx_context = getattr(page_element, '_psx_context', {}) or context
+            page_element = wrapper
+
+            if include_layout:
                 # Apply layout chain innermost-first so the root layout wraps everything.
                 # layout_chain is stored [root, ..., inner] (reversed from collection order).
                 # Iterating reversed() gives [inner, ..., root], so each iteration wraps
@@ -571,55 +931,58 @@ class ComponentRouter:
                 if hasattr(route, 'layout_chain') and route.layout_chain:
                     for layout_path in reversed(route.layout_chain):
                         layout_func = self._load_layout(layout_path)
-                        print(f"DEBUG: Layout function: {layout_func}")
+                        if debug:
+                            if _DEBUG: print(f"DEBUG: Layout function: {layout_func}")
                         if layout_func:
                             try:
                                 # Pass the page element directly as children so its _ast_node
                                 # reference is preserved and to_html() renders it correctly.
-                                # Wrapping in a new PSXElement loses the AST node references
-                                # that contain parsed expressions, logic blocks, etc.
                                 children_element = page_element
-                                
-                                # Wrap page element with layout - pass PSXElement as children
-                                # IMPORTANT: Pass the full context to the layout
-                                print(f"DEBUG: Calling layout with context keys: {list(context.keys())}")
+
                                 # Add props to context for layout components
                                 layout_context = {**context, 'props': context}
                                 page_element = layout_func(children=children_element, **layout_context)
-                                print(f"DEBUG: After layout, element type: {type(page_element)}")
+                                if debug:
+                                    if _DEBUG: print(f"DEBUG: After layout, element type: {type(page_element)}")
+                                # A nested layout may already provide the full document
+                                # (e.g. /jobs). In that case the root layout must not
+                                # wrap it again, otherwise the nested <html>/<body>
+                                # document is emitted inside the root document.
+                                if self._is_full_document(page_element) and layout_path != route.layout_chain[0]:
+                                    break
                             except Exception as e:
                                 print(f"Warning: Failed to apply layout {layout_path}: {e}")
-                                import traceback
-                                traceback.print_exc()
-                
-                # Now render the final composed element tree to HTML
-                content = render_psx(page_element, context)
-                print(f"DEBUG: Rendered content length: {len(content)}")
-                
-                return content
-            except Exception as e:
-                print(f"ERROR: Failed to render route: {e}")
-                import traceback
-                traceback.print_exc()
-                
-                # Try to render error boundary if available
-                if hasattr(route, 'special_chains') and route.special_chains.get('error'):
-                    error_chain = route.special_chains['error']
-                    if error_chain:
-                        try:
-                            error_func = self._load_layout(error_chain[-1])  # Use closest error boundary
-                            if error_func:
-                                from ..psx.core.parser import PSXElement
-                                error_element = error_func(error=str(e), **context)
-                                return render_psx(error_element, context)
-                        except Exception as error_error:
-                            print(f"ERROR: Failed to render error boundary: {error_error}")
-                
-                return f"<h1>Error rendering route: {e}</h1>"
-        elif route.handler and callable(route.handler):
-            return route.handler(context)
-        else:
-            return f"<h1>Route {route.path} has no handler</h1>"
+
+            content = render_psx(page_element, context)
+            if debug:
+                if _DEBUG: print(f"DEBUG: Rendered content length: {len(content)}")
+            return content
+
+        except Exception as e:
+            print(f"ERROR: Failed to render route: {e}")
+            import traceback
+            traceback.print_exc()
+
+            if debug:
+                from ..server.debug import render_debug_error_html
+                return render_debug_error_html(
+                    e,
+                    request_path=str(getattr(route, "path", "") or ""),
+                )
+
+            # Try to render error boundary if available
+            if hasattr(route, 'special_chains') and route.special_chains.get('error'):
+                error_chain = route.special_chains['error']
+                if error_chain:
+                    try:
+                        error_func = self._load_layout(error_chain[-1])  # Use closest error boundary
+                        if error_func:
+                            error_element = error_func(error=str(e), **context)
+                            return render_psx(error_element, context)
+                    except Exception as error_error:
+                        print(f"ERROR: Failed to render error boundary: {error_error}")
+
+            return '<h1 data-nextpy-error="true">Internal Server Error</h1>' 
     
     def handle_api_route(self, route: Route, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle API route requests"""

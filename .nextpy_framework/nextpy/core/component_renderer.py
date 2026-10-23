@@ -9,9 +9,12 @@ import time
 import os
 import inspect
 import html
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from ..true_jsx import JSXElement, render_jsx, JSXComponent
+
+_DEBUG = os.environ.get("NEXTPY_DEBUG") == "1"
 
 from ..jsx_transformer import load_jsx_module
 from ..jsx_preprocessor import is_jsx_file, JSXSyntaxError
@@ -41,6 +44,7 @@ class ComponentRenderer:
         }
         self.render_cache = {}
         self.render_cache_timeout = 60  # 1 minute for rendered content
+        self.revalidate_cache: Dict[str, Optional[int]] = {}
         
     def _is_cache_valid(self, file_path: Path, cache_entry: Dict[str, Any]) -> bool:
         """Check if cache entry is still valid"""
@@ -61,11 +65,47 @@ class ComponentRenderer:
                 
         return True
         
+    def get_revalidate(self, file_path: Path) -> Optional[int]:
+        """Return the ISR revalidate interval for a page, if declared."""
+        key = str(file_path)
+        if key in self.revalidate_cache:
+            return self.revalidate_cache[key]
+        try:
+            module = self.load_component_module(file_path)
+            value = getattr(module, "revalidate", None)
+            self.revalidate_cache[key] = int(value) if value is not None else None
+            return self.revalidate_cache[key]
+        except Exception:
+            return None
+
     def _get_cache_key(self, file_path: Path, context: Dict[str, Any] = None) -> str:
-        """Generate cache key for rendered content"""
-        context_hash = hash(str(sorted(context.items()))) if context else 0
-        return f"{file_path}:{context_hash}"
+        """Generate a stable cache key, ignoring request-scoped objects."""
+        stable: Dict[str, Any] = {}
+        for key, value in (context or {}).items():
+            if key in ("request", "req", "response"):
+                continue
+            if isinstance(value, (str, int, float, bool, type(None))):
+                stable[key] = value
+            elif isinstance(value, (list, tuple, dict)):
+                try:
+                    json.dumps(value, sort_keys=True, default=str)
+                except (TypeError, ValueError):
+                    continue
+                stable[key] = value
+        payload = json.dumps(stable, sort_keys=True, default=str)
+        return f"{file_path}:{hash(payload)}"
         
+    @staticmethod
+    def _static_props_key(file_path, context: Dict[str, Any]) -> str:
+        """Static props must be scoped to route params/query, not just the file.
+
+        Without this, a dynamic SSG route such as ``/posts/[slug]`` would reuse
+        the first rendered slug for every URL.
+        """
+        params = json.dumps(context.get('params') or {}, sort_keys=True, default=str)
+        query = json.dumps(context.get('query') or {}, sort_keys=True, default=str)
+        return f"static:{file_path}:{params}:{query}"
+
     def _cleanup_expired_cache(self):
         """Remove expired entries from cache"""
         current_time = time.time()
@@ -145,12 +185,14 @@ class ComponentRenderer:
         Get the page component as a PSX element (not rendered HTML)
         This allows layouts to compose with the page element tree before rendering
         """
-        print(f"DEBUG get_page_element: Received context keys: {list(context.keys()) if context else 'None'}")
+        if self.debug:
+            if _DEBUG: print(f"DEBUG get_page_element: Received context keys: {list(context.keys()) if context else 'None'}")
         if context is None:
             context = {}
         else:
             context = context.copy()  # Copy to avoid mutating the original
-        print(f"DEBUG get_page_element: After copy/initialization, context keys: {list(context.keys())}")
+        if self.debug:
+            if _DEBUG: print(f"DEBUG get_page_element: After copy/initialization, context keys: {list(context.keys())}")
         
         try:
             module = self.load_component_module(file_path)
@@ -159,16 +201,16 @@ class ComponentRenderer:
             page_props = {}
             
             # getServerSideProps (runs on every request)
-            if hasattr(module, 'getServerSideProps'):
+            if not context.get('__nextpy_props_loaded') and hasattr(module, 'getServerSideProps'):
                 if callable(module.getServerSideProps):
                     result = module.getServerSideProps(context)
                     if isinstance(result, dict) and 'props' in result:
                         page_props.update(result['props'])
             
             # getStaticProps (runs at build time)
-            elif hasattr(module, 'getStaticProps'):
+            elif not context.get('__nextpy_props_loaded') and hasattr(module, 'getStaticProps'):
                 if callable(module.getStaticProps):
-                    static_props_key = f"static:{file_path}"
+                    static_props_key = self._static_props_key(file_path, context)
                     static_cache_entry = self.cache.get(static_props_key)
                     
                     if self._is_cache_valid(file_path, static_cache_entry):
@@ -177,10 +219,16 @@ class ComponentRenderer:
                         result = module.getStaticProps(context)
                         if isinstance(result, dict) and 'props' in result:
                             page_props.update(result['props'])
+                            revalidate = result.get('revalidate')
+                            if revalidate is None:
+                                revalidate = getattr(module, 'revalidate', None)
+                            if revalidate is not None:
+                                self.revalidate_cache[str(file_path)] = int(revalidate)
                             self.cache[static_props_key] = {
                                 'props': result['props'],
                                 'timestamp': time.time(),
-                                'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0
+                                'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0,
+                                'revalidate': revalidate,
                             }
             
             # Get the main component
@@ -201,7 +249,8 @@ class ComponentRenderer:
             # Call the component to get the PSX element
             # Pass both context and page_props
             final_props = {**context, **page_props}
-            print(f"DEBUG: get_page_element calling component with props: {list(final_props.keys())}")
+            if self.debug:
+                if _DEBUG: print(f"DEBUG: get_page_element calling component with props: {list(final_props.keys())}")
             if callable(component):
                 element = component(final_props)
             else:
@@ -226,12 +275,19 @@ class ComponentRenderer:
         if context is None:
             context = {}
         
-        # Check render cache for static props
-        render_cache_key = self._get_cache_key(file_path, context)
-        render_cache_entry = self.render_cache.get(render_cache_key)
-        
-        if render_cache_entry and self._is_cache_valid(file_path, render_cache_entry):
-            return render_cache_entry['html']
+        # Check render cache for static props. Responses using
+        # getServerSideProps are request-specific and must never be cached.
+        try:
+            probe = self.load_component_module(file_path)
+            has_ssr = probe is not None and hasattr(probe, 'getServerSideProps')
+        except Exception:
+            has_ssr = False
+
+        render_cache_key = None if has_ssr else self._get_cache_key(file_path, context)
+        if render_cache_key is not None:
+            render_cache_entry = self.render_cache.get(render_cache_key)
+            if render_cache_entry and self._is_cache_valid(file_path, render_cache_entry):
+                return render_cache_entry['html']
         
         try:
             module = self.load_component_module(file_path)
@@ -240,17 +296,17 @@ class ComponentRenderer:
             page_props = {}
             
             # getServerSideProps (runs on every request)
-            if hasattr(module, 'getServerSideProps'):
+            if not context.get('__nextpy_props_loaded') and hasattr(module, 'getServerSideProps'):
                 if callable(module.getServerSideProps):
                     result = module.getServerSideProps(context)
                     if isinstance(result, dict) and 'props' in result:
                         page_props.update(result['props'])
             
             # getStaticProps (runs at build time)
-            elif hasattr(module, 'getStaticProps'):
+            elif not context.get('__nextpy_props_loaded') and hasattr(module, 'getStaticProps'):
                 if callable(module.getStaticProps):
                     # Check if we have cached static props
-                    static_props_key = f"static:{file_path}"
+                    static_props_key = self._static_props_key(file_path, context)
                     static_cache_entry = self.cache.get(static_props_key)
                     
                     if self._is_cache_valid(file_path, static_cache_entry):
@@ -259,11 +315,17 @@ class ComponentRenderer:
                         result = module.getStaticProps(context)
                         if isinstance(result, dict) and 'props' in result:
                             page_props.update(result['props'])
+                            revalidate = result.get('revalidate')
+                            if revalidate is None:
+                                revalidate = getattr(module, 'revalidate', None)
+                            if revalidate is not None:
+                                self.revalidate_cache[str(file_path)] = int(revalidate)
                             # Cache static props
                             self.cache[static_props_key] = {
                                 'props': result['props'],
                                 'timestamp': time.time(),
-                                'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0
+                                'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0,
+                                'revalidate': revalidate,
                             }
             
             # Get the main component
@@ -370,12 +432,13 @@ class ComponentRenderer:
             if not html.strip().startswith('<html'):
                 html = self._wrap_in_html(html, page_props)
             
-            # Cache the rendered content
-            self.render_cache[render_cache_key] = {
-                'html': html,
-                'timestamp': time.time(),
-                'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0
-            }
+            # Cache the rendered content (never for request-specific SSR pages)
+            if render_cache_key is not None:
+                self.render_cache[render_cache_key] = {
+                    'html': html,
+                    'timestamp': time.time(),
+                    'file_mtime': file_path.stat().st_mtime if file_path.exists() else 0
+                }
             
             return html
             
@@ -975,7 +1038,8 @@ class ComponentRenderer:
             # Extract handlers from the original content
             handlers = extract_handler_functions(lambda: None)  # We'll parse the content directly
             
-            print(f"new keys {handlers}")
+            if self.debug:
+                print(f"new keys {handlers}")
             
             # Parse the original content to find handler functions
             import re
@@ -1015,7 +1079,8 @@ class ComponentRenderer:
             # Extract state keys
             state_pattern = r'\[(\w+),\s*set\w+\]\s*=\s*useState'
             state_keys = re.findall(state_pattern, original_content)
-            print(f"here new keys {state_keys}")
+            if self.debug:
+                print(f"here new keys {state_keys}")
             
             # Convert handler attributes in HTML
             html_with_handlers = convert_handler_attributes_in_html(rendered_html, handlers, state_keys)

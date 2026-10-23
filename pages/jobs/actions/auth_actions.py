@@ -8,8 +8,17 @@ from nextpy.db import get_session, User
 from nextpy.auth import (
     hash_password, verify_password,
     set_session_cookie, get_user_id_from_request, clear_session_cookie,
+    delete_session, COOKIE_NAME,
 )
 from nextpy.server_actions import server_action
+
+
+def _rotate_session(request: Request, response: Response, user_id: int) -> None:
+    """Replace any existing session with a fresh one on login/register."""
+    old_session_id = request.cookies.get(COOKIE_NAME)
+    if old_session_id:
+        delete_session(old_session_id)
+    set_session_cookie(response, user_id, secure=request.url.scheme == "https")
 
 
 @server_action()
@@ -53,7 +62,7 @@ async def register(
         db.commit()
         db.refresh(user)
 
-        set_session_cookie(response, user.id)
+        _rotate_session(request, response, user.id)
         return {
             "success": True,
             "user": {"id": user.id, "email": user.email, "username": user.username, "role": user.role},
@@ -86,7 +95,7 @@ async def login(
         if user is None or not verify_password(password, user.hashed_password):
             return {"success": False, "error": "Invalid email or password"}
 
-        set_session_cookie(response, user.id)
+        _rotate_session(request, response, user.id)
         return {
             "success": True,
             "user": {"id": user.id, "email": user.email, "username": user.username, "role": user.role},
@@ -99,11 +108,11 @@ async def login(
 @server_action()
 async def logout(request: Request, response: Response):
     """Log out the current user by clearing the session cookie."""
-    session_id = request.cookies.get("nextpy_session", "")
+    session_id = request.cookies.get(COOKIE_NAME, "")
     if session_id:
-        clear_session_cookie(response, session_id)
+        clear_session_cookie(response, session_id, secure=request.url.scheme == "https")
     else:
-        response.delete_cookie("nextpy_session")
+        response.delete_cookie(COOKIE_NAME, path="/")
     return {"success": True, "message": "Logged out"}
 
 

@@ -3,8 +3,8 @@ Interactive Component Decorator for NextPy PSX - PRODUCTION VERSION
 Enables client-side interactivity with proper handler registration
 """
 
-from cgitb import handler
 import sys
+import os
 import inspect
 import re
 import ast
@@ -12,7 +12,7 @@ import hashlib
 import html as html_module
 import json
 from functools import wraps
-from typing import Callable, Dict, Any, Optional, List
+from typing import Callable, Dict, Any, Optional, List, Tuple
 
 
 def extract_handler_functions(component_func: Callable) -> Dict[str, str]:
@@ -255,6 +255,14 @@ def python_code_to_js(python_code: str, state_keys: Optional[List[str]] = None) 
         setter_name = match.group(1)  # "Count" from "setCount"
         expression = match.group(2)   # The argument
         state_key = setter_name[0].lower() + setter_name[1:]  # "count"
+
+        # Map the setter back to the actual useState variable. This handles
+        # setFullName -> full_name and setConfirmingDelete -> confirming_delete.
+        normalized_setter = setter_name.replace('_', '').lower()
+        for key in (state_keys or []):
+            if key == state_key or key.replace('_', '').lower() == normalized_setter:
+                state_key = key
+                break
         
         # SAFER: Only do basic state variable replacement
         # Do NOT try to parse full expressions with regex
@@ -299,7 +307,7 @@ def python_code_to_js(python_code: str, state_keys: Optional[List[str]] = None) 
     js_code = replace_state_variables(js_code, state_keys)
     
     # Pattern 5: Final cleanup and normalization
-    js_code = re.sub(r'\s+', ' ', js_code)  # Normalize whitespace
+    js_code = re.sub(r'[ \t]+', ' ', js_code)  # Normalize spaces, preserve newlines
     js_code = js_code.strip()
     
     return js_code
@@ -456,6 +464,36 @@ def generate_handler_registration_script(
     // Handler: {handler_name} (event: {event_type})
     component._handlers['{handler_name}'] = function(e) {{
         try {{
+            const triggerElement = e.__nextpyHandlerElement || e.currentTarget;
+            const bridgedEvent = {{
+                target: e.target,
+                currentTarget: triggerElement,
+                type: e.type,
+                key: e.key,
+                code: e.code,
+                detail: e.detail,
+                preventDefault: () => e.preventDefault(),
+                stopPropagation: () => e.stopPropagation()
+            }};
+            if (e.target && e.target.dataset) {{
+                bridgedEvent.targetDataset = {{ ...e.target.dataset }};
+            }}
+            if (triggerElement && triggerElement.dataset) {{
+                bridgedEvent.currentTargetDataset = {{ ...triggerElement.dataset }};
+            }}
+            if (e.target && e.target.value !== undefined) {{
+                bridgedEvent.value = e.target.value;
+            }}
+            if (component.state) {{
+                component.state.e = bridgedEvent;
+                component.state.event = bridgedEvent;
+            }}
+            const actionRuntime = window.NextPyActionRuntime;
+            const actionComponent = actionRuntime && actionRuntime.components && actionRuntime.components.get(componentId);
+            if (actionComponent && actionComponent.state) {{
+                actionComponent.state.e = bridgedEvent;
+                actionComponent.state.event = bridgedEvent;
+            }}
             {safe_js_body}
         }} catch (error) {{
             console.error('Error in handler {handler_name}:', error);
@@ -476,7 +514,8 @@ def generate_handler_registration_script(
             console.log('Found data-handler-click element:', el);
             if (!el) return;
 
-            const handlerName = el.getAttribute('data-handler-click');
+            const rawHandlerName = el.getAttribute('data-handler-click');
+            const handlerName = rawHandlerName ? rawHandlerName.replace(/^[\"']|[\"']$/g, '') : rawHandlerName;
             console.log('Handler name:', handlerName);
             
             // Fallback component ID lookup - try multiple sources
@@ -502,7 +541,7 @@ def generate_handler_registration_script(
 
             const handler = component._handlers?.[handlerName];
             console.log('Handler found:', handler);
-            if (handler) handler.call(component, e);
+            if (handler) { e.__nextpyHandlerElement = el; handler.call(component, e); }
         });
 
         // Delegate change events
@@ -510,7 +549,8 @@ def generate_handler_registration_script(
             const el = e.target.closest('[data-handler-change]');
             if (!el) return;
 
-            const handlerName = el.getAttribute('data-handler-change');
+            const rawHandlerName = el.getAttribute('data-handler-change');
+            const handlerName = rawHandlerName ? rawHandlerName.replace(/^[\"']|[\"']$/g, '') : rawHandlerName;
             
             // Fallback component ID lookup
             let componentId = el.closest('[data-component-id]')?.getAttribute('data-component-id');
@@ -530,7 +570,35 @@ def generate_handler_registration_script(
             if (!component) return;
 
             const handler = component._handlers?.[handlerName];
-            if (handler) handler.call(component, e);
+            if (handler) { e.__nextpyHandlerElement = el; handler.call(component, e); }
+        });
+
+        // Delegate input events (text/password/textarea bindings)
+        document.addEventListener('input', function(e) {
+            const el = e.target.closest('[data-handler-input]');
+            if (!el) return;
+
+            const rawHandlerName = el.getAttribute('data-handler-input');
+            const handlerName = rawHandlerName ? rawHandlerName.replace(/^[\"']|[\"']$/g, '') : rawHandlerName;
+
+            let componentId = el.closest('[data-component-id]')?.getAttribute('data-component-id');
+            if (!componentId) {
+                componentId = document.body.getAttribute('data-component-id');
+            }
+            if (!componentId) {
+                const componentIds = Object.keys(window.nextpyComponents || {});
+                if (componentIds.length > 0) {
+                    componentId = componentIds[0];
+                }
+            }
+
+            if (!componentId) return;
+
+            const component = window.nextpyComponents?.[componentId];
+            if (!component) return;
+
+            const handler = component._handlers?.[handlerName];
+            if (handler) { e.__nextpyHandlerElement = el; handler.call(component, e); }
         });
 
         // Delegate submit events
@@ -538,7 +606,8 @@ def generate_handler_registration_script(
             const el = e.target.closest('[data-handler-submit]');
             if (!el) return;
 
-            const handlerName = el.getAttribute('data-handler-submit');
+            const rawHandlerName = el.getAttribute('data-handler-submit');
+            const handlerName = rawHandlerName ? rawHandlerName.replace(/^[\"']|[\"']$/g, '') : rawHandlerName;
             
             // Fallback component ID lookup
             let componentId = el.closest('[data-component-id]')?.getAttribute('data-component-id');
@@ -560,6 +629,7 @@ def generate_handler_registration_script(
             const handler = component._handlers?.[handlerName];
             if (handler) {
                 e.preventDefault();
+                e.__nextpyHandlerElement = el;
                 handler.call(component, e);
             }
         });
@@ -835,6 +905,213 @@ from ..components.component import component as base_component
 from .integration import get_component_hydrator
 
 
+def _get_component_source(func: Callable) -> str:
+    """Return the best available Python source for a component function."""
+    candidates = []
+    try:
+        if hasattr(func, '__module__') and func.__module__ in sys.modules:
+            module = sys.modules[func.__module__]
+            if hasattr(module, '__original_file__'):
+                candidates.append(module.__original_file__)
+    except Exception:
+        pass
+    try:
+        code_file = getattr(getattr(func, '__code__', None), 'co_filename', None)
+        if code_file:
+            candidates.append(code_file)
+    except Exception:
+        pass
+    try:
+        candidates.append(inspect.getfile(func))
+    except Exception:
+        pass
+    try:
+        module_name = getattr(func, '__module__', '').split('.')[-1]
+        if module_name:
+            import os
+            for base in (os.getcwd(), os.path.join(os.getcwd(), 'pages')):
+                for ext in ('.py', '.psx'):
+                    candidates.append(os.path.join(base, module_name + ext))
+    except Exception:
+        pass
+    # Dynamically executed page modules often have no usable filename.  Scan
+    # the pages tree for the component definition as a last resort.
+    try:
+        import os
+        func_name = getattr(func, '__name__', '')
+        pages_dir = os.path.join(os.getcwd(), 'pages')
+        if func_name and os.path.isdir(pages_dir):
+            for root, _dirs, files in os.walk(pages_dir):
+                for filename in files:
+                    if not filename.endswith(('.py', '.psx')):
+                        continue
+                    file_path = os.path.join(root, filename)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                    except Exception:
+                        continue
+                    if f'def {func_name}(' in content:
+                        candidates.insert(0, file_path)
+                        break
+                if candidates and candidates[0].startswith(pages_dir):
+                    break
+    except Exception:
+        pass
+    for file_path in candidates:
+        try:
+            if file_path and os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except Exception:
+            continue
+    try:
+        return inspect.getsource(func)
+    except Exception:
+        return ""
+
+
+def _extract_state_and_derived(func: Callable) -> Tuple[List[str], Dict[str, str]]:
+    """Extract useState keys and simple derived-variable expressions.
+
+    Derived values such as ``bg_color = "bg-white" if theme == "light" else
+    ...`` are evaluated by Python during SSR and then lost.  Capturing the
+    expression lets the browser recompute the same value after a state change.
+    """
+    source = _get_component_source(func)
+    state_keys: List[str] = []
+    derived: Dict[str, str] = {}
+    if not source:
+        return state_keys, derived
+
+    try:
+        import textwrap
+        tree = ast.parse(textwrap.dedent(source))
+    except Exception:
+        return state_keys, derived
+
+    node = None
+    for candidate in ast.walk(tree):
+        if isinstance(candidate, (ast.FunctionDef, ast.AsyncFunctionDef)) and candidate.name == getattr(func, '__name__', ''):
+            node = candidate
+            break
+    if node is None:
+        return state_keys, derived
+
+    hook_names = {
+        'useState', 'useEffect', 'useFetch', 'useReducer', 'useMemo',
+        'useCallback', 'useRef', 'useContext', 'useLocalStorage',
+        'useDebounce', 'useInterval', 'useToggle', 'useCrudEvent',
+    }
+    excluded_names = {
+        'handle', 'handler', 'props', 'result', 'children',
+    }
+
+    for stmt in node.body:
+        if isinstance(stmt, ast.Assign):
+            value = stmt.value
+            targets = stmt.targets
+            # [state, setter] = useState(...)
+            if len(targets) == 1 and isinstance(targets[0], (ast.Tuple, ast.List)):
+                if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == 'useState':
+                    elts = targets[0].elts
+                    if elts and isinstance(elts[0], ast.Name):
+                        state_keys.append(elts[0].id)
+                continue
+            if len(targets) != 1 or not isinstance(targets[0], ast.Name):
+                continue
+            name = targets[0].id
+            if name in excluded_names or name.startswith('_'):
+                continue
+            if isinstance(value, (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+                if value.func.id in hook_names or value.func.id.startswith('create_on'):
+                    continue
+            try:
+                expr = ast.unparse(value).strip()
+            except Exception:
+                continue
+            if expr:
+                derived[name] = expr
+        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+    return state_keys, derived
+
+
+def _extract_client_effects(func: Callable) -> List[Dict[str, Any]]:
+    """Compile useEffect callbacks into structured client actions."""
+    source = _get_component_source(func)
+    if not source:
+        return []
+    try:
+        import textwrap
+        tree = ast.parse(textwrap.dedent(source))
+    except Exception:
+        return []
+
+    node = None
+    for candidate in ast.walk(tree):
+        if isinstance(candidate, (ast.FunctionDef, ast.AsyncFunctionDef)) and candidate.name == getattr(func, '__name__', ''):
+            node = candidate
+            break
+    if node is None:
+        return []
+
+    defs = {
+        child.name: child for child in node.body
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    from ..compiler.actions import compile_handler_to_actions
+    effects: List[Dict[str, Any]] = []
+    for stmt in node.body:
+        if not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)):
+            continue
+        call = stmt.value
+        if not (isinstance(call.func, ast.Name) and call.func.id == 'useEffect'):
+            continue
+        if not call.args:
+            continue
+
+        arg = call.args[0]
+        code = None
+        name = 'effect'
+        if isinstance(arg, ast.Lambda):
+            code = ast.unparse(arg)
+            name = 'effect'
+        elif isinstance(arg, ast.Name) and arg.id in defs:
+            target = defs[arg.id]
+            name = arg.id
+            body = target.body
+            # Drop nonlocal/global declarations; state writes become SET_STATE.
+            body = [b for b in body if not isinstance(b, (ast.Nonlocal, ast.Global))]
+            code = '\n'.join(ast.unparse(b) for b in body)
+        if not code:
+            continue
+
+        deps = None
+        if len(call.args) > 1:
+            deps_node = call.args[1]
+            if isinstance(deps_node, (ast.List, ast.Tuple)):
+                try:
+                    deps = [ast.literal_eval(elt) for elt in deps_node.elts]
+                except Exception:
+                    deps = [ast.unparse(elt) for elt in deps_node.elts]
+        try:
+            actions = compile_handler_to_actions(code, name)
+        except Exception:
+            actions = []
+        if actions and not any(
+            isinstance(a, dict) and (a.get('metadata') or {}).get('error')
+            for a in actions
+        ):
+            effects.append({'name': name, 'actions': actions, 'deps': deps})
+
+    return effects
+
+
 def interactive_component(func: Callable) -> Callable:
     """
     Decorator for interactive PSX components with client-side state management.
@@ -844,9 +1121,6 @@ def interactive_component(func: Callable) -> Callable:
     
     @wraps(func)
     def wrapper(*args, **kwargs):
-        # First, get the component from the base decorator
-        base_component_result = base_component(func)(*args, **kwargs)
-        
         # Extract props if provided
         props = args[0] if args and isinstance(args[0], dict) else kwargs
         
@@ -951,14 +1225,31 @@ def interactive_component(func: Callable) -> Callable:
             props = {}
         props['_component_id'] = component_id
         
-        # Execute the component function
-        base_component_result = func(props)
+        # Execute through the base decorator so props, local helpers, and
+        # module-level components are captured in ``_psx_context``. Calling
+        # the raw ``func`` here loses nested functions used inside {for}/{if}
+        # blocks (e.g. job_type_label) and breaks their evaluation.
+        base_component_result = base_component(func)(props)
+
+        # Snapshot mount actions before rendering children.  Child components
+        # reset the thread-local hook state, so reading it after ``to_html``
+        # would pick up a child's actions (or none) instead of this component's.
+        from ..components.component import get_current_component
+        _comp_state = get_current_component()
+        _mount_actions_snapshot = list(getattr(_comp_state, 'mount_actions', []))
+        _registered_functions_snapshot = dict(
+            getattr(_comp_state, 'registered_functions', {})
+        )
         
         # FIX: Extract state early before rendering
         from .integration import get_component_hydrator
         hydrator = get_component_hydrator()
         metadata = hydrator.extract_component_metadata(func)
         initial_state = metadata['state']
+        state_keys, derived_expressions = _extract_state_and_derived(func)
+        if not state_keys:
+            state_keys = list(initial_state.keys())
+        client_effects = _extract_client_effects(func)
         
         # Get the HTML output with interactive handler context
         if hasattr(base_component_result, 'to_html'):
@@ -970,11 +1261,18 @@ def interactive_component(func: Callable) -> Callable:
                 base_component_result._psx_context.update(initial_state)
                 # FIX: Add component ID to context for conditional element tracking
                 base_component_result._psx_context['_component_id'] = component_id
+                # Expose which values may change in the browser.  Attribute
+                # rendering uses this to emit reactive class/style bindings
+                # even when the component used an f-string (which Python has
+                # already flattened before PSX sees it).
+                base_component_result._psx_context['_psx_dynamic_vars'] = list(dict.fromkeys(
+                    list(state_keys) + list(derived_expressions.keys())
+                ))
+                base_component_result._psx_context['_psx_derived_expressions'] = derived_expressions
                 html = base_component_result.to_html()  # Don't pass context, use stored _psx_context
                 
                 # FIX: Post-process HTML to add component_id to conditional elements
                 # This is a fallback mechanism to ensure conditional elements have the component_id
-                import re
                 def add_component_id_to_conditionals(html, component_id):
                     # Pattern to match conditional spans with empty component_id
                     # Handle both escaped and unescaped quotes
@@ -994,69 +1292,79 @@ def interactive_component(func: Callable) -> Callable:
         else:
             html = str(base_component_result)
         
-        # Extract state keys from the component for better conversion
-        try:
-            # Try to get source from function first
-            source = inspect.getsource(func)
-            # Match useState patterns to get state variable names
-            # FIX: Support any setter name, not just setXxxx pattern
-            state_pattern = r'\[(\w+),\s*(\w+)\]\s*=\s*useState'
-            state_keys = re.findall(state_pattern, source)
-            # Extract only the state variable names (first group)
-            state_keys = [match[0] for match in state_keys]
-        except (OSError, TypeError) as e:
-            # Fallback: try to read from PSX file using the same logic as EnhancedHandlerExtractor
-            try:
-                # Get the module name from the function
-                module = inspect.getmodule(func)
-                if module and module.__name__:
-                    module_name = module.__name__.split('.')[-1]
-                    # Try to find the PSX file in pages directory
-                    import os
-                    pages_path = os.path.join(os.getcwd(), 'pages')
-                    
-                    psx_file = os.path.join(pages_path, f'{module_name}.psx')
-                    
-                    if os.path.exists(psx_file):
-                        with open(psx_file, 'r') as f:
-                            source = f.read()
-                            # FIX: Support any setter name, not just setXxxx pattern
-                            state_pattern = r'\[(\w+),\s*(\w+)\]\s*=\s*useState'
-                            state_keys = re.findall(state_pattern, source)
-                            # Extract only the state variable names (first group)
-                            state_keys = [match[0] for match in state_keys]
-                    else:
-                        state_keys = []
-                else:
-                    state_keys = []
-            except Exception as e:
-                state_keys = []
-        
+        # Supplement state keys from the rendered context.  inspect.getsource
+        # often fails for dynamically loaded pages, but the context still has
+        # the actual useState variable names (e.g. full_name, confirming_delete).
+        if hasattr(base_component_result, '_psx_context'):
+            for _key, _value in base_component_result._psx_context.items():
+                if not callable(_value) and not str(_key).startswith('_') and _key not in state_keys:
+                    state_keys.append(_key)
+
         # FIX: Extract lambda handlers from _psx_context (set by PSXRuntime during rendering)
         if hasattr(base_component_result, '_psx_context'):
             lambda_handlers = base_component_result._psx_context.get('_lambda_handlers', {})
             if lambda_handlers:
+                from ..compiler.actions import compile_handler_to_actions
                 for handler_name, lambda_source in lambda_handlers.items():
                     try:
-                        js_code = python_code_to_js(lambda_source, state_keys)
-                        handlers[handler_name] = js_code
+                        actions = compile_handler_to_actions(lambda_source, handler_name)
+                        if actions and not any(
+                            isinstance(a, dict) and (a.get('metadata') or {}).get('error')
+                            for a in actions
+                        ):
+                            handlers[handler_name] = actions
+                        else:
+                            handlers[handler_name] = python_code_to_js(lambda_source, state_keys)
                     except Exception as e:
-                        handlers[handler_name] = f'console.error("Lambda compile failed: {e}")'
+                        handlers[handler_name] = python_code_to_js(lambda_source, state_keys)
         
+        # Compile any remaining Python handler strings into structured actions.
+        # The regex fallbacks below historically emitted raw Python (e.g. a
+        # ternary) directly into the browser, which is a SyntaxError.  Structured
+        # actions keep the client runtime safe and make conditionals/derived
+        # expressions behave the same on both sides.
+        try:
+            from ..compiler.actions import compile_handler_to_actions
+            for _handler_name, _handler_body in list(handlers.items()):
+                if not isinstance(_handler_body, str) or not _handler_body.strip():
+                    continue
+                _code = _handler_body.strip()
+                # Do not feed already-compiled JavaScript back into the Python
+                # action compiler (e.g. ``this.stateManager.set(...)``).
+                if any(_marker in _code for _marker in (
+                    'this.stateManager', 'executeNextPyActions', 'console.',
+                    'window.', 'document.', 'new Function(', '=>'
+                )):
+                    continue
+                _candidate = _code
+                if not _code.startswith(('lambda ', 'lambda:', 'def ')) and '\n' not in _code:
+                    _candidate = f"lambda e: {_code}"
+                try:
+                    _actions = compile_handler_to_actions(_candidate, _handler_name)
+                    if _actions and not any(
+                        isinstance(a, dict) and (a.get('metadata') or {}).get('error')
+                        for a in _actions
+                    ):
+                        handlers[_handler_name] = _actions
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # Convert handler attributes to data-handler attributes with dynamic targeting
         html = convert_handler_attributes_in_html(html, handlers, state_keys, initial_state)
         
         # Manually register component to ensure consistent ID
-        from ..components.component import get_current_component
-        _comp_state = get_current_component()
         component_data = {
             'name': metadata['name'],
             'state': metadata['state'],
             'handlers': metadata['handlers'],
             'effects': metadata['effects'],
             'props': props or {},
-            'mount_actions': getattr(_comp_state, 'mount_actions', []),
-            'registered_functions': getattr(_comp_state, 'registered_functions', {}),
+            'mount_actions': _mount_actions_snapshot,
+            'registered_functions': _registered_functions_snapshot,
+            'derived_expressions': derived_expressions,
+            'client_effects': client_effects,
         }
         # Override the generated ID with our consistent one
         original_id = engine.register_component(component_data)
@@ -1069,10 +1377,13 @@ def interactive_component(func: Callable) -> Callable:
         
         
         # Generate scripts
-        full_script = engine.generate_hydration_script()
+        # Only emit this component's hydration script. Generating all
+        # contexts makes every component embed every earlier component,
+        # producing quadratic page size and leaking scripts across routes.
+        full_script = engine.generate_hydration_script(component_id)
         
         handler_script = generate_handler_registration_script(handlers, component_id, state_keys=state_keys, html=html)
-        hydration_script = hydrator.generate_hydration_script()
+        hydration_script = hydrator.generate_hydration_script(component_id)
         
         # Load JS action runtime script for executeNextPyActions
         try:
@@ -1087,6 +1398,10 @@ def interactive_component(func: Callable) -> Callable:
         # 3. Hydration script (initializes components)
         # 4. Handler registration script (uses executeNextPyActions)
         complete_script = f"{action_runtime_script}\n\n{full_script}\n\n{hydration_script}\n\n{handler_script}"
+        
+        # The script is self-contained now; drop the server-side context so
+        # repeated page renders do not accumulate every component ever seen.
+        engine.cleanup_component(component_id)
         
         # Create a wrapped result that includes hydration data
         class InteractiveComponentResult:

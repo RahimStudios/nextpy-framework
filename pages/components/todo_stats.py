@@ -4,10 +4,10 @@ useFetch demo - loads todo statistics from a server action endpoint
 and reactively updates when the user performs CRUD operations.
 """
 
-from nextpy.psx import component, useFetch
+from nextpy.psx import interactive_component, useFetch
 
 
-@component
+@interactive_component
 def TodoStats(props=None):
     stats = useFetch("/__nextpy/actions/execute", {
         "method": "POST",
