@@ -1,0 +1,42 @@
+/* NextPy Docs — scroll-spy & reveal styles */
+
+/* "On this page" TOC active link */
+.docs-toc-active,
+[data-docs-toc-active] {
+    color: #fff !important;
+    border-left-color: #3b82f6 !important;
+}
+
+/* Left sidebar active page link */
+aside a.docs-nav-active,
+aside a[data-docs-nav-active] {
+    color: #fff !important;
+    background: rgba(59, 130, 246, 0.12) !important;
+}
+
+/* Scroll reveal — data-attribute variants are used by the PSX scrollspy
+   because the action runtime cannot call obj.prop.method() chains like
+   element.classList.add(); setAttribute/removeAttribute work instead. */
+.docs-reveal,
+[data-docs-reveal] {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--docs-reveal-delay, 0ms);
+    will-change: opacity, transform;
+}
+.docs-revealed,
+[data-docs-revealed] {
+    opacity: 1;
+    transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .docs-reveal,
+    [data-docs-reveal] {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+}

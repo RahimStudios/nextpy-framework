@@ -24,6 +24,7 @@ from nextpy.cache import MemoryCache, cached, get_cache, invalidate
 from nextpy.tasks import BackgroundQueue, get_queue, enqueue, task as background_task
 from nextpy.api import api, fetch_api
 from nextpy.admin import AdminSite, admin, register
+from nextpy.websocket import broadcast_hot_reload
 from nextpy.auth import (
     AuthManager, require_auth, create_session,
     get_session as get_auth_session, delete_session,
@@ -123,6 +124,7 @@ __all__ = [
     'get_user_from_request', 'current_user_id', 'require_user', 'require_role',
     'get_server_side_props', 'get_static_props', 'get_static_paths',
     'Head', 'Link', 'AdminSite', 'admin', 'register',
+    'broadcast_hot_reload',
     
     # Enhanced Full-Stack Features
     'ServerAction', 'server_action', 'ServerActionError', 'ValidationError',

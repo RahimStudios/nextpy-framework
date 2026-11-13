@@ -2,7 +2,7 @@
 JobHub - Edit job listing page.
 """
 
-from nextpy.psx import interactive_component, useState, callServerAction
+from nextpy.psx import interactive_component, useState, useEffect, callServerAction, Motion
 
 
 @interactive_component
@@ -10,12 +10,11 @@ def EditJobForm(props=None):
     props = props or {}
     job = props.get("job")
 
-    [saving, setSaving] = useState(False)
     [error, setError] = useState("")
     [_server_result, _setServerResult] = useState(None)
+    [_server_loading, _setServerLoading] = useState(False)
 
     def handle_update(e):
-        setSaving(True)
         setError("")
         callServerAction("update_job", {
             "job_id": int(e.target.elements.job_id.value),
@@ -28,14 +27,15 @@ def EditJobForm(props=None):
             "job_type": e.target.elements.job_type.value,
             "experience_level": e.target.elements.experience_level.value,
         })
-        if _server_result and _server_result.get("success"):
-            window.nextpyHardNavigate("/jobs/dashboard")
-        else:
-            if _server_result:
-                setError(_server_result.get("error", "Failed to update job."))
+
+    def handle_result():
+        if _server_result:
+            if _server_result.get("success"):
+                window.nextpyHardNavigate("/jobs/dashboard")
             else:
-                setError("Failed to update job.")
-            setSaving(False)
+                setError(_server_result.get("error", "Failed to update job."))
+
+    useEffect(handle_result, [_server_result])
 
     if not job:
         return (
@@ -69,14 +69,19 @@ def EditJobForm(props=None):
 
     return (
         <div class="max-w-2xl mx-auto">
+            <Motion
+                initial={{"opacity": 0, "transform": "translateY(24px)"}}
+                animate={{"opacity": 1, "transform": "translateY(0px)"}}
+                transition={{"duration": 0.5, "easing": "ease-out"}}
+            >
             <div class="mb-8">
-                <a href="/jobs/dashboard" class="text-sm font-medium text-gray-500 hover:text-indigo-600">Back to dashboard</a>
-                <h1 class="mt-3 text-3xl font-bold text-gray-900">Edit Job Posting</h1>
-                <p class="mt-1 text-gray-600">Update the details for this job listing.</p>
+                <a href="/jobs/dashboard" class="text-sm font-semibold text-indigo-600 transition hover:text-indigo-500">Back to dashboard</a>
+                <h1 class="mt-3 text-3xl font-bold tracking-tight text-gray-900">Edit Job Posting</h1>
+                <p class="mt-1 text-gray-500">Update the details for this job listing.</p>
             </div>
-            <div class="p-8 bg-white border border-gray-200 shadow-sm rounded-xl">
+            <div class="rounded-2xl border border-gray-200 bg-white p-8 shadow-xl shadow-gray-900/5">
                 {if error:
-                    <div class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50">{error}</div>
+                    <div class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50" data-state-error></div>
                 }
                 <form onsubmit={handle_update} class="space-y-6">
                     <input type="hidden" name="job_id" value={job["id"]} />
@@ -128,14 +133,18 @@ def EditJobForm(props=None):
                             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">{job.get("description", "")}</textarea>
                     </div>
                     <div class="flex items-center gap-4">
-                        <button type="submit"
-                            class="px-6 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                            Save Changes
+                        <button type="submit" disabled={_server_loading}
+                            class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3 font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:shadow-xl hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60">
+                            {if _server_loading:
+                                <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                            }
+                            <span>{"Saving..." if _server_loading else "Save Changes"}</span>
                         </button>
-                        <a href="/jobs/dashboard" class="text-sm font-medium text-gray-600 hover:text-gray-800">Cancel</a>
+                        <a href="/jobs/dashboard" class="text-sm font-semibold text-gray-500 transition hover:text-gray-800">Cancel</a>
                     </div>
                 </form>
             </div>
+            </Motion>
         </div>
     )
 

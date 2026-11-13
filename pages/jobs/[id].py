@@ -2,7 +2,7 @@
 JobHub - Job detail page (/jobs/[id]). Uses interactive_component + callServerAction.
 """
 
-from nextpy.psx import interactive_component, useState, callServerAction
+from nextpy.psx import interactive_component, useState, useEffect, callServerAction, Motion
 
 
 @interactive_component
@@ -17,21 +17,24 @@ def JobDetailPage(props=None):
 
     [showModal, setShowModal] = useState(False)
     [coverLetter, setCoverLetter] = useState("")
-    [applying, setApplying] = useState(False)
     [done, setDone] = useState(False)
     [error, setError] = useState("")
     [_server_result, _setServerResult] = useState(None)
+    [_server_loading, _setServerLoading] = useState(False)
 
     def handle_apply(e):
-        setApplying(True)
         setError("")
         callServerAction("apply_to_job", {"job_id": job["id"] if job else 0, "cover_letter": coverLetter})
-        if _server_result and _server_result.get("success"):
-            setDone(True)
-            setShowModal(False)
-        else:
-            setError(_server_result.get("error", "Failed to apply.") if _server_result else "Failed to apply.")
-            setApplying(False)
+
+    def handle_result():
+        if _server_result:
+            if _server_result.get("success"):
+                setDone(True)
+                setShowModal(False)
+            else:
+                setError(_server_result.get("error", "Failed to apply."))
+
+    useEffect(handle_result, [_server_result])
 
     if job is None:
         return (
@@ -45,9 +48,14 @@ def JobDetailPage(props=None):
 
     return (
         <div class="mx-auto max-w-4xl">
-            <a href="/jobs/browse" class="mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-indigo-600">Back to jobs</a>
+            <a href="/jobs/browse" class="mb-6 inline-flex items-center gap-1 text-sm font-semibold text-gray-500 transition hover:text-indigo-600">&larr; Back to jobs</a>
 
-            <div class="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+            <Motion
+                initial={{"opacity": 0, "transform": "translateY(24px)"}}
+                animate={{"opacity": 1, "transform": "translateY(0px)"}}
+                transition={{"duration": 0.5, "easing": "ease-out"}}
+            >
+            <div class="rounded-2xl border border-gray-200 bg-white p-8 shadow-xl shadow-gray-900/5">
                 <div class="mb-4 flex flex-wrap items-center gap-2">
                     <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700">
                         {JOB_TYPES.get(job["job_type"], job["job_type"])}
@@ -98,7 +106,7 @@ def JobDetailPage(props=None):
                     {if (not is_owner) and is_authenticated:
                         {if not showModal and (not done) and (not already_applied):
                             <button onclick={lambda e: setShowModal(True)}
-                                class="w-full rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-700">
+                                class="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:shadow-xl hover:brightness-110 active:scale-[0.98]">
                                 Apply Now
                             </button>
                         }
@@ -116,11 +124,11 @@ def JobDetailPage(props=None):
                         }
 
                         {if showModal:
-                            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                                <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
-                                    <h3 class="mb-4 text-lg font-semibold text-gray-900">Apply to this job</h3>
+                            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+                                <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+                                    <h3 class="mb-4 text-lg font-bold text-gray-900">Apply to this job</h3>
                                     {if error:
-                                        <div class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+                                        <div class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700" data-state-error></div>
                                     }
                                     <div class="mb-4">
                                         <label class="mb-1 block text-sm font-medium text-gray-700">Cover letter (optional)</label>
@@ -131,11 +139,13 @@ def JobDetailPage(props=None):
                                     </div>
                                     <div class="flex justify-end gap-3">
                                         <button onclick={lambda e: setShowModal(False)}
-                                            class="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
-                                        <button onclick={handle_apply} disabled={applying}
-                                            class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
-                                            {if applying: "Submitting..."}
-                                            {if not applying: "Submit Application"}
+                                            class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-100">Cancel</button>
+                                        <button onclick={handle_apply} disabled={_server_loading}
+                                            class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-600/25 transition-all hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60">
+                                            {if _server_loading:
+                                                <span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                                            }
+                                            <span>{"Submitting..." if _server_loading else "Submit Application"}</span>
                                         </button>
                                     </div>
                                 </div>
@@ -144,13 +154,14 @@ def JobDetailPage(props=None):
                     }
 
                     {if not is_authenticated:
-                        <div class="rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-600">
-                            <a href="/jobs/login" class="font-medium text-indigo-600 hover:text-indigo-500">Log in</a>
+                        <div class="rounded-xl bg-gray-50 p-4 text-center text-sm text-gray-600">
+                            <a href="/jobs/login" class="font-semibold text-indigo-600 transition hover:text-indigo-500">Log in</a>
                             {" "}to apply to this job.
                         </div>
                     }
                 </div>
             </div>
+            </Motion>
         </div>
     )
 

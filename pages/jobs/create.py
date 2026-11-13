@@ -2,7 +2,7 @@
 JobHub - Create job listing page. Uses interactive_component with callServerAction.
 """
 
-from nextpy.psx import component, interactive_component, useState, callServerAction
+from nextpy.psx import component, interactive_component, useState, useEffect, callServerAction, Motion
 
 
 @interactive_component
@@ -16,11 +16,10 @@ def CreateJobForm(props=None):
     [jobType, setJobType] = useState("full_time")
     [experienceLevel, setExperienceLevel] = useState("mid")
     [error, setError] = useState("")
-    [loading, setLoading] = useState(False)
     [_server_result, _setServerResult] = useState(None)
+    [_server_loading, _setServerLoading] = useState(False)
 
     def handle_create(e):
-        setLoading(True)
         setError("")
         params = {
             "title": title,
@@ -33,21 +32,30 @@ def CreateJobForm(props=None):
             "experience_level": experienceLevel,
         }
         callServerAction("create_job", params)
-        if _server_result and _server_result.get("success"):
-            window.navigateTo("/jobs/dashboard")
-        else:
-            setError(_server_result.get("error", "Failed to create job.") if _server_result else "Failed to create job.")
-            setLoading(False)
+
+    def handle_result():
+        if _server_result:
+            if _server_result.get("success"):
+                window.navigateTo("/jobs/dashboard")
+            else:
+                setError(_server_result.get("error", "Failed to create job."))
+
+    useEffect(handle_result, [_server_result])
 
     return (
         <div class="max-w-2xl mx-auto">
+            <Motion
+                initial={{"opacity": 0, "transform": "translateY(24px)"}}
+                animate={{"opacity": 1, "transform": "translateY(0px)"}}
+                transition={{"duration": 0.5, "easing": "ease-out"}}
+            >
             <div class="mb-8">
-                <h1 class="text-3xl font-bold text-gray-900">Post a New Job</h1>
-                <p class="mt-1 text-gray-600">Fill out the details below to list your job opening.</p>
+                <h1 class="text-3xl font-bold tracking-tight text-gray-900">Post a New Job</h1>
+                <p class="mt-1 text-gray-500">Fill out the details below to list your job opening.</p>
             </div>
-            <div class="p-8 bg-white border border-gray-200 shadow-sm rounded-xl">
+            <div class="rounded-2xl border border-gray-200 bg-white p-8 shadow-xl shadow-gray-900/5">
                 {if error:
-                    <div class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50">{error}</div>
+                    <div class="p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50" data-state-error></div>
                 }
                 <form onsubmit={handle_create} class="space-y-6">
                     <div class="grid gap-6 sm:grid-cols-2">
@@ -110,14 +118,18 @@ def CreateJobForm(props=None):
                         </textarea>
                     </div>
                     <div class="flex items-center gap-4">
-                        <button type="submit"
-                            class="px-6 py-3 font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                            <p>Publish</p>
+                        <button type="submit" disabled={_server_loading}
+                            class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3 font-semibold text-white shadow-lg shadow-indigo-600/25 transition-all hover:shadow-xl hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60">
+                            {if _server_loading:
+                                <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+                            }
+                            <span>{"Publishing..." if _server_loading else "Publish"}</span>
                         </button>
-                        <a href="/jobs/dashboard" class="text-sm font-medium text-gray-600 hover:text-gray-800">Cancel</a>
+                        <a href="/jobs/dashboard" class="text-sm font-semibold text-gray-500 transition hover:text-gray-800">Cancel</a>
                     </div>
                 </form>
             </div>
+            </Motion>
         </div>
     )
 

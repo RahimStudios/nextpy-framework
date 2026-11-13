@@ -8,7 +8,7 @@ def CodeBlock(props):
     lang = props.get("lang", "text")
     code = props.get("code", "")
     
-    handletoggle=create_onclick(lambda e: setCopy(not copy))
+    
 
     return psx(f"""
         <div class="relative rounded-xl border border-gray-800 bg-[#0d1117] overflow-hidden group">
@@ -29,7 +29,7 @@ def CodeBlock(props):
                 </span>
 
                 <!-- Copy button -->
-                <div create_onclick={handletoggle}>
+                <div onclick={{lambda e: setCopy(not copy)}}>
                 {{if copy:
                      <button
                         onclick="navigator.clipboard.writeText(this.closest('.group').querySelector('code').innerText)"

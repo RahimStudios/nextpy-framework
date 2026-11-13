@@ -62,7 +62,20 @@ from nextpy.admin import AdminSite
 from nextpy.db import User, Post, Todo, Job, Application
 
 # Import all server actions (triggers registration)
+try:
+    from pages.actions import *  # noqa: F401
+except ImportError:
+    pass  # No server actions yet
+
 from pages.actions.todo_actions import create_todo, toggle_todo, delete_todo, get_todos, get_todo_stats  # noqa: F401
+try:
+    from pages.jobs.actions import (  # noqa: F401
+        register, login, logout, get_me,
+        create_job, update_job, delete_job, get_my_jobs, list_jobs,
+        apply_to_job, get_my_applications, get_job_applications, update_application_status,
+    )
+except ImportError:
+    pass  # No job actions yet
 from pages.jobs.actions import (  # noqa: F401
     register, login, logout, get_me,
     create_job, update_job, delete_job, get_my_jobs, list_jobs,
@@ -72,8 +85,19 @@ from pages.jobs.actions import (  # noqa: F401
 # Database must initialize before the app starts
 from nextpy.db import init_db
 from nextpy.config import settings
+import os
 
-init_db(settings["database_url"])
+# Ensure database URL is absolute path for consistency
+db_url = settings["database_url"]
+if db_url.startswith("sqlite:///"):
+    db_path = db_url.replace("sqlite:///", "")
+    if not os.path.isabs(db_path):
+        # Make it relative to the project directory
+        project_dir = Path(__file__).parent
+        abs_path = str(project_dir / db_path)
+        db_url = f"sqlite:///{abs_path}"
+
+init_db(db_url)
 
 admin_site = AdminSite()
 admin_site.register(User)

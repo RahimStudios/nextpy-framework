@@ -27,6 +27,13 @@ class DatabaseConfig:
     
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./nextpy.db")
+        # Convert relative SQLite path to absolute path to ensure consistency
+        if self.database_url.startswith("sqlite:///"):
+            db_path = self.database_url.replace("sqlite:///", "")
+            if not os.path.isabs(db_path):
+                # Make it relative to the current working directory
+                abs_path = os.path.abspath(db_path)
+                self.database_url = f"sqlite:///{abs_path}"
         self.echo = os.getenv("DB_ECHO", "false").lower() == "true"
         self.pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
         self.max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))

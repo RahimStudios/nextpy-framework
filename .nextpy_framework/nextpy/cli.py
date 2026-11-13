@@ -9,6 +9,7 @@ import time
 import secrets
 import asyncio
 import signal
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -39,6 +40,8 @@ class HotReloadHandler:
         self.debug = debug
         self.last_reload_time = 0
         self.reload_cooldown = 0.5  # 500ms cooldown between reloads
+        self._last_tailwind_build = 0.0
+        self._tailwind_build_lock = threading.Lock()
 
         # Enhanced file patterns for better JSX detection
         self.file_patterns = {
@@ -136,6 +139,47 @@ class HotReloadHandler:
             )
 
         self._trigger_reload()
+        self._schedule_tailwind_build(file_path)
+
+    def _schedule_tailwind_build(self, file_path: str = None):
+        """Rebuild Tailwind CSS in the background when source files change.
+
+        Tailwind v4 scans .py/.html sources for class candidates, so edits
+        to pages/components must regenerate public/tailwind.css — otherwise
+        new utilities only appear after a full restart.
+        """
+        if not file_path:
+            return
+        if not str(file_path).endswith(('.py', '.html', '.jsx', '.css')):
+            return
+        now = time.time()
+        if now - self._last_tailwind_build < 2.0:
+            return
+        with self._tailwind_build_lock:
+            if now - self._last_tailwind_build < 2.0:
+                return
+            self._last_tailwind_build = now
+        threading.Thread(target=self._run_tailwind_build, daemon=True).start()
+
+    def _run_tailwind_build(self):
+        """Run `npm run build:tailwind` without blocking the reload path."""
+        try:
+            proj_root = Path.cwd()
+            if not (proj_root / "package.json").exists():
+                return
+            npm_bin = shutil.which("npm")
+            if not npm_bin:
+                return
+            subprocess.run(
+                [npm_bin, "run", "build:tailwind"],
+                cwd=str(proj_root),
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=120,
+            )
+        except Exception:
+            pass  # CSS rebuild is best-effort; server reload still proceeds
 
     def on_modified(self, event):
         """Handle file modification events"""
@@ -169,7 +213,18 @@ class HotReloadHandler:
                     self._debounce_reload(event.src_path)
 
     def _trigger_reload(self):
-        """Trigger the reload callback"""
+        """Broadcast an HMR signal to all SSE-connected browsers, then
+        invoke the server reload callback (which restarts uvicorn)."""
+        # Notify every browser tab listening on /__nextpy/hmr so the browser
+        # starts polling for the new server before uvicorn has finished
+        # restarting.  The SSE client script reconnects automatically and
+        # reloads the page the moment the server is responsive again.
+        try:
+            from nextpy.server.app import _hmr_signal_all
+            _hmr_signal_all()
+        except Exception:
+            pass  # HMR notification is best-effort
+
         if self.reload_callback:
             self.reload_callback()
 
@@ -241,13 +296,25 @@ def _init_project_db():
     """Load .env, register project models, initialize SQLAlchemy."""
     _prepare_project()
     try:
-        import models  # noqa: F401  (registers app tables on nextpy.db.Base)
+        import nextpy.db  # noqa: F401  (registers app tables on nextpy.db.Base)
     except ImportError:
         pass
     from nextpy.config import settings
     from nextpy.db import init_db
 
-    return init_db(settings["database_url"])
+    # Ensure database URL is absolute path for consistency
+    db_url = settings.get("database_url", "sqlite:///app.db")
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url.replace("sqlite:///", "")
+        if not os.path.isabs(db_path):
+            # Resolve relative to the actual project root context
+            project_dir = Path.cwd().resolve()
+            abs_path = os.path.abspath(project_dir / db_path)
+            db_url = f"sqlite:///{abs_path}"
+            settings["database_url"] = db_url
+
+    return init_db(db_url)
+
 
 
 def _format_size(size_bytes: int) -> str:
@@ -295,6 +362,23 @@ def dev(port: int, host: str, reload: bool, debug: bool):
     settings["debug"] = debug
     settings["nextpy_debug"] = debug
     settings["development"] = True
+
+    # Initialize database cleanly with explicit path maps before starting server
+    from nextpy.db import init_db
+    db_url = settings.get("database_url", "sqlite:///app.db")
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url.replace("sqlite:///", "")
+        if not os.path.isabs(db_path):
+            project_dir = Path.cwd().resolve()
+            abs_path = os.path.abspath(project_dir / db_path)
+            db_url = f"sqlite:///{abs_path}"
+            settings["database_url"] = db_url
+            
+    init_db(db_url)
+
+    main_module = find_main_module()
+    project_dir = Path.cwd()
+    os.chdir(project_dir)
 
     main_module = find_main_module()
     project_dir = Path.cwd()
@@ -1256,6 +1340,7 @@ def _create_project_structure(
         "pages/blog",
         "pages/api",
         "pages/api/users",
+        "pages/actions",
         "components",
         "components/ui",
         "components/layout",
@@ -1840,9 +1925,12 @@ __all__ = ["AppUser", "User"]
 
     # Create the application entry point.  init_db() is called here, after all
     # models have been imported, so SQLAlchemy knows every table.
-    (project_dir / "main.py").write_text('''"""NextPy application entry point."""
+    (project_dir / "main.py").write_text('''
+
+"""NextPy application entry point."""
 
 import sys
+import os
 from pathlib import Path
 
 # Support running from a source checkout that vendors the framework.
@@ -1858,11 +1946,16 @@ from nextpy.db import User, init_db
 # Importing models registers them on nextpy.db.Base.
 import models  # noqa: F401
 
-init_db(settings["database_url"])
+# Import server actions to register them
+try:
+    from pages.actions import *  # noqa: F401
+except ImportError:
+    pass  # No server actions yet
 
 admin_site = AdminSite()
 admin_site.register(User)
 
+# Define the app instance cleanly so Uvicorn can import it
 app = nx.create_app(
     pages_dir="pages",
     templates_dir="templates",
@@ -1875,12 +1968,24 @@ app = nx.create_app(
 if __name__ == "__main__":
     import uvicorn
 
+    # Ensure database URL is absolute path ONLY when executed directly
+    db_url = settings["database_url"]
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url.replace("sqlite:///", "")
+        if not os.path.isabs(db_path):
+            project_dir = Path(__file__).parent
+            abs_path = str(project_dir / db_path)
+            db_url = f"sqlite:///{abs_path}"
+
+    init_db(db_url)
+
     uvicorn.run(
         "main:app",
         host=settings["host"],
         port=settings["port"],
         reload=settings["development"],
     )
+
 ''')
     click.echo("  Created: main.py")
 
@@ -2109,6 +2214,22 @@ def use_auth(request):
     )
     click.echo("  Created: hooks/use_auth.py")
 
+    (project_dir / "pages/actions" / "__init__.py").write_text('''
+"""Server actions for this NextPy app.
+
+Server actions allow you to call Python functions from client-side components.
+All server actions are automatically registered when imported here.
+
+Example:
+    from nextpy.server_actions import server_action
+
+    @server_action()
+    async def my_action(data: str):
+        return {"result": f"Processed: {data}"}
+"""''')
+    click.echo("  Created: pages/actions/__init__.py")
+
+    
     # Create middleware example
     (project_dir / "middleware" / "cors.py").write_text('''"""CORS middleware example"""
 
@@ -2132,8 +2253,14 @@ def add_cors_middleware(app):
     (project_dir / "tests" / "test_api.py").write_text('''"""API tests example"""
 
 import pytest
-from fastapi.testclient import TestClient
+import sys
+from pathlib import Path
+
+# Add project to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
@@ -2306,11 +2433,11 @@ Thumbs.db
     click.echo("  Created: .gitignore")
 
 
-    # Create .env file for development.  Secrets are generated per project so
-    # new apps never ship with the framework's placeholder secrets.
+    # create .env file with generated secrets
     _secret_key = secrets.token_urlsafe(48)
     _jwt_secret = secrets.token_urlsafe(48)
     _session_secret = secrets.token_urlsafe(48)
+
     (project_dir / ".env").write_text(f"""# NextPy Development Environment
 DEVELOPMENT=true
 DEBUG=true
@@ -2320,13 +2447,15 @@ NEXTPY_DEBUG=true
 HOST=0.0.0.0
 PORT=8000
 
-# Database
-DATABASE_URL=sqlite:///./app.db
+# Database Configuration 
+DATABASE_URL=sqlite:///nextpy.db
 
 # Secrets (generated for this project)
 SECRET_KEY={_secret_key}
 JWT_SECRET={_jwt_secret}
 SESSION_SECRET={_session_secret}
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
 
 # Security
 CSRF_PROTECTION=true
@@ -2336,8 +2465,10 @@ CORS_ORIGINS=
 # NextPy Settings
 NEXTPY_DEBUG_ICON=true
 NEXTPY_HOT_RELOAD=true
+NEXTPY_HMR=true
 NEXTPY_LOG_LEVEL=info
 """)
+
     click.echo("  Created: .env")
 
     # Install Node.js dependencies

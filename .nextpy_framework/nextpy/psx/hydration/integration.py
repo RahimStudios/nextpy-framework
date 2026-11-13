@@ -164,7 +164,8 @@ class ComponentHydrator:
         
         return effects
     
-    def register_component(self, component_func: Callable, props: Dict[str, Any] = None) -> str:
+    def register_component(self, component_func: Callable, props: Dict[str, Any] = None,
+                           hydrate: str = 'eager') -> str:
         """Register a component for hydration"""
         metadata = self.extract_component_metadata(component_func)
         
@@ -192,8 +193,9 @@ class ComponentHydrator:
             'handlers': metadata['handlers'],
             'effects': metadata.get('effects', []),
             'props': props or {},
+            'hydrate': hydrate,
         })
-        wrapped_html = self.engine.generate_html_wrapper(component_id, html, metadata['state'])
+        wrapped_html = self.engine.generate_html_wrapper(component_id, html, metadata['state'], hydrate=hydrate)
         
         # Emit only this component's hydration script.
         hydration_script = self.engine.generate_hydration_script(component_id)
@@ -201,10 +203,10 @@ class ComponentHydrator:
         # Combine HTML and script
         return f"{wrapped_html}\n<script type='text/javascript'>\n{hydration_script}\n</script>"
     
-    def wrap_component_html(self, component_id: str, html: str, 
-                          state: Dict[str, Any]) -> str:
+    def wrap_component_html(self, component_id: str, html: str,
+                          state: Dict[str, Any], hydrate: str = 'eager') -> str:
         """Wrap component HTML with hydration data"""
-        return self.engine.generate_html_wrapper(component_id, html, state)
+        return self.engine.generate_html_wrapper(component_id, html, state, hydrate=hydrate)
     
     def generate_hydration_script(self, component_id: Optional[str] = None) -> str:
         """Generate hydration script for one component (or all if omitted)."""

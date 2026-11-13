@@ -101,6 +101,8 @@ async def login(
             "user": {"id": user.id, "email": user.email, "username": user.username, "role": user.role},
             "message": "Logged in successfully",
         }
+    except  Exception as e:
+        return {"success": False, "error": str(e)}
     finally:
         db.close()
 

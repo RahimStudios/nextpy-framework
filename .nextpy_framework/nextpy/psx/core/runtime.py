@@ -68,10 +68,14 @@ class PSXRuntime:
         if expression in self._expression_cache:
             return self._expression_cache[expression]
         
+        # Normalize whitespace — JSX expressions often contain newlines/indentation
+        # that break Python's parser (e.g. multi-line string concatenation).
+        normalized = ' '.join(expression.split())
+        
         try:
-            result = self.evaluator.evaluate(expression)
+            result = self.evaluator.evaluate(normalized)
             # Cache simple expressions
-            if self._is_cacheable(expression):
+            if self._is_cacheable(normalized):
                 self._expression_cache[expression] = result
             return result
         except Exception as e:
@@ -314,6 +318,15 @@ class PSXRuntime:
                         if initial_value:
                             attrs.append('checked')
                 continue
+            elif key == '_psx_motion':
+                # Motion/AnimatePresence config — emit raw JSON attribute.
+                attrs.append(f'data-psx-motion="{html.escape(str(value), quote=True)}"')
+                continue
+            elif key == '_psx_ref':
+                # ref={name} / ref="name" → data-psx-ref for the client
+                # runtime's per-component ref registry (useRef/getRef).
+                attrs.append(f'data-psx-ref="{html.escape(str(value), quote=True)}"')
+                continue
             elif key == '_bind_type' or key == '_raw_code':
                 # Skip these attributes, they're already handled above
                 continue
@@ -339,6 +352,17 @@ class PSXRuntime:
             if value is None:
                 continue
 
+            # Internal runtime attributes emitted by earlier render passes
+            # (e.g. control-flow branches re-parsed from HTML). They are
+            # metadata, not user expressions: never run {expr} evaluation on
+            # them. The parser entity-decodes attr values once, so escaping
+            # here is the single correct encode.
+            if (html_key == 'data-bind' or html_key.startswith(('data-psx-', 'data-bind-',
+                                     'data-if-', 'data-handler-', 'data-component-id',
+                                     'data-state-'))):
+                attrs.append(f'{html_key}="{html.escape(str(value), quote=True)}"')
+                continue
+
             # Handle different value types
             binding_expr = None
             if isinstance(value, str):
@@ -347,7 +371,11 @@ class PSXRuntime:
                     inner = value[1:-1].strip()
                     binding_expr = inner
                     try:
-                        evaluated = self.evaluate_expression(inner)
+                        # Decode HTML entities — JSX attribute values may contain
+                        # &quot; etc. that break Python expression parsing.
+                        import html as _html
+                        eval_inner = _html.unescape(inner)
+                        evaluated = self.evaluate_expression(eval_inner)
                         value = str(evaluated) if evaluated is not None else ''
                     except Exception:
                         value = inner
@@ -482,11 +510,32 @@ class PSXRuntime:
                         # Keep the prefix so it can be detected during rendering
                         pass
                 
+                # Evaluate {expr} prop values so components receive real
+                # Python objects (dicts for Motion configs, numbers, lists)
+                # instead of literal "{...}" strings. Failures keep the
+                # original string for backwards compatibility.
+                for _pk, _pv in list(props.items()):
+                    if (isinstance(_pv, str) and len(_pv) > 1
+                            and _pv.startswith('{') and _pv.endswith('}')):
+                        try:
+                            props[_pk] = self.evaluate_expression(_pv[1:-1].strip())
+                        except Exception:
+                            pass
+
                 # Call the component function
                 result = component_fn(**props)
                 
                 # Handle the result
                 if hasattr(result, 'to_html'):
+                    # Component helpers (Motion, Card, ...) build fresh
+                    # PSXElements whose _psx_context only holds the component
+                    # module's globals — page locals like ``showPassword``
+                    # are missing and child expressions fail with
+                    # "Unsafe name access".  Merge the parent render context
+                    # on top so page state wins while component helpers stay.
+                    _child_ctx = dict(getattr(result, '_psx_context', None) or {})
+                    _child_ctx.update(self.context)
+                    result._psx_context = _child_ctx
                     return result.to_html()
                 elif hasattr(result, '_ast_node'):
                     # It's a PSXElement, render it
@@ -519,10 +568,15 @@ class PSXRuntime:
         return html.escape(text)
 
 
-def process_python_logic(psx_str: str, context: Dict[str, Any]) -> str:
+def process_python_logic(psx_str: str, context: Dict[str, Any],
+                         substitute_expressions: bool = True) -> str:
     """
     Process Python logic in PSX strings
     Handles all Python expressions, PSX utilities, and control flow
+
+    When ``substitute_expressions`` is False, control-flow blocks are still
+    processed but simple ``{expr}`` text substitutions are left intact so the
+    AST parser can turn them into reactive ExpressionNodes (data-bind spans).
     """
     import re
     import ast
@@ -1164,6 +1218,15 @@ def process_python_logic(psx_str: str, context: Dict[str, Any]) -> str:
             pos = end_pos
             continue
     
+    # When called from the AST parser we must NOT eagerly substitute {expr}
+    # in text — those need to survive as ExpressionNodes so the renderer can
+    # emit reactive data-bind spans. Control-flow bodies above already
+    # recurse with the default (True) so their content stays pre-rendered.
+    if not substitute_expressions:
+        # Still strip JSX-style comments so they don't become ExpressionNodes.
+        result = re.sub(r'\{/\*.*?\*/\}', '', result, flags=re.S)
+        return result
+
     # Now handle simple expressions with our improved logic
     matches = list(re.finditer(r'\{([^{}]+?)\}', result))
     if not matches:

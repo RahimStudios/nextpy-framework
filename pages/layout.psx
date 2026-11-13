@@ -9,7 +9,7 @@ def Layout(children, **props):
     return (
         <html>
             <head>
-                <title>{props.get('title', 'Nextpy - The Python Web Framework')}</title>
+                <title>{props.get('title', 'Next.py by RAHIMSTUDIOS - The Python Web Framework')}</title>
                 <link rel="shortcut icon" href="/static/images/icon.png" type="image/x-icon">
                 <link href="/tailwind.css" rel="stylesheet">
                 
@@ -115,10 +115,3 @@ def Layout(children, **props):
         </html>
     )
 
-def getServerSideProps(context):
-    return {
-        "props": {
-            "title": "Nextpy - The Python Web Framework",
-            "message": "Your Python-powered web framework with True JSX"
-        }
-    }

@@ -23,6 +23,7 @@ class HydrationContext:
     registered_functions: Dict[str, Any] = field(default_factory=dict)
     derived_expressions: Dict[str, str] = field(default_factory=dict)
     client_effects: List[Dict[str, Any]] = field(default_factory=list)
+    hydrate: str = 'eager'  # eager | visible | interaction | idle
 
 
 class HydrationEngine:
@@ -64,6 +65,7 @@ class HydrationEngine:
             registered_functions=component_data.get('registered_functions', {}),
             derived_expressions=component_data.get('derived_expressions', {}),
             client_effects=component_data.get('client_effects', []),
+            hydrate=component_data.get('hydrate', 'eager'),
         )
         
         self.contexts[component_id] = context
@@ -189,9 +191,11 @@ class HydrationEngine:
                 }}
             }});
             
-            // CRITICAL: Auto-trigger component binding updates after state changes
-            if (this.component && this.component.updateBindings) {{
-                this.component.updateBindings();
+            // CRITICAL: Auto-trigger component binding updates after state changes.
+            // Batched through rAF so high-frequency sets (scroll, input) coalesce
+            // into one DOM pass per frame instead of one scan per set.
+            if (this.component && this.component._scheduleBindingsUpdate) {{
+                this.component._scheduleBindingsUpdate();
             }}
         }}
     }}
@@ -225,6 +229,7 @@ class HydrationEngine:
                     _runtimeComponent.derivedExpressions = _derivedExpressions;
                     _runtimeComponent.effects = {json.dumps(context.client_effects)};
                 }}
+                this._derivedExpressions = _derivedExpressions || {{}};
                 // FIX: Rebuild dependency map after DOM is ready
                 setTimeout(() => {{
                     window.NextPyActionRuntime.rebuildDependencyMap(id);
@@ -244,6 +249,27 @@ class HydrationEngine:
             }});
         }}
         
+        // Resolve a data-bind target: plain state keys come from StateManager;
+        // derived variables (e.g. ``label = "A" if open else "B"``) are
+        // re-evaluated through the action runtime's derivedExpressions so
+        // they stay reactive even though they are not state keys.
+        _resolveBindingValue(stateKey) {{
+            const state = this.stateManager.state || {{}};
+            if (stateKey in state) return this.stateManager.get(stateKey);
+            const rt = window.NextPyActionRuntime;
+            if (rt && rt.components && typeof rt._deriveVariables === 'function') {{
+                try {{
+                    const derived = rt._deriveVariables(state, this.id);
+                    if (stateKey in derived) return derived[stateKey];
+                }} catch (e) {{}}
+            }}
+            return this.stateManager.get(stateKey);
+        }}
+
+        _isDerivedKey(stateKey) {{
+            return !!(this._derivedExpressions && this._derivedExpressions[stateKey]);
+        }}
+
         createBinding(element, binding) {{
             const parts = binding.split(":");
             if (parts.length !== 2) return;
@@ -254,18 +280,18 @@ class HydrationEngine:
             // Store binding info
             this.bindings.set(elementId, {{ property, stateKey, element }});
             
-            // Subscribe to state changes
+            // Subscribe to state changes. Derived keys can depend on any
+            // state variable, so they refresh on every notification.
             const unsub = this.stateManager.subscribe((key, newValue) => {{
-                if (key === stateKey) {{
-                    this.updateBinding(elementId, property, newValue);
+                if (key === stateKey || this._isDerivedKey(stateKey)) {{
+                    this.updateBinding(elementId, property, this._resolveBindingValue(stateKey));
                 }}
             }});
             
             this.unsubscribers.push(unsub);
             
             // Set initial value
-            const initialValue = this.stateManager.get(stateKey);
-            this.updateBinding(elementId, property, initialValue);
+            this.updateBinding(elementId, property, this._resolveBindingValue(stateKey));
             
             // Add two-way binding for input elements
             if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {{
@@ -281,6 +307,10 @@ class HydrationEngine:
         updateBinding(elementId, property, value) {{
             const binding = this.bindings.get(elementId);
             if (!binding) return;
+            // An unresolvable binding (missing state key, failed derived
+            // expression) must not blank the SSR-rendered text — keep the
+            // server-rendered value instead of writing '' over it.
+            if (value === undefined) return;
             
             const {{ element }} = binding;
             
@@ -436,6 +466,21 @@ class HydrationEngine:
             }});
         }}
         
+        _scheduleBindingsUpdate() {{
+            if (this._bindingsScheduled) return;
+            this._bindingsScheduled = true;
+            const run = () => {{
+                this._bindingsScheduled = false;
+                if (this.updateBindings) this.updateBindings();
+            }};
+            const hidden = typeof document !== 'undefined' && document.hidden;
+            if (typeof requestAnimationFrame === 'function' && !hidden) {{
+                requestAnimationFrame(run);
+            }} else {{
+                setTimeout(run, hidden ? 16 : 0);
+            }}
+        }}
+
         updateBindings() {{
             // Update all DOM elements with data-bind attributes
             if (!this.element) {{
@@ -449,7 +494,8 @@ class HydrationEngine:
                 if (!binding) return;
                 
                 const [property, stateKey] = binding.split(':');
-                const value = this.stateManager.get(stateKey);
+                const value = this._resolveBindingValue(stateKey);
+                if (value === undefined) return;
 
                 try {{
                     if (property === 'textContent') {{
@@ -490,8 +536,23 @@ class HydrationEngine:
         }}
     }}
     
+    // Read SSR state from the __PSX_DATA__ JSON bootstrap tag (CSP-friendly,
+    // defers JSON parse cost). Falls back to the inline literal for older
+    // markup that predates the bootstrap tag.
+    function readInitialState() {{
+        const tag = document.getElementById('__PSX_DATA__-{component_id}');
+        if (tag) {{
+            try {{
+                return JSON.parse(tag.textContent);
+            }} catch (e) {{
+                console.warn('[NextPy] Failed to parse __PSX_DATA__ for {component_id}:', e);
+            }}
+        }}
+        return {json.dumps(context.initial_state).replace("</", "<\\/")};
+    }}
+
     // Initialize component
-    const initialState = {json.dumps(context.initial_state)};
+    const initialState = readInitialState();
     const component = new Component(componentId, initialState);
     
     // Store component reference for cleanup
@@ -526,29 +587,82 @@ class HydrationEngine:
     
     }}
     
-    // Initialize component when DOM is ready
-    if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', initializeComponent);
-    }} else {{
-        // DOM is already ready - try immediately, then retry if element not found (SPA navigation timing)
-        const el = document.getElementById(componentId);
-        if (el) {{
-            initializeComponent();
+    // Initialize component when DOM is ready (with SPA retry fallback)
+    function initWhenDomReady() {{
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', initializeComponent);
         }} else {{
-            // Element not found yet - retry with increasing delays (SPA body replacement timing)
-            let retries = 0;
-            const maxRetries = 10;
-            const retryInterval = setInterval(() => {{
-                retries++;
-                const retryEl = document.getElementById(componentId);
-                if (retryEl) {{
-                    clearInterval(retryInterval);
-                    initializeComponent();
-                }} else if (retries >= maxRetries) {{
-                    clearInterval(retryInterval);
-                    console.warn('Component element not found after retries:', componentId);
-                }}
-            }}, 50);
+            // DOM is already ready - try immediately, then retry if element not found (SPA navigation timing)
+            const el = document.getElementById(componentId);
+            if (el) {{
+                initializeComponent();
+            }} else {{
+                // Element not found yet - retry with increasing delays (SPA body replacement timing)
+                let retries = 0;
+                const maxRetries = 10;
+                const retryInterval = setInterval(() => {{
+                    retries++;
+                    const retryEl = document.getElementById(componentId);
+                    if (retryEl) {{
+                        clearInterval(retryInterval);
+                        initializeComponent();
+                    }} else if (retries >= maxRetries) {{
+                        clearInterval(retryInterval);
+                        console.warn('Component element not found after retries:', componentId);
+                    }}
+                }}, 50);
+            }}
+        }}
+    }}
+
+    // Island hydration: defer attaching listeners/state until the component
+    // is actually needed. The SSR HTML stays fully rendered and untouched —
+    // hydration only binds to existing DOM nodes (zero DOM reset).
+    const hydrateStrategy = '{context.hydrate}';
+    let islandInitialized = false;
+    function initIsland() {{
+        if (islandInitialized) return;
+        islandInitialized = true;
+        initWhenDomReady();
+    }}
+
+    if (hydrateStrategy === 'eager' || hydrateStrategy === '') {{
+        initIsland();
+    }} else {{
+        const islandEl = document.getElementById(componentId);
+        if (!islandEl) {{
+            // Element missing at script eval — fall back to eager scheduling.
+            initIsland();
+        }} else if (hydrateStrategy === 'visible') {{
+            // Hydrate when the island scrolls into view.
+            if (typeof IntersectionObserver === 'function') {{
+                const io = new IntersectionObserver((entries) => {{
+                    if (entries.some(e => e.isIntersecting)) {{
+                        io.disconnect();
+                        initIsland();
+                    }}
+                }}, {{ rootMargin: '200px' }});
+                io.observe(islandEl);
+            }} else {{
+                initIsland();
+            }}
+        }} else if (hydrateStrategy === 'interaction') {{
+            // Hydrate on first user interaction inside the island.
+            const events = ['pointerdown', 'focusin', 'keydown'];
+            const onInteract = () => {{
+                events.forEach(ev => islandEl.removeEventListener(ev, onInteract));
+                initIsland();
+            }};
+            events.forEach(ev => islandEl.addEventListener(ev, onInteract, {{ once: false }}));
+        }} else if (hydrateStrategy === 'idle') {{
+            // Hydrate when the main thread is idle.
+            if (typeof requestIdleCallback === 'function') {{
+                requestIdleCallback(() => initIsland(), {{ timeout: 2000 }});
+            }} else {{
+                setTimeout(initIsland, 1);
+            }}
+        }} else {{
+            initIsland();
         }}
     }}
 }})();
@@ -589,25 +703,32 @@ class HydrationEngine:
         if component_id in self.contexts:
             del self.contexts[component_id]
     
-    def generate_html_wrapper(self, component_id: str, html_content: str, state: Dict[str, Any]) -> str:
+    def generate_html_wrapper(self, component_id: str, html_content: str, state: Dict[str, Any],
+                              hydrate: str = 'eager') -> str:
         """Generate HTML wrapper with hydration script"""
         # Register component with state
         if component_id not in self.contexts:
             self.register_component({
                 'name': 'Component',
-                'state': state
+                'state': state,
+                'hydrate': hydrate,
             })
             registered_id = list(self.contexts.keys())[-1]
             if registered_id != component_id:
                 self.contexts[component_id] = self.contexts.pop(registered_id)
                 self.contexts[component_id].component_id = component_id
-        
+        else:
+            # Ensure an explicitly passed strategy wins over a stale context.
+            self.contexts[component_id].hydrate = hydrate
+
         hydration_script = self.generate_hydration_script(component_id)
-        
+        state_json = json.dumps(state).replace('</', '<\\/')
+
         return f"""
-<div id="{component_id}" data-component-id="{component_id}" class="nextpy-component">
+<div id="{component_id}" data-component-id="{component_id}" data-psx-hydrate="{hydrate}" class="nextpy-component">
     {html_content}
 </div>
+<script type="application/json" id="__PSX_DATA__-{component_id}">{state_json}</script>
 <script>
 {hydration_script}
 </script>

@@ -13,6 +13,66 @@ window.__nextpyActionRuntimeLoaded = true;
  * Replacing JS string evaluation with structured action processing
  */
 
+/**
+ * PSXSignal - fine-grained reactive primitive (SolidJS-style pub/sub).
+ * Tracks active subscribers so computed effects re-run only when a
+ * signal they actually read changes.
+ */
+class PSXSignal {
+    constructor(value) {
+        this._value = value;
+        this._subs = new Set();
+    }
+
+    get() {
+        // Register dependency when read inside an effect/computed.
+        if (PSXSignal._active) {
+            PSXSignal._active.add(this);
+        }
+        return this._value;
+    }
+
+    set(newValue) {
+        if (Object.is(this._value, newValue)) return;
+        const oldValue = this._value;
+        this._value = newValue;
+        // Snapshot: subscribers may unsubscribe or subscribe during notify.
+        Array.from(this._subs).forEach(fn => {
+            try { fn(newValue, oldValue); }
+            catch (error) { console.error('[NextPy] Signal subscriber error:', error); }
+        });
+    }
+
+    subscribe(fn) {
+        this._subs.add(fn);
+        return () => this._subs.delete(fn);
+    }
+}
+PSXSignal._active = null;
+
+/**
+ * psxEffect - run fn, tracking every signal read, and re-run only when
+ * one of those signals changes. Returns a dispose function.
+ */
+function psxEffect(fn) {
+    let deps = new Set();
+    let unsubscribers = [];
+    const subscribeAll = () => {
+        unsubscribers.forEach(u => u());
+        unsubscribers = [];
+        deps.forEach(sig => unsubscribers.push(sig.subscribe(run)));
+    };
+    const run = () => {
+        deps = new Set();
+        PSXSignal._active = deps;
+        try { fn(); }
+        finally { PSXSignal._active = null; }
+        subscribeAll();
+    };
+    run();
+    return () => unsubscribers.forEach(u => u());
+}
+
 class NextPyActionRuntime {
     constructor() {
         this.components = new Map();
@@ -20,13 +80,22 @@ class NextPyActionRuntime {
         this.functions = new Map();
         this.dependencyMap = new Map(); // FIX: Track state dependencies
         this._effectsRunning = new Set();
+        // Fine-grained reactivity state
+        this.signals = new Map();          // componentId -> Map(key -> PSXSignal)
+        this._dirtyComponents = new Map(); // componentId -> Set(changedKeys)
+        this._rafScheduled = false;
+        this._domTasks = new Map();        // id -> fn, flushed once per frame
+        this.refs = new Map();             // componentId -> Map(refName -> element)
+        this._oldValues = new Map();       // componentId -> Map(key -> oldValue)
+        this._flipElements = new Set();    // elements with layout:true motion config
         this._registerBuiltinFunctions();
     }
 
     registerComponent(componentId, initialState = {}) {
         this.components.set(componentId, {
             state: { ...initialState },
-            listeners: []
+            listeners: [],
+            functions: new Map()
         });
         this.dependencyMap.set(componentId, {}); // FIX: Initialize dependency map for component
         this._ensureStateDefaults(componentId);
@@ -50,6 +119,8 @@ class NextPyActionRuntime {
         });
         // FIX: Set up input bindings for elements with data-bind attribute
         this._setupInputBindings(componentId);
+        // Collect data-psx-ref element references for useRef support.
+        this._collectRefs(componentId);
         // Apply SSR-reactive class/style/attribute bindings on mount.
         this._applyAttributeBindings(null, componentId);
         // Run useEffect callbacks on mount (once per component).
@@ -196,11 +267,18 @@ class NextPyActionRuntime {
                     return this._executeNavigate(data, componentId);
                 case 'CONDITIONAL':
                     return this._executeConditional(data, componentId);
+                case 'DEFINE_FUNCTION':
+                    return this._executeDefineFunction(data, componentId);
                 default:
                     console.warn(`Unknown action type: ${type}`);
                     return null;
             }
         } catch (error) {
+            // Swallow RETURN sentinel from nested function returns; it's only
+            // for unwinding control flow, not a real error.
+            if (error && error.type === 'RETURN') {
+                return error.value;
+            }
             console.error(`Action execution error:`, error);
             if (window.NEXTPY_DEBUG) throw error;
             return null;
@@ -209,9 +287,25 @@ class NextPyActionRuntime {
 
     async executeActions(actions, componentId = null) {
         const results = [];
-        for (const action of actions) {
-            const result = await this.executeAction(action, componentId);
-            results.push(result);
+        // Expose the active component id so compiled code can reach
+        // per-component client APIs (window.nextpy.getRef, .signal, ...).
+        const _np = window.nextpy;
+        const _prevCid = _np ? _np._componentId : undefined;
+        if (_np) _np._componentId = componentId;
+        try {
+            for (const action of actions) {
+                const result = await this.executeAction(action, componentId);
+                results.push(result);
+            }
+        } catch (error) {
+            // Swallow RETURN sentinel from nested function returns; it's only
+            // for unwinding control flow, not a real error.
+            if (error && error.type === 'RETURN') {
+                return error.value;
+            }
+            throw error;
+        } finally {
+            if (_np) _np._componentId = _prevCid;
         }
         return results;
     }
@@ -287,7 +381,16 @@ class NextPyActionRuntime {
             evaluatedKwargs[key] = this._evaluateExpression(value, componentId);
         }
 
-        if (this.functions.has(funcName)) {
+        const component = componentId ? this.components.get(componentId) : null;
+        if (component && component.functions && component.functions.has(funcName)) {
+            const func = component.functions.get(funcName);
+            try {
+                return func(...evaluatedArgs, evaluatedKwargs || {});
+            } catch (e) {
+                if (e && e.type === 'RETURN') return e.value;
+                throw e;
+            }
+        } else if (this.functions.has(funcName)) {
             const func = this.functions.get(funcName);
             return func(...evaluatedArgs, evaluatedKwargs || {});
         } else if (typeof window[funcName] === 'function') {
@@ -326,6 +429,8 @@ class NextPyActionRuntime {
                 obj = localStorage;
             } else if (object === 'Math' && typeof Math !== 'undefined') {
                 obj = Math;
+            } else if ((object === 'nextpy' || object === 'window.nextpy') && window.nextpy) {
+                obj = window.nextpy;
             } else {
                 console.warn(`Object '${object}' is undefined or null, returning empty string`);
                 return "";
@@ -494,7 +599,16 @@ class NextPyActionRuntime {
         if (name in component.state) {
             return component.state[name];
         }
-        
+
+        // Registered functions (nested defs, builtins) resolve as values so
+        // they can be passed as callbacks: addEventListener("scroll", OnScroll)
+        if (component.functions && component.functions.has(name)) {
+            return component.functions.get(name);
+        }
+        if (this.functions.has(name)) {
+            return this.functions.get(name);
+        }
+
         // Only allow window object access for built-in functions/constants
         if (name in window && typeof window[name] !== 'undefined') {
             return window[name];
@@ -743,55 +857,535 @@ class NextPyActionRuntime {
             }
         }
 
-        // FIX: Re-evaluate ALL conditional elements for this component on ANY state change.
-        // Conditions reference derived Python variables (user, is_employer, etc.) that
-        // don't match state keys (_fetch_data_0, etc.), so we can't rely on the
-        // dependency map for targeted updates. Instead, re-evaluate all conditionals.
-        // Also update layout elements with empty data-component-id that reference the
-        // same state (e.g., layout nav conditionals for user/login).
-        const allConditionals = document.querySelectorAll(`[data-if-condition]`);
+        // Notify the per-key fine-grained signal so user effects subscribed
+        // via window.nextpy.effect / createSignal re-run immediately.
+        const sig = this._signalFor(componentId, key);
+        sig.set(newValue);
+
+        // Mark the component dirty and batch all DOM work into the next
+        // animation frame. High-frequency events (scroll, mousemove, input)
+        // coalesce into a single flush per frame — no layout thrash.
+        let dirty = this._dirtyComponents.get(componentId);
+        if (!dirty) {
+            dirty = new Set();
+            this._dirtyComponents.set(componentId, dirty);
+        }
+        dirty.add(key);
+        let olds = this._oldValues.get(componentId);
+        if (!olds) {
+            olds = new Map();
+            this._oldValues.set(componentId, olds);
+        }
+        if (!olds.has(key)) olds.set(key, oldValue);
+        this._scheduleFrame();
+    }
+
+    /**
+     * Lazily create (or fetch) the fine-grained signal for a state key.
+     * Signals are synced from component.state at creation time.
+     */
+    _signalFor(componentId, key) {
+        let compSignals = this.signals.get(componentId);
+        if (!compSignals) {
+            compSignals = new Map();
+            this.signals.set(componentId, compSignals);
+        }
+        let sig = compSignals.get(key);
+        if (!sig) {
+            const component = this.components.get(componentId);
+            sig = new PSXSignal(component ? component.state[key] : undefined);
+            compSignals.set(key, sig);
+        }
+        return sig;
+    }
+
+    /**
+     * Schedule a one-shot DOM task (e.g. hydration StateManager binding
+     * refresh) to run once per animation frame. Tasks are keyed so repeated
+     * scheduling within the same frame dedupes.
+     */
+    scheduleDomTask(id, fn) {
+        this._domTasks.set(id, fn);
+        this._scheduleFrame();
+    }
+
+    /**
+     * Coalesce all pending DOM mutations into a single requestAnimationFrame.
+     * Falls back to setTimeout when rAF is unavailable or the tab is hidden
+     * (rAF stalls in background tabs).
+     */
+    _scheduleFrame() {
+        if (this._rafScheduled) return;
+        this._rafScheduled = true;
+        const flush = () => {
+            this._rafScheduled = false;
+            this._flushDirty();
+        };
+        const hidden = typeof document !== 'undefined' && document.hidden;
+        if (typeof requestAnimationFrame === 'function' && !hidden) {
+            requestAnimationFrame(flush);
+        } else {
+            setTimeout(flush, hidden ? 16 : 0);
+        }
+        // Safety net: if rAF stalls (e.g., headless Chrome throttling), force flush after 100ms.
+        if (!this._rafFallback) {
+            this._rafFallback = setTimeout(() => {
+                if (this._rafScheduled) {
+                    this._rafScheduled = false;
+                    this._flushDirty();
+                }
+            }, 100);
+        }
+    }
+
+    /**
+     * Synchronously flush all pending DOM updates. Useful for tests and
+     * for code paths that must observe DOM changes immediately.
+     */
+    flush() {
+        if (this._rafScheduled) {
+            // Can't cancel a queued rAF portably; _flushDirty is idempotent
+            // because dirty sets are cleared on flush.
+        }
+        this._flushDirty();
+    }
+
+    _flushDirty() {
+        // FLIP: snapshot layout-animated elements before any DOM mutation so
+        // we can invert their position deltas afterwards.
+        const flipSnap = this._flipElements.size ? this._snapshotFlip() : null;
+
+        // Clear the rAF fallback timer when flush runs.
+        if (this._rafFallback) {
+            clearTimeout(this._rafFallback);
+            this._rafFallback = null;
+        }
+
+        // Run ad-hoc DOM tasks first (hydration binding refreshes, etc.)
+        if (this._domTasks.size) {
+            const tasks = Array.from(this._domTasks.values());
+            this._domTasks.clear();
+            tasks.forEach(fn => {
+                try { fn(); } catch (e) { console.error('[NextPy] DOM task error:', e); }
+            });
+        }
+        if (!this._dirtyComponents.size) return;
+        const dirty = new Map(this._dirtyComponents);
+        this._dirtyComponents.clear();
+        dirty.forEach((keys, componentId) => {
+            try {
+                this._flushComponent(componentId, keys);
+            } catch (error) {
+                console.error('Component update flush error:', error);
+            }
+        });
+
+        if (flipSnap) this._playFlip(flipSnap);
+    }
+
+    /**
+     * Apply all pending DOM mutations for one component.
+     * Only elements whose expressions reference a changed key are
+     * re-evaluated — the fine-grained equivalent of React's targeted
+     * re-render, without a VDOM diff.
+     */
+    _flushComponent(componentId, changedKeys) {
         const component = this.components.get(componentId);
+        if (!component) return;
+
+        // Derive variables once per flush and diff against the previous
+        // snapshot so changes to derived names (user, is_employer, ...)
+        // also trigger dependent conditionals/bindings.
+        const derived = this._deriveVariables(component.state, componentId);
+        const prevDerived = component._lastDerived || {};
+        const allChanged = new Set(changedKeys);
+        for (const [k, v] of Object.entries(derived)) {
+            if (!(k in prevDerived) || !Object.is(prevDerived[k], v)) {
+                allChanged.add(k);
+            }
+        }
+        component._lastDerived = derived;
+
+        // Conditional elements: only re-evaluate those whose condition
+        // references a changed key (or whose deps can't be determined).
+        const allConditionals = document.querySelectorAll(`[data-if-condition]`);
         allConditionals.forEach(element => {
-            if (element.dataset.componentId === componentId) {
-                const condition = element.dataset.ifCondition;
-                if (condition) {
-                    this._updateConditionalElement(element, componentId, condition);
-                }
-            } else if (!element.dataset.componentId && component) {
-                // Layout element with empty component ID — update using this component's state
-                const condition = element.dataset.ifCondition;
-                if (condition) {
-                    this._updateConditionalElement(element, componentId, condition);
-                }
+            const isOwner = element.dataset.componentId === componentId;
+            const isLayout = !element.dataset.componentId && component;
+            if (!isOwner && !isLayout) return;
+            if (!this._elementDependsOn(element, element.dataset.ifCondition, allChanged)) {
+                return;
+            }
+            const condition = element.dataset.ifCondition;
+            if (condition) {
+                this._updateConditionalElement(element, componentId, condition);
             }
         });
 
-        // Re-apply reactive class/style/attribute bindings (theme switching,
-        // disabled states, aria attributes, ...).
-        this._applyAttributeBindings(null, componentId);
+        // Reactive class/style/attribute bindings — targeted per element.
+        this._applyAttributeBindingsForKeys(component, componentId, allChanged);
 
-        // Run useEffect callbacks whose dependency list contains this key.
-        this._runEffects(componentId, key);
-
-        // Find DOM elements that depend on this state (legacy data-state-* attributes).
-        // This must run after conditional content is (re)injected so state-driven text
-        // inside conditionals is not wiped by the template content.
-        const elements = document.querySelectorAll(`[data-state-${key}]`);
-        elements.forEach(element => {
-            if (element.dataset.componentId === componentId || !element.dataset.componentId) {
-                const text = (newValue === null || newValue === undefined) ? '' : String(newValue);
-                element.textContent = text;
-                if (element.hasAttribute('data-state-toggle')) {
-                    element.style.display = text ? '' : 'none';
+        // Legacy data-state-* text bindings for changed keys only.
+        changedKeys.forEach(key => {
+            const elements = document.querySelectorAll(`[data-state-${key}]`);
+            elements.forEach(element => {
+                if (element.dataset.componentId === componentId || !element.dataset.componentId) {
+                    const value = component.state[key];
+                    const text = (value === null || value === undefined) ? '' : String(value);
+                    element.textContent = text;
+                    if (element.hasAttribute('data-state-toggle')) {
+                        element.style.display = text ? '' : 'none';
+                    }
                 }
+            });
+        });
+
+        // useEffect callbacks whose deps contain any changed key.
+        allChanged.forEach(key => this._runEffects(componentId, key));
+
+        // Custom event per changed state key.
+        const olds = this._oldValues.get(componentId);
+        changedKeys.forEach(key => {
+            const event = new CustomEvent('nextpy:stateChange', {
+                detail: {
+                    componentId, key,
+                    newValue: component.state[key],
+                    oldValue: olds ? olds.get(key) : undefined
+                }
+            });
+            document.dispatchEvent(event);
+        });
+        if (olds) changedKeys.forEach(key => olds.delete(key));
+    }
+
+    /**
+     * Extract identifier tokens from an expression/template once and cache
+     * them per-expression on the element. Returns true when the element's
+     * expression references any name in changedKeys — elements with no
+     * identifiable deps are always considered dependent (conservative
+     * correctness for conditions the extractor can't parse).
+     */
+    _elementDependsOn(element, expr, changedKeys) {
+        if (!expr) return true;
+        const exprStr = String(expr);
+        if (!element._psxDepCache) element._psxDepCache = new Map();
+        let ids = element._psxDepCache.get(exprStr);
+        if (!ids) {
+            ids = new Set();
+            const idRe = /[A-Za-z_][A-Za-z0-9_]*/g;
+            let m;
+            while ((m = idRe.exec(exprStr)) !== null) {
+                ids.add(m[0]);
+            }
+            element._psxDepCache.set(exprStr, ids);
+        }
+        if (ids.size === 0) return true;
+        for (const id of ids) {
+            if (changedKeys.has(id)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Apply only the attribute bindings whose template references a
+     * changed key. Registrations live on component._attrBindings and are
+     * populated by _applyAttributeBindings (mount + post-conditional
+     * injection).
+     */
+    _applyAttributeBindingsForKeys(component, componentId, allChanged) {
+        const bindings = component._attrBindings;
+        if (!bindings || !bindings.length) return;
+        const scope = { ...component.state, ...this._deriveVariables(component.state, componentId) };
+        for (const entry of bindings) {
+            const { element, bindName, spec, template } = entry;
+            if (!element.isConnected) continue;
+            const owner = element.closest('[data-component-id]');
+            if (owner && owner.dataset.componentId !== componentId) continue;
+            if (!this._elementDependsOn(element, template, allChanged)) continue;
+            try {
+                const value = this._evaluateAttributeTemplate(template, scope);
+                // _evaluatePSXExpr returns the source expression unchanged when
+                // evaluation fails — writing that back would clobber the valid
+                // SSR attribute with raw Python source.  Keep the SSR value.
+                if (String(value) === String(template).trim()) continue;
+                if (spec === 'class') {
+                    element.className = String(value);
+                } else if (spec === 'style') {
+                    element.setAttribute('style', String(value));
+                } else if (spec.startsWith('attr-')) {
+                    const attrName = spec.slice(5);
+                    const booleanAttrs = ['disabled', 'checked', 'readonly', 'required', 'multiple', 'selected', 'autofocus', 'hidden', 'open'];
+                    if (booleanAttrs.includes(attrName)) {
+                        if (value) {
+                            element.setAttribute(attrName, '');
+                        } else {
+                            element.removeAttribute(attrName);
+                        }
+                    } else {
+                        element.setAttribute(attrName, String(value));
+                    }
+                }
+            } catch (error) {
+                console.warn('Attribute binding update failed:', bindName, error);
+            }
+        }
+    }
+
+    /**
+     * Collect elements carrying data-psx-ref="name" into the component's
+     * ref registry so Python useRef() values can reach DOM nodes.
+     */
+    _collectRefs(componentId) {
+        const root = document.getElementById(componentId);
+        if (!root) return;
+        let refs = this.refs.get(componentId);
+        if (!refs) {
+            refs = new Map();
+            this.refs.set(componentId, refs);
+        }
+        root.querySelectorAll('[data-psx-ref]').forEach(el => {
+            refs.set(el.getAttribute('data-psx-ref'), el);
+        });
+    }
+
+    /** Public: get a DOM element registered via data-psx-ref. */
+    getRef(componentId, name) {
+        const refs = this.refs.get(componentId);
+        return refs ? refs.get(name) : null;
+    }
+
+    // ── Motion / AnimatePresence (Web Animations API) ────────────────────────
+
+    /**
+     * Initialize every [data-psx-motion] element under root that hasn't been
+     * initialized yet. Applies `initial` styles, plays the `animate` entrance,
+     * wires whileHover/whileTap, and registers FLIP elements (layout: true).
+     */
+    _initMotionElements(root) {
+        if (typeof document === 'undefined' || typeof Element === 'undefined') return;
+        const scope = root && root.querySelectorAll ? root : document;
+        const candidates = [];
+        if (scope.matches && scope.matches('[data-psx-motion]')) candidates.push(scope);
+        scope.querySelectorAll('[data-psx-motion]').forEach(el => candidates.push(el));
+        candidates.forEach(el => {
+            if (el._psxMotion || typeof el.animate !== 'function') return;
+            let cfg;
+            try { cfg = JSON.parse(el.getAttribute('data-psx-motion') || '{}'); }
+            catch (e) { return; }
+            el._psxMotion = cfg;
+            if (cfg.layout) this._flipElements.add(el);
+            if (cfg.initial) this._applyInstantStyles(el, cfg.initial);
+            // Snapshot computed values for every animated prop so gesture
+            // reverts can restore props that `animate` doesn't mention
+            // (e.g. whileHover's `scale` when animate only has opacity).
+            el._psxMotionBase = this._captureMotionBase(el, cfg);
+            if (cfg.animate) {
+                const anim = el.animate(
+                    this._psxKeyframes(cfg.animate, el),
+                    this._psxAnimOptions(cfg.transition)
+                );
+                this._commitOnFinish(anim);
+            }
+            if (cfg.whileHover || cfg.whileTap) this._bindMotionGestures(el, cfg);
+        });
+        this._observeMotionDom();
+    }
+
+    /** Lazily start a MutationObserver so SSR/innerHTML-injected motion
+     *  elements get initialized without explicit calls. */
+    _observeMotionDom() {
+        if (this._motionObserver || typeof MutationObserver !== 'function') return;
+        if (typeof document === 'undefined' || !document.documentElement) return;
+        let scheduled = false;
+        this._motionObserver = new MutationObserver(() => {
+            if (scheduled) return;
+            scheduled = true;
+            setTimeout(() => {
+                scheduled = false;
+                this._initMotionElements(document);
+            }, 0);
+        });
+        this._motionObserver.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
+    /** camelCase style prop → kebab-case CSS property for getComputedStyle. */
+    _cssPropName(prop) {
+        return String(prop).replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+    }
+
+    /** Computed value of a motion style prop on el ('' if unavailable). */
+    _computedMotionValue(el, prop) {
+        try {
+            const v = getComputedStyle(el).getPropertyValue(this._cssPropName(prop));
+            return (v === null || v === undefined) ? '' : String(v).trim();
+        } catch (e) { return ''; }
+    }
+
+    /**
+     * Snapshot computed values for every prop named in any motion spec.
+     * Used to revert gesture-only props (scale, rotate, ...) that `animate`
+     * doesn't cover.
+     */
+    _captureMotionBase(el, cfg) {
+        const base = {};
+        const specs = [cfg.initial, cfg.animate, cfg.exit, cfg.whileHover, cfg.whileTap];
+        specs.forEach(spec => {
+            Object.keys(spec || {}).forEach(prop => {
+                if (base[prop] === undefined) {
+                    base[prop] = this._computedMotionValue(el, prop);
+                }
+            });
+        });
+        return base;
+    }
+
+    /**
+     * Convert a style spec ({prop: scalar|[v1,v2,...]}) into WAAPI keyframes.
+     * Scalars are expanded to [currentValue, target] — a single-element
+     * keyframe array produces no visible tween in WAAPI.
+     */
+    _psxKeyframes(spec, el) {
+        const kf = {};
+        for (const [prop, value] of Object.entries(spec || {})) {
+            const vals = Array.isArray(value) ? value.slice() : [value];
+            if (vals.length === 1) {
+                const target = vals[0];
+                const cur = el ? this._computedMotionValue(el, prop) : '';
+                kf[prop] = (cur && cur !== String(target)) ? [cur, target] : [target, target];
+            } else {
+                kf[prop] = vals;
+            }
+        }
+        return kf;
+    }
+
+    _psxAnimOptions(transition) {
+        const t = transition || {};
+        return {
+            duration: (t.duration !== undefined ? t.duration : 0.3) * 1000,
+            delay: (t.delay || 0) * 1000,
+            easing: t.easing || 'ease-out',
+            fill: 'none',
+        };
+    }
+
+    _applyInstantStyles(el, styleSpec) {
+        for (const [prop, value] of Object.entries(styleSpec || {})) {
+            const vals = Array.isArray(value) ? value : [value];
+            el.style[prop] = vals[vals.length - 1];
+        }
+    }
+
+    /** Persist the animation's end state as inline styles, then release it. */
+    _commitOnFinish(anim) {
+        if (!anim || !anim.finished) return;
+        anim.finished.then(() => {
+            try {
+                if (typeof anim.commitStyles === 'function') anim.commitStyles();
+            } catch (e) {}
+            try { anim.cancel(); } catch (e) {}
+        }).catch(() => {});
+    }
+
+    /**
+     * Spec that returns a gesture-touched element to its resting state:
+     * `animate` values where defined, otherwise the init-time computed base
+     * (so e.g. whileHover's `scale` is reset even when `animate` omits it).
+     */
+    _motionRevertSpec(el, cfg) {
+        const spec = {};
+        const gestureProps = new Set([
+            ...Object.keys(cfg.whileHover || {}),
+            ...Object.keys(cfg.whileTap || {}),
+        ]);
+        gestureProps.forEach(prop => {
+            if (cfg.animate && cfg.animate[prop] !== undefined) {
+                spec[prop] = cfg.animate[prop];
+            } else {
+                const base = (el._psxMotionBase || {})[prop];
+                if (base) spec[prop] = base;
             }
         });
-        
-        // Trigger custom event
-        const event = new CustomEvent('nextpy:stateChange', {
-            detail: { componentId, key, newValue, oldValue }
+        return spec;
+    }
+
+    _bindMotionGestures(el, cfg) {
+        const play = (spec) => {
+            if (!spec) return;
+            const anim = el.animate(this._psxKeyframes(spec, el), this._psxAnimOptions(cfg.transition));
+            this._commitOnFinish(anim);
+        };
+        const revert = () => {
+            const spec = this._motionRevertSpec(el, cfg);
+            if (Object.keys(spec).length) play(spec);
+        };
+        if (cfg.whileHover) {
+            el.addEventListener('mouseenter', () => play(cfg.whileHover));
+            el.addEventListener('mouseleave', revert);
+        }
+        if (cfg.whileTap) {
+            el.addEventListener('pointerdown', () => play(cfg.whileTap));
+            el.addEventListener('pointerup', revert);
+            el.addEventListener('pointerleave', revert);
+        }
+    }
+
+    /**
+     * Collect motion elements inside a container that are about to be
+     * removed, for AnimatePresence-style exit animations.
+     */
+    _collectExitingMotions(container) {
+        const exiting = [];
+        container.querySelectorAll('[data-psx-motion]').forEach(m => {
+            if (m._psxMotion && m._psxMotion.exit) exiting.push(m);
         });
-        document.dispatchEvent(event);
+        return exiting;
+    }
+
+    /** Play exit animations; resolves when all finish or maxWait elapses. */
+    _playExitAnimations(exiting, maxWait) {
+        const anims = exiting.map(m => {
+            try {
+                return m.animate(
+                    this._psxKeyframes(m._psxMotion.exit, m),
+                    this._psxAnimOptions(m._psxMotion.transition)
+                );
+            } catch (e) { return null; }
+        }).filter(Boolean);
+        if (!anims.length) return Promise.resolve();
+        const finished = Promise.all(anims.map(a => a.finished.catch(() => {})));
+        const timeout = new Promise(r => setTimeout(r, maxWait));
+        return Promise.race([finished, timeout]);
+    }
+
+    // ── FLIP layout animations ───────────────────────────────────────────────
+
+    _snapshotFlip() {
+        const snap = new Map();
+        this._flipElements.forEach(el => {
+            if (el.isConnected) snap.set(el, el.getBoundingClientRect());
+        });
+        return snap;
+    }
+
+    _playFlip(snapshot) {
+        snapshot.forEach((first, el) => {
+            if (!el.isConnected) return;
+            const last = el.getBoundingClientRect();
+            const dx = first.left - last.left;
+            const dy = first.top - last.top;
+            const sx = last.width ? first.width / last.width : 1;
+            const sy = last.height ? first.height / last.height : 1;
+            if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return;
+            if (typeof el.animate !== 'function') return;
+            el.animate([
+                {
+                    transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+                    transformOrigin: 'top left',
+                },
+                { transform: 'none', transformOrigin: 'top left' },
+            ], { duration: 300, easing: 'ease-out' });
+        });
     }
 
     _updateConditionalElement(element, componentId, condition) {
@@ -809,27 +1403,45 @@ class NextPyActionRuntime {
             const trueContent = element.dataset.ifTrue || '';
             const falseContent = element.dataset.ifFalse || '';
             
-            // FIX: Unescape HTML content before setting as innerHTML
-            const unescapeHtml = (html) => {
-                const textArea = document.createElement('textarea');
-                textArea.innerHTML = html;
-                return textArea.value;
-            };
-            
-            // FIX: Evaluate PSX expressions inside the content before setting innerHTML
+            // dataset.ifTrue/ifFalse are already entity-decoded once by the
+            // browser — the result is valid innerHTML as-is. Decoding again
+            // (e.g. via a textarea) would turn &quot; inside attribute values
+            // into literal quotes and break data-psx-motion JSON.
             const derived = this._deriveVariables(component.state, componentId);
             const fullState = { ...component.state, ...derived };
-            
-            // Update the element content based on condition result
-            if (result) {
-                const raw = unescapeHtml(trueContent);
-                element.innerHTML = this._sanitizeHTML(this._evaluatePSXContent(raw, fullState));
-            } else {
-                const raw = unescapeHtml(falseContent);
-                element.innerHTML = this._sanitizeHTML(this._evaluatePSXContent(raw, fullState));
+            const branchContent = result ? trueContent : falseContent;
+            const newHtml = this._sanitizeHTML(this._evaluatePSXContent(branchContent, fullState));
+
+            // No-op guard: identical content means no DOM churn and no
+            // spurious exit animations.
+            if (element.innerHTML === newHtml) return;
+
+            const applySwap = () => {
+                element.innerHTML = newHtml;
+                this._applyStateBindings(element, componentId);
+                this._applyAttributeBindings(element, componentId);
+                this._initMotionElements(element);
+            };
+
+            // AnimatePresence: play exit animations on motion descendants
+            // before removing them, then swap in the new branch.
+            const exiting = this._collectExitingMotions(element);
+            if (exiting.length) {
+                const token = (element._psxSwapToken = (element._psxSwapToken || 0) + 1);
+                const durations = exiting.map(m => {
+                    const t = (m._psxMotion.transition || {});
+                    return ((t.duration !== undefined ? t.duration : 0.3) + (t.delay || 0)) * 1000;
+                });
+                const maxWait = Math.min(Math.max(...durations) + 100, 2000);
+                this._playExitAnimations(exiting, maxWait).then(() => {
+                    if (element._psxSwapToken === token && element.isConnected) {
+                        applySwap();
+                    }
+                });
+                return;
             }
-            this._applyStateBindings(element, componentId);
-            this._applyAttributeBindings(element, componentId);
+
+            applySwap();
         } catch (error) {
             console.error('Conditional update error:', error);
         }
@@ -888,7 +1500,10 @@ class NextPyActionRuntime {
                     deps: Array.isArray(deps) ? deps.slice() : deps,
                 };
                 try {
-                    this.executeActions(effect.actions || [], componentId);
+                    this.executeActions(effect.actions || [], componentId).catch(err => {
+                        if (err && err.type === 'RETURN') return;
+                        console.error('Effect execution error:', err);
+                    });
                 } catch (error) {
                     console.error('Effect execution error:', error);
                 }
@@ -901,8 +1516,20 @@ class NextPyActionRuntime {
     _evaluateAttributeTemplate(template, state) {
         if (template === null || template === undefined) return '';
         const text = String(template);
+        // Prefer whole-expression evaluation first.  Templates that are
+        // themselves a Python expression — f-strings like
+        // ``f"{acc_icon} rotate-45" if open else f"{acc_icon} rotate-0"`` —
+        // contain ``{...}`` holes, but the brace pass below would substitute
+        // the holes and leave the surrounding Python syntax unevaluated.
+        // _evaluatePSXExpr returns the trimmed input unchanged on failure,
+        // which is our "not a whole expression" signal.
+        const direct = this._evaluatePSXExpr(text, state);
+        const failed = direct === text.trim();
+        if (!failed && (direct === null || typeof direct !== 'object')) {
+            return direct;
+        }
         if (!text.includes('{')) {
-            return this._evaluatePSXExpr(text, state);
+            return failed ? text : direct;
         }
         return text.replace(/\{([^{}]+)\}/g, (_, expr) => {
             const value = this._evaluatePSXExpr(expr.trim(), state);
@@ -928,14 +1555,33 @@ class NextPyActionRuntime {
             if (!bindName) return;
             const spec = bindName.slice('data-bind-'.length);
             const template = element.getAttribute(bindName);
+            // Register for fine-grained per-frame updates.
+            if (!component._attrBindings) component._attrBindings = [];
+            if (!component._attrBindings.some(e => e.element === element && e.bindName === bindName)) {
+                component._attrBindings.push({ element, bindName, spec, template });
+            }
             try {
                 const value = this._evaluateAttributeTemplate(template, scope);
+                // _evaluatePSXExpr returns the source expression unchanged when
+                // evaluation fails — writing that back would clobber the valid
+                // SSR attribute with raw Python source.  Keep the SSR value.
+                if (String(value) === String(template).trim()) return;
                 if (spec === 'class') {
                     element.className = String(value);
                 } else if (spec === 'style') {
                     element.setAttribute('style', String(value));
                 } else if (spec.startsWith('attr-')) {
-                    element.setAttribute(spec.slice(5), String(value));
+                    const attrName = spec.slice(5);
+                    const booleanAttrs = ['disabled', 'checked', 'readonly', 'required', 'multiple', 'selected', 'autofocus', 'hidden', 'open'];
+                    if (booleanAttrs.includes(attrName)) {
+                        if (value) {
+                            element.setAttribute(attrName, '');
+                        } else {
+                            element.removeAttribute(attrName);
+                        }
+                    } else {
+                        element.setAttribute(attrName, String(value));
+                    }
                 }
             } catch (error) {
                 console.warn('Attribute binding update failed:', bindName, error);
@@ -985,6 +1631,14 @@ class NextPyActionRuntime {
             const quote = expr[0];
             const inner = expr.slice(1, -1);
             if (!inner.includes(quote) && !inner.includes('\\' + quote)) {
+                // Recursively evaluate nested string literals — JSON-serialized
+                // Python expressions arrive as "'value'" (double-quoted string
+                // containing a single-quoted literal).
+                const trimmedInner = inner.trim();
+                if ((trimmedInner.startsWith('"') && trimmedInner.endsWith('"')) ||
+                    (trimmedInner.startsWith("'") && trimmedInner.endsWith("'"))) {
+                    return this._evaluatePSXExpr(trimmedInner, state);
+                }
                 return inner;
             }
         }
@@ -1014,7 +1668,12 @@ class NextPyActionRuntime {
                 .replace(/\{\{/g, '__LBRACE__')
                 .replace(/\}\}/g, '__RBRACE__');
             tmpl = tmpl.replace(/\{([^}]+)\}/g, (_, subExpr) => {
-                return '${' + this._evaluatePSXExpr(subExpr, state) + '}';
+                // Evaluate the sub-expression and substitute its value directly
+                // into the template literal — don't leave a variable reference
+                // that won't resolve in the JS scope.
+                const subValue = this._evaluatePSXExpr(subExpr.trim(), state);
+                const subStr = (subValue === null || subValue === undefined) ? '' : String(subValue);
+                return subStr.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
             });
             tmpl = tmpl.replace(/__LBRACE__/g, '{').replace(/__RBRACE__/g, '}');
             return '`' + tmpl + '`';
@@ -1126,7 +1785,15 @@ class NextPyActionRuntime {
         
         // 9. Handle == and != (already JS compatible)
         
-        // 10. Replace variable names with values from state
+        // 10. Replace variable names with values from state.
+        // Protect string literals first so identifiers inside quotes
+        // (e.g. "password" in a ternary) are not replaced.
+        const stringLiterals = [];
+        jsExpr = jsExpr.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g, (match) => {
+            stringLiterals.push(match);
+            return `__PSX_STR_${stringLiterals.length - 1}__`;
+        });
+        
         const replacedKeys = new Set();
         // Sort keys by length (longest first) to avoid partial replacements
         const sortedKeys = Object.keys(state).sort((a, b) => b.length - a.length);
@@ -1142,7 +1809,7 @@ class NextPyActionRuntime {
                 continue;
             }
             
-            // Word boundary match — but skip if inside a string or part of a longer identifier
+            // Word boundary match — skip if inside a placeholder or part of a longer identifier
             const regex = new RegExp(`(?<![\\w$.])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
             if (regex.test(jsExpr)) {
                 const valStr = typeof val === 'string' ? JSON.stringify(val) : (val === null ? 'null' : JSON.stringify(val));
@@ -1152,19 +1819,25 @@ class NextPyActionRuntime {
         }
         
         // 10. Handle remaining unknown identifiers — declare as null to avoid ReferenceError
+        // Do this BEFORE restoring string literals so identifiers inside
+        // quotes (e.g. "password") are not detected.
         const builtins = new Set(['true','false','null','undefined','NaN','Infinity','Math','JSON','String','Number','Array','Object','console','window','document']);
+        const stateKeys = new Set(Object.keys(state));
         const idRegex = /(?<![\\w$.])([a-zA-Z_][a-zA-Z0-9_]*)(?![\\w$(])/g;
         let m;
         const unknownIds = [];
         while ((m = idRegex.exec(jsExpr)) !== null) {
             const id = m[1];
-            if (!replacedKeys.has(id) && !builtins.has(id) && !id.startsWith('__')) {
+            if (!replacedKeys.has(id) && !builtins.has(id) && !stateKeys.has(id) && !id.startsWith('__')) {
                 unknownIds.push(id);
             }
         }
         
         const uniqueUnknownIds = [...new Set(unknownIds)];
         const varDecls = uniqueUnknownIds.map(id => `let ${id} = null;`).join(' ');
+        
+        // Restore string literals
+        jsExpr = jsExpr.replace(/__PSX_STR_(\d+)__/g, (_, idx) => stringLiterals[parseInt(idx)]);
         
         // 11. Evaluate
         try {
@@ -1191,6 +1864,7 @@ class NextPyActionRuntime {
             return result;
         } catch (e) {
             // If evaluation fails, return the original expression (so at least something shows)
+            console.warn('PSX expr eval failed:', expr, '→', jsExpr, 'error:', e.message);
             return expr;
         }
     }
@@ -1200,56 +1874,91 @@ class NextPyActionRuntime {
      * Handles nested conditions.
      */
     _convertTernary(expr, state) {
-        // Find " if " pattern — but not inside strings
-        // We need to match: <then-expr> if <condition> else <else-expr>
-        // This is tricky because the else part could contain another ternary
-        // Strategy: find " if " from right to left, matching the outermost one
-        
-        let result = expr;
-        // Keep converting until no more "if...else" patterns
-        let maxIterations = 10;
-        while (result.includes(' if ') && result.includes(' else ') && maxIterations-- > 0) {
-            // Find the LAST " if " that has a matching " else "
-            const ifIdx = result.lastIndexOf(' if ');
-            if (ifIdx <= 0) break;
-            
-            // Find the matching " else " after this " if "
-            const elseIdx = result.indexOf(' else ', ifIdx + 4);
-            if (elseIdx < 0) break;
-            
-            // Extract the then-expr (everything before " if ")
-            const thenExpr = result.substring(0, ifIdx).trim();
-            // Extract the condition (between " if " and " else ")
-            const condExpr = result.substring(ifIdx + 4, elseIdx).trim();
-            // Extract the else-expr (everything after " else ")
-            let elseExpr = result.substring(elseIdx + 6).trim();
-            
-            // The else-expr might contain another ternary, so we need to find where it ends
-            // For simplicity, if elseExpr contains " if ", we'll handle it in the next iteration
-            // unless it's wrapped in parentheses
-            
-            // Convert condition
-            let condJS = condExpr
-                .replace(/\bTrue\b/g, 'true')
-                .replace(/\bFalse\b/g, 'false')
-                .replace(/\bNone\b/g, 'null')
-                .replace(/\band\b/g, '&&')
-                .replace(/\bor\b/g, '||')
-                .replace(/\bnot\s+/g, '!');
-            
-            // Replace variables in condition
-            for (const [key, value] of Object.entries(state)) {
-                if (value === undefined) continue;
-                const regex = new RegExp(`(?<![\\w$.])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
-                const valStr = typeof value === 'string' ? JSON.stringify(value) : (value === null ? 'null' : JSON.stringify(value));
-                condJS = condJS.replace(regex, valStr);
+        expr = expr.trim();
+        // Unwrap fully-parenthesized expressions that contain a ternary so the
+        // inner ``if/else`` sits at depth 0 for the scan below.  ``ast.unparse``
+        // emits chained else-branches as ``else (a if c else b)``.
+        if (expr.startsWith('(') && expr.endsWith(')') && expr.includes(' if ') && expr.includes(' else ')) {
+            let d = 0, quote = null, wraps = true;
+            for (let i = 0; i < expr.length; i++) {
+                const ch = expr[i];
+                if (quote) {
+                    if (ch === '\\') { i++; continue; }
+                    if (ch === quote) quote = null;
+                    continue;
+                }
+                if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+                if (ch === '(') d++;
+                else if (ch === ')') {
+                    d--;
+                    if (d === 0 && i !== expr.length - 1) { wraps = false; break; }
+                    if (d < 0) { wraps = false; break; }
+                }
             }
-            
-            // Build JS ternary
-            result = '(' + condJS + ') ? (' + thenExpr + ') : (' + elseExpr + ')';
+            if (wraps && d === 0) {
+                return '(' + this._convertTernary(expr.substring(1, expr.length - 1), state) + ')';
+            }
         }
-        
-        return result;
+        // Python ternary is RIGHT-associative:
+        //   A if c1 else B if c2 else C  ===  c1 ? A : (c2 ? B : C)
+        // Find the FIRST top-level " if " (outside strings/parens/brackets)
+        // and the FIRST top-level " else " after it — that else pairs with
+        // this if; everything after it is the else-branch (recursively a
+        // ternary).  The previous lastIndexOf approach mangled chained
+        // ternaries into unbalanced JS.
+        const len = expr.length;
+        let depth = 0;
+        let quote = null;
+        const ifs = [];
+        const elses = [];
+        for (let i = 0; i < len; i++) {
+            const ch = expr[i];
+            if (quote) {
+                if (ch === '\\') { i++; continue; }
+                if (ch === quote) quote = null;
+                continue;
+            }
+            if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+            if (ch === '(' || ch === '[' || ch === '{') { depth++; continue; }
+            if (ch === ')' || ch === ']' || ch === '}') { depth = Math.max(0, depth - 1); continue; }
+            if (depth !== 0) continue;
+            if (expr.startsWith(' if ', i)) { ifs.push(i); i += 3; }
+            else if (expr.startsWith(' else ', i)) { elses.push(i); i += 5; }
+        }
+        if (!ifs.length) return expr;
+
+        const ifIdx = ifs[0];
+        const elseIdx = elses.find(e => e > ifIdx);
+        if (elseIdx === undefined) return expr;
+
+        const thenExpr = expr.substring(0, ifIdx).trim();
+        const condExpr = expr.substring(ifIdx + 4, elseIdx).trim();
+        const elseExpr = expr.substring(elseIdx + 6).trim();
+        if (!thenExpr || !condExpr || !elseExpr) return expr;
+
+        // Convert condition operators
+        let condJS = condExpr
+            .replace(/\bTrue\b/g, 'true')
+            .replace(/\bFalse\b/g, 'false')
+            .replace(/\bNone\b/g, 'null')
+            .replace(/\band\b/g, '&&')
+            .replace(/\bor\b/g, '||')
+            .replace(/\bnot\s+/g, '!');
+
+        // Replace variables in condition
+        for (const [key, value] of Object.entries(state)) {
+            if (value === undefined) continue;
+            const regex = new RegExp(`(?<![\\w$.])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
+            const valStr = typeof value === 'string' ? JSON.stringify(value) : (value === null ? 'null' : JSON.stringify(value));
+            condJS = condJS.replace(regex, valStr);
+        }
+
+        // Recurse: then/else branches may themselves contain ternaries
+        // (e.g. parenthesized ``(a if c else b)`` or chained ``x if c1 else y if c2 else z``)
+        const thenJS = this._convertTernary(thenExpr, state);
+        const elseJS = this._convertTernary(elseExpr, state);
+
+        return '(' + condJS + ') ? (' + thenJS + ') : (' + elseJS + ')';
     }
     
     /**
@@ -1345,7 +2054,13 @@ class NextPyActionRuntime {
      */
     _evaluateTagAttributes(tagStr, state) {
         // Find attribute values that contain {expr}
-        return tagStr.replace(/(\w+)=["']([^"']*?\{[^}]+[^"']*?)["']/g, (match, attrName, attrValue) => {
+        return tagStr.replace(/(\w[\w-]*)=["']([^"']*?\{[^}]+[^"']*?)["']/g, (match, attrName, attrValue) => {
+            // Internal runtime attributes (data-psx-motion JSON, data-bind
+            // templates, data-if-* branches) contain braces that are NOT
+            // PSX expressions — evaluating them corrupts the payload.
+            if (/^(data-psx-|data-bind|data-if-|data-handler-|data-component-id|data-state-)/.test(attrName)) {
+                return match;
+            }
             // Check if the attribute value contains {expr}
             if (!attrValue.includes('{')) return match;
             
@@ -1440,15 +2155,32 @@ class NextPyActionRuntime {
             ? runtimeComponent.derivedExpressions
             : {};
         const scope = { ...state, ...derived };
-        for (const [name, expr] of Object.entries(expressions)) {
-            try {
-                const value = this._evaluatePSXExpr(expr, scope);
-                scope[name] = value;
-                derived[name] = value;
-            } catch (error) {
-                // Keep SSR value if the client evaluator cannot handle an
-                // expression (e.g. a server-only helper call).
+        const pending = new Map(Object.entries(expressions));
+        // Iterate to a fixpoint: derived vars may depend on other derived
+        // vars (nav_link_active -> nav_link_base), and dict order is not
+        // guaranteed to be topological.  _evaluatePSXExpr returns the raw
+        // expression string on failure, so a value identical to the source
+        // expression means "not yet resolvable" — retry on the next pass.
+        for (let pass = 0; pass < 6 && pending.size; pass++) {
+            let progressed = false;
+            for (const [name, expr] of [...pending.entries()]) {
+                const src = String(expr);
+                try {
+                    const value = this._evaluatePSXExpr(src, scope);
+                    if (value === src.trim()) {
+                        continue; // unresolved — may resolve on a later pass
+                    }
+                    scope[name] = value;
+                    derived[name] = value;
+                    pending.delete(name);
+                    progressed = true;
+                } catch (error) {
+                    // Keep SSR value if the client evaluator cannot handle an
+                    // expression (e.g. a server-only helper call).
+                    pending.delete(name);
+                }
             }
+            if (!progressed) break;
         }
         
         return derived;
@@ -1507,16 +2239,95 @@ class NextPyActionRuntime {
         this.functions.set('any', (arr) => arr.some(Boolean));
         this.functions.set('all', (arr) => arr.every(Boolean));
         this.functions.set('round', Math.round);
+        this.functions.set('range', (n) => Array.from({ length: n }, (_, i) => i));
 
         // Console functions
         this.functions.set('console_log', console.log);
         this.functions.set('alert', (msg) => alert(msg));
     }
 
-    _executeForLoop(data, componentId) {
-        // Placeholder implementation
-        // For loops require more complex execution context
-        console.warn('FOR_LOOP not yet implemented in JS runtime');
+    _executeDefineFunction(data, componentId) {
+        // Register a nested def as a callable thunk. Params are bound into
+        // component state for the duration of the call (restored after), so
+        // compiled VARIABLE lookups inside the body resolve correctly.
+        const { name, params = [], actions = [] } = data;
+        const target = componentId && this.components.has(componentId)
+            ? this.components.get(componentId).functions
+            : this.functions;
+
+        const fn = (...args) => {
+            const comp = componentId ? this.components.get(componentId) : null;
+            const saved = {};
+            if (comp) {
+                params.forEach((p, i) => {
+                    saved[p] = comp.state[p];
+                    comp.state[p] = args[i];
+                });
+            }
+            const restore = () => {
+                if (!comp) return;
+                for (const p of Object.keys(saved)) {
+                    if (saved[p] === undefined) delete comp.state[p];
+                    else comp.state[p] = saved[p];
+                }
+            };
+            return this.executeActions(actions, componentId).then(
+                (res) => { restore(); return res; },
+                (err) => {
+                    restore();
+                    if (err && err.type === 'RETURN') return err.value;
+                    throw err;
+                }
+            );
+        };
+        target.set(name, fn);
+        return fn;
+    }
+
+    async _executeForLoop(data, componentId) {
+        const { vars = [], iter, body = [], orelse = [] } = data;
+        const iterable = this._evaluateExpression(iter, componentId);
+
+        let items = [];
+        if (iterable != null) {
+            if (typeof iterable === 'string') {
+                items = [...iterable];
+            } else if (typeof iterable[Symbol.iterator] === 'function') {
+                items = [...iterable];
+            } else if (typeof iterable.length === 'number') {
+                items = Array.from(iterable);
+            }
+        }
+
+        const comp = componentId ? this.components.get(componentId) : null;
+        let broke = false;
+        for (const item of items) {
+            const saved = {};
+            if (comp) {
+                vars.forEach((v, i) => {
+                    saved[v] = comp.state[v];
+                    comp.state[v] = (vars.length > 1 && Array.isArray(item)) ? item[i] : item;
+                });
+            }
+            try {
+                await this.executeActions(body, componentId);
+            } catch (e) {
+                if (e && e.type === 'PSX_BREAK') { broke = true; break; }
+                if (e && e.type === 'PSX_CONTINUE') continue;
+                throw e;
+            } finally {
+                if (comp) {
+                    for (const v of vars) {
+                        if (saved[v] === undefined) delete comp.state[v];
+                        else comp.state[v] = saved[v];
+                    }
+                }
+            }
+        }
+        // Python semantics: else runs only when the loop did not break.
+        if (!broke && orelse.length) {
+            await this.executeActions(orelse, componentId);
+        }
     }
 
     _executeWhileLoop(data, componentId) {
@@ -1526,15 +2337,11 @@ class NextPyActionRuntime {
     }
 
     _executeBreak() {
-        // Placeholder implementation
-        // Break requires loop context
-        throw new Error('BREAK not yet implemented');
+        throw { type: 'PSX_BREAK' };
     }
 
     _executeContinue() {
-        // Placeholder implementation
-        // Continue requires loop context
-        throw new Error('CONTINUE not yet implemented');
+        throw { type: 'PSX_CONTINUE' };
     }
 
     _executeTry(data, componentId) {
@@ -1584,6 +2391,33 @@ window.registerNextPyComponent = function(componentId, initialState = {}) {
     return window.NextPyActionRuntime.registerComponent(componentId, initialState);
 };
 
+// ── Fine-grained reactivity primitives ──────────────────────────────────────
+// window.nextpy.createSignal(v)  → PSXSignal with .get()/.set()/.subscribe()
+// window.nextpy.signal(cid, k)   → per-component state signal (auto-synced)
+// window.nextpy.effect(fn)       → re-run fn only when signals it read change
+// window.nextpy.flush()          → synchronously flush pending rAF DOM updates
+// window.nextpy.getRef(cid, n)   → DOM element registered via data-psx-ref
+// window.nextpy.useRef(v)        → plain client-side ref object { current: v }
+window.nextpy = window.nextpy || {};
+window.nextpy.createSignal = function(initial) {
+    return new PSXSignal(initial);
+};
+window.nextpy.signal = function(componentId, key) {
+    return window.NextPyActionRuntime._signalFor(componentId, key);
+};
+window.nextpy.effect = function(fn) {
+    return psxEffect(fn);
+};
+window.nextpy.flush = function() {
+    window.NextPyActionRuntime.flush();
+};
+window.nextpy.getRef = function(componentId, name) {
+    return window.NextPyActionRuntime.getRef(componentId, name);
+};
+window.nextpy.useRef = function(initial) {
+    return { current: initial };
+};
+
 // SPA-style navigation function — called by lambda handlers after actions
 window.navigateTo = function(url) {
     if (window.__nextpyNavigate) {
@@ -1621,6 +2455,17 @@ window.spaReload = function() {
     }
     window.location.reload();
 };
+
+// Initialize Motion/AnimatePresence elements on pages that don't go through
+// component hydration (plain render_psx_component output).
+if (typeof document !== 'undefined') {
+    const bootMotion = () => window.NextPyActionRuntime._initMotionElements(document);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootMotion);
+    } else {
+        bootMotion();
+    }
+}
 
 console.log('[NextPy] Action Runtime loaded');
 })();

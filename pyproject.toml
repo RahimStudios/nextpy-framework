@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextpy-framework"
-version = "5.0.0"
+version = "5.2.0"
 description = "The Python Web Framework introducing file-based routing, SSR, and SSG and more"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -46,7 +46,10 @@ dependencies = [
     "watchdog>=6.0.0",
     "python-dotenv>=1.2.1",
     "sqlalchemy>=2.0.44",
+    "pyjwt>=2.8.0",
+
 ]
+
 
 [project.optional-dependencies]
 dev = [
@@ -54,8 +57,6 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "black>=23.0",
     "mypy>=1.0",
-    # For Tailwind CSS development, ensure Node.js and npm are installed.
-    # Then run: npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
 ]
 
 [project.urls]
@@ -71,5 +72,5 @@ where = [".nextpy_framework"]
 include = ["nextpy*"]
 
 [tool.setuptools.package-data]
-nextpy = ["py.typed"]
-"nextpy.public" = ["*.png"]
+# Ensures all subdirectories containing static assets, templates, and configurations are bundled
+nextpy = ["py.typed", "**/*.png", "**/*.html", "**/*.css", "**/*.json"]

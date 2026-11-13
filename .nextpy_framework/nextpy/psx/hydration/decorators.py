@@ -43,16 +43,27 @@ def extract_handler_functions(component_func: Callable) -> Dict[str, str]:
     
     source = '\n'.join(component_lines)
     
+    # Find functions used as useEffect callbacks — these are client effects,
+    # not event handlers, and must not be compiled as handlers.
+    effect_func_names = set()
+    for m in re.finditer(r'useEffect\s*\(\s*(\w+)\s*,', source):
+        effect_func_names.add(m.group(1))
+    
     # Split by function definitions at component or nested function level
     lines = source.split('\n')
     i = 0
+    component_name = getattr(component_func, '__name__', '')
     while i < len(lines):
         line = lines[i]
-        # Look for nested def handle_* or def on_* definitions
-        match = re.match(r'^(\s+)def\s+((?:handle|on)_\w+)\s*\([^)]*\)\s*:', line)
+        # Match any component-level def (handle_*, on_*, CamelCase, snake_case, etc.)
+        match = re.match(r'^(\s+)def\s+(\w+)\s*\([^)]*\)\s*:', line)
         if match:
             indent = len(match.group(1))
             func_name = match.group(2)
+            # Skip the component function itself, nested defs, and useEffect callbacks
+            if func_name == component_name or indent == 0 or func_name in effect_func_names:
+                i += 1
+                continue
             func_lines = []
             i += 1
             # Collect lines until next def at same or lesser indentation
@@ -432,11 +443,11 @@ def generate_handler_registration_script(
             if hasattr(handler_body[0], 'to_dict'):
                 # New AST-based structured Action objects
                 serialized_actions = [action.to_dict() for action in handler_body]
-                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId)"
+                js_body = f"executeNextPyActions({json.dumps(serialized_actions)}, componentId).catch(err => {{ if (err && err.type === 'RETURN') return; throw err; }})"
                 event_type = event_types.get(handler_name, 'click')
             elif isinstance(handler_body[0], dict):
                 # Already serialized actions
-                js_body = f"executeNextPyActions({json.dumps(handler_body)}, componentId)"
+                js_body = f"executeNextPyActions({json.dumps(handler_body)}, componentId).catch(err => {{ if (err && err.type === 'RETURN') return; throw err; }})"
                 event_type = event_types.get(handler_name, 'click')
             else:
                 # Fallback to old python_code_to_js for string-based handlers
@@ -451,8 +462,9 @@ def generate_handler_registration_script(
         safe_js_body = f"""
 (() => {{
     try {{
-        {js_body}
+        {js_body};
     }} catch (innerError) {{
+        if (innerError && innerError.type === 'RETURN') return;
         console.error('Inner error in handler {handler_name}:', innerError);
         throw innerError;
     }}
@@ -496,6 +508,7 @@ def generate_handler_registration_script(
             }}
             {safe_js_body}
         }} catch (error) {{
+            if (error && error.type === 'RETURN') return;
             console.error('Error in handler {handler_name}:', error);
             console.error('Event:', e);
         }}
@@ -844,23 +857,30 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
     # Replace state values with spans containing data-bind attributes
     # This preserves surrounding static text
     if state_keys and initial_state:
-        # First, protect all HTML attribute values to prevent wrapping inside attributes
-        # Store them in a dictionary with unique placeholders
-        protected_attrs = {}
-        attr_placeholder_counter = 0
+        # Protect everything the value-wrapping must not touch, using
+        # placeholders that are restored after all substitutions:
+        #   1. <script> blocks — wrapping inside __PSX_DATA__ JSON corrupts it
+        #   2. Existing <span data-bind=...> elements emitted by the AST
+        #      renderer — re-wrapping nests spans and double-binds
+        #   3. HTML attribute values
+        #   4. Spans added by this pass itself (placeholder approach below)
+        protected = {}
+        protect_counter = 0
 
-        def protect_attr_values(match):
-            nonlocal attr_placeholder_counter
-            attr_value = match.group(1)  # Get the captured value inside quotes
-            placeholder = f"__ATTR_PLACEHOLDER_{attr_placeholder_counter}__"
-            protected_attrs[placeholder] = attr_value
-            attr_placeholder_counter += 1
+        def _protect(text):
+            nonlocal protect_counter
+            placeholder = f"__PSX_PROTECT_{protect_counter}__"
+            protect_counter += 1
+            protected[placeholder] = text
             return placeholder
+
+        html = re.sub(r'<script\b[^>]*>.*?</script>', lambda m: _protect(m.group(0)), html, flags=re.S)
+        html = re.sub(r'<span\s+data-bind="[^"]*"[^>]*>.*?</span>', lambda m: _protect(m.group(0)), html, flags=re.S)
 
         # Protect all attribute values (anything between quotes after =)
         # Use separate patterns for double and single quotes to handle them correctly
-        html = re.sub(r'=\s*"([^"]*)"', lambda m: '="' + protect_attr_values(m) + '"', html)
-        html = re.sub(r"=\s*'([^']*)'", lambda m: "='" + protect_attr_values(m) + "'", html)
+        html = re.sub(r'=\s*"([^"]*)"', lambda m: '="' + _protect(m.group(1)) + '"', html)
+        html = re.sub(r"=\s*'([^']*)'", lambda m: "='" + _protect(m.group(1)) + "'", html)
 
         # Now apply data-binding wrapping to the remaining content (which is not inside attributes)
         for state_key in state_keys:
@@ -878,18 +898,21 @@ def convert_handler_attributes_in_html(html: str, handlers: Dict[str, str], stat
                 state_value_str = str(state_value)
                 binding_type = 'textContent'
 
-            # Replace the state value with a span containing data-bind attribute
+            # Replace the state value with a span containing data-bind attribute.
+            # The span itself is protected immediately so later keys cannot
+            # match the value inside it (prevents nested data-bind spans).
             pattern = rf'\b{re.escape(state_value_str)}\b'
 
             def wrap_value_with_binding(match):
                 value = match.group(0)
-                return f'<span data-bind="{binding_type}:{state_key}">{value}</span>'
+                return _protect(f'<span data-bind="{binding_type}:{state_key}">{value}</span>')
 
             html = re.sub(pattern, wrap_value_with_binding, html)
 
-        # Restore the protected attribute values
-        for placeholder, original_attr in protected_attrs.items():
-            html = html.replace(placeholder, original_attr)
+        # Restore all protected content (placeholders are word-char safe,
+        # so state-value patterns can never match inside them)
+        for placeholder, original in protected.items():
+            html = html.replace(placeholder, original)
     
     # Pattern 6: data-event="click:handler_name" format (alternative syntax)
     # This allows more flexible specification if developer uses this pattern
@@ -952,7 +975,11 @@ def _get_component_source(func: Callable) -> str:
                     except Exception:
                         continue
                     if f'def {func_name}(' in content:
-                        candidates.insert(0, file_path)
+                        # Append, not prepend: co_filename/__file__ candidates
+                        # above are authoritative.  Many pages define ``Home``,
+                        # so a name-only match must never outrank the module's
+                        # own file.
+                        candidates.append(file_path)
                         break
                 if candidates and candidates[0].startswith(pages_dir):
                     break
@@ -971,6 +998,43 @@ def _get_component_source(func: Callable) -> str:
         return ""
 
 
+def _component_ast(func: Callable):
+    """Parse a component function's source into an AST.
+
+    JSX pages (.py files with markup) are not valid Python, so the first
+    parse attempt fails.  Fall back to running the JSX preprocessor — which
+    rewrites markup into psx() calls — and parse that instead.
+    """
+    source = _get_component_source(func)
+    if not source:
+        return None
+    try:
+        import textwrap
+        return ast.parse(textwrap.dedent(source))
+    except Exception:
+        pass
+    try:
+        from nextpy.jsx_preprocessor import preprocess_content
+        transformed = preprocess_content(source)
+        return ast.parse(textwrap.dedent(transformed))
+    except Exception:
+        pass
+    # JSX preprocessors often require a complete module — an isolated
+    # function fragment can fail with "unclosed tag" errors.  Fall back to
+    # preprocessing the whole file the function was defined in.
+    try:
+        import inspect as _inspect
+        file_path = _inspect.getsourcefile(func) or _inspect.getfile(func)
+        if file_path and os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_source = f.read()
+            transformed = preprocess_content(file_source)
+            return ast.parse(transformed)
+    except Exception:
+        return None
+    return None
+
+
 def _extract_state_and_derived(func: Callable) -> Tuple[List[str], Dict[str, str]]:
     """Extract useState keys and simple derived-variable expressions.
 
@@ -978,16 +1042,10 @@ def _extract_state_and_derived(func: Callable) -> Tuple[List[str], Dict[str, str
     ...`` are evaluated by Python during SSR and then lost.  Capturing the
     expression lets the browser recompute the same value after a state change.
     """
-    source = _get_component_source(func)
+    tree = _component_ast(func)
     state_keys: List[str] = []
     derived: Dict[str, str] = {}
-    if not source:
-        return state_keys, derived
-
-    try:
-        import textwrap
-        tree = ast.parse(textwrap.dedent(source))
-    except Exception:
+    if tree is None:
         return state_keys, derived
 
     node = None
@@ -1032,23 +1090,90 @@ def _extract_state_and_derived(func: Callable) -> Tuple[List[str], Dict[str, str
                 expr = ast.unparse(value).strip()
             except Exception:
                 continue
-            if expr:
-                derived[name] = expr
+            # Skip expressions that can't be evaluated client-side:
+            # - props.* / props.get() — props is server-only
+            # - comprehensions/generator expressions — Python-only syntax
+            # - calls to locally-defined functions — not available in JS scope
+            if not expr:
+                continue
+            if 'props' in expr and ('props.' in expr or 'props[' in expr or 'props.get' in expr):
+                continue
+            # Python comprehensions / generator expressions use 'for ... in'
+            # inside brackets/parens — not valid JS.
+            if re.search(r'\bfor\s+\w+\s+in\b', expr):
+                continue
+            # f-strings are allowed only when every {expr} hole is a plain
+            # state variable — the client runtime evaluates f-strings, but
+            # holes referencing locals/props/comprehensions would break.
+            if re.search(r'\bf[\'"]', expr):
+                holes = re.findall(r'\{([^{}]+)\}', expr)
+                state_set = set(state_keys)
+                if not all(
+                    re.fullmatch(r'[A-Za-z_]\w*', h.strip()) and h.strip() in state_set
+                    for h in holes
+                ):
+                    continue
+            # Skip calls to functions defined inside the component (page_url,
+            # _opt, etc.) — they don't exist in the client JS scope.
+            local_funcs = {
+                n.name for n in ast.walk(node)
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            has_local_call = any(
+                re.search(r'\b' + re.escape(fname) + r'\s*\(', expr)
+                for fname in local_funcs
+            )
+            if has_local_call:
+                continue
+            derived[name] = expr
         elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
 
     return state_keys, derived
 
 
+def _extract_state_setter_map(func: Callable) -> Dict[str, str]:
+    """Return ``{setter_name: state_name}`` for every
+    ``[state, setter] = useState(...)`` destructuring in the component body.
+
+    Handler/effect compilation needs this map: name-based fallbacks like
+    ``setCounter -> counter`` produce the wrong key when the setter name
+    does not literally derive from the state name (``setCounter`` vs
+    ``count``).
+    """
+    tree = _component_ast(func)
+    if tree is None:
+        return {}
+    node = None
+    for candidate in ast.walk(tree):
+        if isinstance(candidate, (ast.FunctionDef, ast.AsyncFunctionDef)) and candidate.name == getattr(func, '__name__', ''):
+            node = candidate
+            break
+    if node is None:
+        return {}
+    setter_map: Dict[str, str] = {}
+    for stmt in node.body:
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            continue
+        target = stmt.targets[0]
+        value = stmt.value
+        if not (
+            isinstance(target, (ast.Tuple, ast.List))
+            and len(target.elts) == 2
+            and all(isinstance(e, ast.Name) for e in target.elts)
+            and isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name)
+            and value.func.id == 'useState'
+        ):
+            continue
+        setter_map[target.elts[1].id] = target.elts[0].id
+    return setter_map
+
+
 def _extract_client_effects(func: Callable) -> List[Dict[str, Any]]:
     """Compile useEffect callbacks into structured client actions."""
-    source = _get_component_source(func)
-    if not source:
-        return []
-    try:
-        import textwrap
-        tree = ast.parse(textwrap.dedent(source))
-    except Exception:
+    tree = _component_ast(func)
+    if tree is None:
         return []
 
     node = None
@@ -1063,6 +1188,11 @@ def _extract_client_effects(func: Callable) -> List[Dict[str, Any]]:
         child.name: child for child in node.body
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+
+    # Build {setter_name: state_name} from ``[state, setter] = useState(...)``
+    # so effect callbacks resolve snake_case setters (set_active_section)
+    # to the real state key instead of the "_active_section" fallback.
+    state_setter_map = _extract_state_setter_map(func)
 
     from ..compiler.actions import compile_handler_to_actions
     effects: List[Dict[str, Any]] = []
@@ -1100,7 +1230,7 @@ def _extract_client_effects(func: Callable) -> List[Dict[str, Any]]:
                 except Exception:
                     deps = [ast.unparse(elt) for elt in deps_node.elts]
         try:
-            actions = compile_handler_to_actions(code, name)
+            actions = compile_handler_to_actions(code, name, state_setter_map)
         except Exception:
             actions = []
         if actions and not any(
@@ -1112,13 +1242,21 @@ def _extract_client_effects(func: Callable) -> List[Dict[str, Any]]:
     return effects
 
 
-def interactive_component(func: Callable) -> Callable:
+def interactive_component(func: Callable = None, *, hydrate: str = 'eager') -> Callable:
     """
     Decorator for interactive PSX components with client-side state management.
-    
+
     Properly handles named event handler functions and converts them to JavaScript.
+
+    Args:
+        hydrate: Island hydration strategy — 'eager' (default, hydrate on load),
+                 'visible' (when scrolled into view), 'interaction' (on first
+                 user interaction), or 'idle' (when the main thread is idle).
     """
-    
+    if func is None:
+        # Used as @interactive_component(hydrate='lazy')
+        return lambda f: interactive_component(f, hydrate=hydrate)
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Extract props if provided
@@ -1154,8 +1292,38 @@ def interactive_component(func: Callable) -> Callable:
                     break
             
             if component_start is not None:
+                # Find functions used as useEffect callbacks — these are client
+                # effects, not event handlers, and must not be extracted as handlers.
+                # Remove their entire function bodies (including nested defs)
+                # from consideration by tracking which lines belong to them.
+                effect_func_names = set()
+                for m in re.finditer(r'useEffect\s*\(\s*(\w+)\s*,', content):
+                    effect_func_names.add(m.group(1))
+                
+                # Build a set of line indices that are inside useEffect callbacks
+                effect_line_indices = set()
+                for idx, line in enumerate(lines):
+                    m = re.match(r'^(\s*)def\s+(\w+)\s*\(', line)
+                    if m and m.group(2) in effect_func_names:
+                        func_indent = len(m.group(1))
+                        # Mark this line and all more-indented lines
+                        effect_line_indices.add(idx)
+                        for j in range(idx + 1, len(lines)):
+                            l2 = lines[j]
+                            if not l2.strip():
+                                continue
+                            indent2 = len(l2) - len(l2.lstrip(' '))
+                            if indent2 <= func_indent:
+                                break
+                            effect_line_indices.add(j)
+                
                 i = component_start + 1
                 while i < len(lines):
+                    # Skip lines inside useEffect callbacks
+                    if i in effect_line_indices:
+                        i += 1
+                        continue
+                    
                     line = lines[i]
                     if not line.strip():
                         i += 1
@@ -1163,10 +1331,14 @@ def interactive_component(func: Callable) -> Callable:
                     line_indent = len(line) - len(line.lstrip(' '))
                     if line_indent <= component_indent:
                         break
-                    match = re.match(r'^(\s+)def\s+((?:handle|on)_\w+)\s*\([^)]*\)\s*:', line)
+                    match = re.match(r'^(\s+)def\s+(\w+)\s*\([^)]*\)\s*:', line)
                     if match:
                         indent = len(match.group(1))
                         func_name = match.group(2)
+                        # Skip the component function itself and useEffect callbacks
+                        if func_name == func.__name__ or func_name in effect_func_names:
+                            i += 1
+                            continue
                         func_lines = []
                         i += 1
                         while i < len(lines):
@@ -1250,6 +1422,7 @@ def interactive_component(func: Callable) -> Callable:
         if not state_keys:
             state_keys = list(initial_state.keys())
         client_effects = _extract_client_effects(func)
+        _setter_map = _extract_state_setter_map(func)
         
         # Get the HTML output with interactive handler context
         if hasattr(base_component_result, 'to_html'):
@@ -1259,6 +1432,22 @@ def interactive_component(func: Callable) -> Callable:
                 base_component_result._psx_context['_interactive_handlers'] = {name: True for name in handlers.keys()}
                 # FIX: Add extracted state to the context for data binding
                 base_component_result._psx_context.update(initial_state)
+                # FIX: Evaluate derived expressions server-side so class/style
+                # bindings have access to derived variables (nav_link_active,
+                # acc_icon, etc.) during SSR evaluation.
+                if derived_expressions:
+                    try:
+                        from ..core.runtime import PSXRuntime
+                        _eval_rt = PSXRuntime(dict(base_component_result._psx_context))
+                        for _name, _expr in derived_expressions.items():
+                            try:
+                                _val = _eval_rt.evaluate_expression(_expr)
+                                base_component_result._psx_context[_name] = _val
+                                _eval_rt.context[_name] = _val
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 # FIX: Add component ID to context for conditional element tracking
                 base_component_result._psx_context['_component_id'] = component_id
                 # Expose which values may change in the browser.  Attribute
@@ -1307,7 +1496,7 @@ def interactive_component(func: Callable) -> Callable:
                 from ..compiler.actions import compile_handler_to_actions
                 for handler_name, lambda_source in lambda_handlers.items():
                     try:
-                        actions = compile_handler_to_actions(lambda_source, handler_name)
+                        actions = compile_handler_to_actions(lambda_source, handler_name, _setter_map)
                         if actions and not any(
                             isinstance(a, dict) and (a.get('metadata') or {}).get('error')
                             for a in actions
@@ -1331,16 +1520,21 @@ def interactive_component(func: Callable) -> Callable:
                 _code = _handler_body.strip()
                 # Do not feed already-compiled JavaScript back into the Python
                 # action compiler (e.g. ``this.stateManager.set(...)``).
+                # NOTE: 'window.'/'document.'/'console.' are intentionally NOT
+                # markers — PSX handlers legitimately call window.*, document.*
+                # and console.* and the action compiler resolves them as
+                # globals.  Only unambiguous JS-only syntax disqualifies a
+                # candidate (this.stateManager, executeNextPyActions, =>, etc.).
                 if any(_marker in _code for _marker in (
-                    'this.stateManager', 'executeNextPyActions', 'console.',
-                    'window.', 'document.', 'new Function(', '=>'
+                    'this.stateManager', 'executeNextPyActions',
+                    'new Function(', '=>', 'function('
                 )):
                     continue
                 _candidate = _code
                 if not _code.startswith(('lambda ', 'lambda:', 'def ')) and '\n' not in _code:
                     _candidate = f"lambda e: {_code}"
                 try:
-                    _actions = compile_handler_to_actions(_candidate, _handler_name)
+                    _actions = compile_handler_to_actions(_candidate, _handler_name, _setter_map)
                     if _actions and not any(
                         isinstance(a, dict) and (a.get('metadata') or {}).get('error')
                         for a in _actions
@@ -1365,15 +1559,20 @@ def interactive_component(func: Callable) -> Callable:
             'registered_functions': _registered_functions_snapshot,
             'derived_expressions': derived_expressions,
             'client_effects': client_effects,
+            'hydrate': hydrate,
         }
         # Override the generated ID with our consistent one
         original_id = engine.register_component(component_data)
         engine.contexts[component_id] = engine.contexts[original_id]
         del engine.contexts[original_id]
         
-        # Wrap HTML with hydration data using consistent ID
-        state = metadata['state']
-        hydrated_html = engine.generate_html_wrapper(component_id, html, state)
+        # Wrap HTML with hydration data using consistent ID.
+        # Use the merged initial_state (useState values + JSON-safe props)
+        # so the __PSX_DATA__ bootstrap carries prop-derived keys like
+        # ``title``/``message`` — otherwise client bindings resolve them to
+        # undefined and blank the SSR text on hydration.
+        state = dict(engine.contexts[component_id].initial_state)
+        hydrated_html = engine.generate_html_wrapper(component_id, html, state, hydrate=hydrate)
         
         
         # Generate scripts

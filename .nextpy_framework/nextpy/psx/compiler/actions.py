@@ -48,6 +48,7 @@ class ActionType(Enum):
     CALL_SERVER_ACTION = "CALL_SERVER_ACTION"
     IF = "IF"
     NAVIGATE = "NAVIGATE"
+    DEFINE_FUNCTION = "DEFINE_FUNCTION"
 
 
 @dataclass
@@ -156,10 +157,14 @@ class ActionCompiler:
         """Compile a list of top-level statements, skipping nested functions"""
         actions = []
         for stmt in stmts:
-            # Skip nested function/class definitions
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            # Nested function defs become DEFINE_FUNCTION registrations so
+            # callbacks (event listeners, effect helpers) resolve by name.
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                action = self._compile_function_def(stmt)
+            elif isinstance(stmt, ast.ClassDef):
                 continue
-            action = self._compile_statement(stmt)
+            else:
+                action = self._compile_statement(stmt)
             if action:
                 actions.append(action)
         return actions
@@ -175,6 +180,8 @@ class ActionCompiler:
             return self._compile_assignment(node)
         elif isinstance(node, ast.If):
             return self._compile_if(node)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            return self._compile_for(node)
         elif isinstance(node, ast.Return):
             return self._compile_return(node)
         elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Attribute):
@@ -230,6 +237,65 @@ class ActionCompiler:
                 "condition": condition.to_dict() if condition else None,
                 "then": body_actions,
                 "else": else_actions,
+            }
+        )
+
+    def _compile_function_def(self, node: ast.AST) -> Optional[Action]:
+        """Compile a nested function definition into a DEFINE_FUNCTION action.
+
+        The body is compiled recursively so nested defs, loops and ifs inside
+        the callback all work. Args/kwargs-only params are captured by name;
+        *args/**kwargs are ignored (unsupported client-side).
+        """
+        params = [a.arg for a in node.args.args]
+        params += [a.arg for a in node.args.kwonlyargs]
+        if node.args.vararg:
+            params.append(node.args.vararg.arg)
+        if node.args.kwarg:
+            params.append(node.args.kwarg.arg)
+
+        body_actions = [a.to_dict() for a in self._compile_statements(node.body)]
+
+        return Action(
+            type=ActionType.DEFINE_FUNCTION,
+            data={
+                "name": node.name,
+                "params": params,
+                "actions": body_actions,
+                "is_async": isinstance(node, ast.AsyncFunctionDef),
+            }
+        )
+
+    def _compile_for(self, node: ast.AST) -> Optional[Action]:
+        """Compile a for loop into a FOR_LOOP action.
+
+        Supports single-name targets and tuple unpacking of iterables that
+        yield arrays (e.g. ``for a, b in pairs``).
+        """
+        target = node.target
+        if isinstance(target, ast.Name):
+            vars_ = [target.id]
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            vars_ = [e.id for e in target.elts if isinstance(e, ast.Name)]
+            if len(vars_) != len(target.elts):
+                return None
+        else:
+            return None
+
+        iterable = self._compile_expression(node.iter)
+        if iterable is None:
+            return None
+
+        body_actions = [a.to_dict() for a in self._compile_statements(node.body)]
+        orelse_actions = [a.to_dict() for a in self._compile_statements(node.orelse)] if node.orelse else []
+
+        return Action(
+            type=ActionType.FOR_LOOP,
+            data={
+                "vars": vars_,
+                "iter": iterable.to_dict(),
+                "body": body_actions,
+                "orelse": orelse_actions,
             }
         )
 
@@ -406,8 +472,10 @@ class ActionCompiler:
             # Fallback: Support setters starting with 'set' for backward compatibility
             elif func_name.startswith('set'):
                 # Extract state key from setter name
-                # For setCount -> count, setName -> name, setchangemynam -> changemynam
-                state_key = func_name[3:]  # Remove 'set' prefix
+                # For setCount -> count, setName -> name, setchangemynam -> changemynam,
+                # set_active_section -> active_section (snake_case setters keep their
+                # underscore-separated name; the leading '_' after 'set' is stripped)
+                state_key = func_name[3:].lstrip('_')  # Remove 'set' prefix + '_' separator
                 if state_key:  # Make sure there's something after 'set'
                     # If the first letter is uppercase, lowercase it (setCount -> count)
                     # Otherwise keep as-is (setchangemynam -> changemynam)

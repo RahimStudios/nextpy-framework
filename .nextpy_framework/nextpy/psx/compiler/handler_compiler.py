@@ -62,7 +62,13 @@ class HandlerCompiler(ast.NodeVisitor):
             if _DEBUG:
                 print(f"Handler extraction error: {e}")
             # Try direct file-based extraction for PSX files
-            return self._extract_from_psx_file(func)
+            try:
+                return self._extract_from_psx_file(func)
+            except Exception as e2:
+                if _DEBUG:
+                    print(f"PSX file extraction error: {e2}")
+                # Return empty handlers dict instead of failing
+                return {}
     
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Visit function definition"""
@@ -273,7 +279,7 @@ class HandlerCompiler(ast.NodeVisitor):
             for i, lambda_code in enumerate(inline_matches):
                 try:
                     clean_code = lambda_code.strip()
-                    actions = compile_handler_to_actions(clean_code, f'inline_handler_{i}')
+                    actions = compile_handler_to_actions(clean_code, f'inline_handler_{i}', state_setter_map)
                     if actions:
                         handlers[f'inline_handler_{i}'] = actions
                 except Exception as e:
@@ -375,7 +381,23 @@ class EnhancedHandlerExtractor:
         try:
             source = inspect.getsource(component_func)
             tree = ast.parse(source)
-            
+
+            # Build {setter: state} map so create_on* lambdas resolve setters
+            # like setCounter -> count instead of the lossy name fallback.
+            setter_map: Dict[str, str] = {}
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Assign)
+                    and len(node.targets) == 1
+                    and isinstance(node.targets[0], (ast.Tuple, ast.List))
+                    and len(node.targets[0].elts) == 2
+                    and all(isinstance(e, ast.Name) for e in node.targets[0].elts)
+                    and isinstance(node.value, ast.Call)
+                    and isinstance(node.value.func, ast.Name)
+                    and node.value.func.id == 'useState'
+                ):
+                    setter_map[node.targets[0].elts[1].id] = node.targets[0].elts[0].id
+
             for node in ast.walk(tree):
                 if isinstance(node, ast.Assign):
                     if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
@@ -394,7 +416,7 @@ class EnhancedHandlerExtractor:
                                     placeholder = _get_python_call_placeholder_from_lambda_code(lambda_code)
                                     
                                     # Compile to actions
-                                    actions = compile_handler_to_actions(lambda_code, target_name)
+                                    actions = compile_handler_to_actions(lambda_code, target_name, setter_map)
                                     if actions:
                                         handlers[placeholder] = actions
         except Exception as e:
@@ -430,12 +452,11 @@ class EnhancedHandlerExtractor:
                 
                 # Fallback: find the source file
                 pages_paths = []
-                if not file_path:
-                    for ext in ('.psx', '.py'):
-                        pages_paths.extend([
-                            os.path.join(os.getcwd(), 'pages', module_name + ext),
-                            os.path.join(os.getcwd(), '..', 'pages', module_name + ext),
-                        ])
+                for ext in ('.psx', '.py'):
+                    pages_paths.extend([
+                        os.path.join(os.getcwd(), 'pages', module_name + ext),
+                        os.path.join(os.getcwd(), '..', 'pages', module_name + ext),
+                    ])
                 
                 for potential_file in pages_paths:
                     if _DEBUG: print(f"DEBUG: EnhancedHandlerExtractor checking pages path: {potential_file}")
@@ -552,20 +573,53 @@ class EnhancedHandlerExtractor:
             for i, lambda_code in enumerate(inline_matches):
                 try:
                     clean_code = lambda_code.strip()
-                    actions = compile_handler_to_actions(clean_code, f'inline_handler_{i}')
+                    actions = compile_handler_to_actions(clean_code, f'inline_handler_{i}', state_setter_map)
                     if actions:
                         handlers[f'inline_handler_{i}'] = actions
                 except Exception as e:
                     print(f"Inline handler compilation error: {e}")
             
             # Extract regular function definitions as handlers
-            func_def_pattern = r'^(\s*)def\s+(\w+)\s*\(\s*\w+\s*\)\s*:'
+            # Skip functions used as useEffect callbacks — they are client
+            # effects, not event handlers, and must not be compiled as handlers.
+            effect_func_names = set()
+            for m in re.finditer(r'useEffect\s*\(\s*(\w+)\s*,', func_content):
+                effect_func_names.add(m.group(1))
+            
+            # Remove useEffect callback function definitions (including their
+            # bodies) from the content so nested functions aren't extracted.
+            if effect_func_names:
+                lines_to_remove = set()
+                fdef_lines_check = func_content.split('\n')
+                for idx, line in enumerate(fdef_lines_check):
+                    m = re.match(r'^(\s*)def\s+(\w+)\s*\(', line)
+                    if m and m.group(2) in effect_func_names:
+                        func_indent = len(m.group(1))
+                        # Mark this line and all more-indented lines as removed
+                        lines_to_remove.add(idx)
+                        for j in range(idx + 1, len(fdef_lines_check)):
+                            l2 = fdef_lines_check[j]
+                            if not l2.strip():
+                                continue
+                            indent2 = len(l2) - len(l2.lstrip(' '))
+                            if indent2 <= func_indent:
+                                break
+                            lines_to_remove.add(j)
+                # Rebuild func_content without those lines
+                func_content = '\n'.join(
+                    l for i, l in enumerate(fdef_lines_check) if i not in lines_to_remove
+                )
+            
+            func_def_pattern = r'^(\s*)def\s+(\w+)\s*\(\s*\w*\s*\)\s*:'
             fdef_lines = func_content.split('\n')
             fi = 0
             while fi < len(fdef_lines):
                 fdef_match = re.match(func_def_pattern, fdef_lines[fi])
                 if fdef_match:
                     handler_name = fdef_match.group(2)
+                    if handler_name in effect_func_names:
+                        fi += 1
+                        continue
                     body_indent = len(fdef_match.group(1)) + 4
                     body_lines = []
                     fi += 1

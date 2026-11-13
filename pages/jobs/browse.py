@@ -6,7 +6,7 @@ GET filters (?search=&job_type=&experience_level=) work without relying on
 client-side list re-rendering.
 """
 
-from nextpy.psx import interactive_component
+from nextpy.psx import interactive_component, Motion
 from urllib.parse import urlencode
 
 
@@ -18,7 +18,7 @@ def job_type_label(jt):
 @interactive_component
 def JobsBrowse(props=None):
     props = props or {}
-    search = props.get("search", "") or ""
+    search_query = props.get("search", "") or ""
     job_type = props.get("job_type", "") or ""
     experience_level = props.get("experience_level", "") or ""
     per_page = int(props.get("per_page") or 6)
@@ -33,9 +33,10 @@ def JobsBrowse(props=None):
     if not isinstance(jobs, list):
         jobs = []
     jobs = [dict(job) for job in jobs]
-    for job in jobs:
+    for idx, job in enumerate(jobs):
         job["type_label"] = job_type_label(job.get("job_type", "full_time"))
         job["location"] = job.get("location") or "Remote"
+        job["anim_delay"] = round(min(idx * 0.05, 0.5), 3)
 
     JOB_TYPES = [
         ("", "All Types"),
@@ -52,19 +53,17 @@ def JobsBrowse(props=None):
         ("lead", "Lead"),
     ]
 
-    job_type_options = "".join(
-        f'<option value="{val}" {"selected" if val == job_type else ""}>{label}</option>'
-        for val, label in JOB_TYPES
-    )
-    level_options = "".join(
-        f'<option value="{val}" {"selected" if val == experience_level else ""}>{label}</option>'
-        for val, label in LEVELS
-    )
+    def _opt(val, label, current):
+        sel = ' selected' if val == current else ''
+        return f'<option value="{val}"{sel}>{label}</option>'
+    
+    job_type_options = "_RAW_CODE:" + "".join(_opt(v, l, job_type) for v, l in JOB_TYPES)
+    level_options = "_RAW_CODE:" + "".join(_opt(v, l, experience_level) for v, l in LEVELS)
 
     def page_url(target_page):
         params = {"page": target_page}
-        if search:
-            params["search"] = search
+        if search_query:
+            params["search"] = search_query
         if job_type:
             params["job_type"] = job_type
         if experience_level:
@@ -87,7 +86,7 @@ def JobsBrowse(props=None):
         if has_next else "<span></span>"
     )
     pagination_html = (
-        '<div class="flex items-center justify-between pt-4 mt-8 border-t border-gray-200">'
+        '_RAW_CODE:' + '<div class="flex items-center justify-between pt-4 mt-8 border-t border-gray-200">'
         + prev_html
         + f'<span class="text-sm text-gray-500">Page {page} of {page_count}</span>'
         + next_html
@@ -104,7 +103,7 @@ def JobsBrowse(props=None):
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div class="sm:col-span-2">
                         <label class="block mb-1 text-sm font-medium text-gray-700">Search</label>
-                        <input name="search" value={search} placeholder="Job title, company..."
+                        <input name="search" value="{search_query}" placeholder="Job title, company..."
                             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                     </div>
                     <div>
@@ -137,19 +136,25 @@ def JobsBrowse(props=None):
 
             <div class="space-y-4">
                 {for job in jobs:
+                    <Motion
+                        initial={{"opacity": 0, "transform": "translateY(16px)"}}
+                        animate={{"opacity": 1, "transform": "translateY(0px)"}}
+                        transition={{"duration": 0.4, "delay": job["anim_delay"], "easing": "ease-out"}}
+                        whileHover={{"y": -3}}
+                    >
                     <a href="/jobs/{job['id']}"
-                        class="block p-6 transition bg-white border border-gray-200 shadow-sm group rounded-xl hover:shadow-md hover:border-indigo-300">
+                        class="block p-6 transition bg-white border border-gray-200 shadow-sm rounded-2xl hover:shadow-lg hover:border-indigo-300">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div class="flex-1">
                                 <div class="flex flex-wrap items-center gap-2 mb-2">
-                                    <span class="inline-block rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                                    <span class="inline-block rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
                                         {job["type_label"]}
                                     </span>
-                                    <span class="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                                    <span class="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
                                         {job.get("experience_level", "mid").title()}
                                     </span>
                                 </div>
-                                <h3 class="text-lg font-semibold text-gray-900 group-hover:text-indigo-600">{job["title"]}</h3>
+                                <h3 class="text-lg font-semibold text-gray-900">{job["title"]}</h3>
                                 <p class="mt-1 text-sm text-gray-600">{job["company"]}</p>
                                 <p class="mt-2 text-sm text-gray-500 line-clamp-2">{job.get("description", "")[:150]}</p>
                             </div>
@@ -158,6 +163,7 @@ def JobsBrowse(props=None):
                             </div>
                         </div>
                     </a>
+                    </Motion>
                 }
             </div>
 

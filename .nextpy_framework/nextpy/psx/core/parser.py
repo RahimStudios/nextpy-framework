@@ -19,9 +19,17 @@ Changes from previous version
 * Dead code (_parse_element_fallback, unused regex patterns) removed.
 * Type hint for _node_to_child corrected to include List as a possible
   return type (Fragment case).
+
+Additional Fixes Applied:
+* Removed the hardcoded `_RAW_CODE:` prefix for the `code` attribute.
+* Added proper string escaping (`\"` and `\'`) in attributes so inline
+  JS doesn't break the parser.
+* Added an interceptor for inline JavaScript in `{}` blocks so the
+  parser doesn't try to evaluate JS as Python expressions.
 """
 
 import re
+import html as _html
 import time
 import logging
 import threading
@@ -54,6 +62,14 @@ PARSE_TIMEOUT: float = 5.0
 #: Hard iteration cap per parse to guard against pathological inputs.
 MAX_ITERATIONS: int = 10_000
 
+#: Keywords that indicate inline JavaScript rather than Python expressions
+_JS_KEYWORDS = (
+    '=>', 'function', 'return ', 'this.', 'document.', 'window.', 
+    'console.', 'var ', 'let ', 'const ', '.classList', 'querySelector', 
+    'getElementById', 'addEventListener'
+)
+_CTRL_KW = ('if ', 'for ', 'while ', 'try', 'elif ', 'else', 'def ', 'class ', 'import ', 'from ')
+
 
 # ── Internal exception ─────────────────────────────────────────────────────────
 
@@ -67,13 +83,6 @@ def _match_brace(code: str, start: int) -> int:
     """
     Given that ``code[start] == '{'``, return the *exclusive* end index
     after the matching ``'}'``.
-
-    Handles:
-    * Arbitrarily nested ``{}`` blocks.
-    * Single-quoted, double-quoted, and back-tick string literals
-      (including escaped characters inside them).
-
-    Returns ``len(code)`` for malformed input so callers degrade gracefully.
     """
     assert code[start] == '{', f"Expected '{{' at index {start}, got {code[start]!r}"
     depth: int = 0
@@ -103,16 +112,19 @@ def _match_brace(code: str, start: int) -> int:
     return n   # malformed — caller handles gracefully
 
 
+def _position(code: str, index: int) -> Tuple[int, int]:
+    """Return 1-based (line, column) of ``index`` within ``code``."""
+    line = code.count('\n', 0, index) + 1
+    last_nl = code.rfind('\n', 0, index)
+    return line, index - last_nl
+
+
 # ── PSXElement (legacy shim) ───────────────────────────────────────────────────
 
 @dataclass
 class PSXElement:
     """
     Legacy PSX element, retained for backwards compatibility.
-
-    ``_ast_node`` and ``_psx_context`` are set externally after construction
-    (they carry information needed for rendering but are not part of the
-    public API surface).
     """
     tag:      str
     props:    Dict[str, Any]                  = field(default_factory=dict)
@@ -120,7 +132,6 @@ class PSXElement:
     key:      Optional[str]                   = None
 
     def to_ast(self) -> ElementNode:
-        """Convert this PSXElement into a production-grade :class:`ElementNode`."""
         events:     Dict[str, Any] = {}
         attributes: Dict[str, Any] = {}
 
@@ -149,12 +160,10 @@ class PSXElement:
         )
 
     def to_html(self, context: Dict[str, Any] = None) -> str:
-        """Render this element to an HTML string."""
         ctx: Dict[str, Any] = {}
         stored_ctx = getattr(self, '_psx_context', None)
         if stored_ctx:
             ctx = dict(stored_ctx)
-            # Ensure _lambda_handlers is a mutable dict that persists across the shallow copy
             if '_lambda_handlers' not in ctx:
                 ctx['_lambda_handlers'] = {}
                 if stored_ctx is not None:
@@ -177,23 +186,12 @@ def _node_to_child(
     node: PSXNodeUnion,
     context: Dict[str, Any],
 ) -> Union[str, PSXElement, List[Union[str, 'PSXElement']]]:
-    """
-    Convert one AST node to its ``PSXElement``-child equivalent.
-
-    :class:`FragmentNode` flattens into a plain list so callers must handle
-    both scalar and list return values (see :func:`_children_to_elements`).
-    """
     if isinstance(node, TextNode):
         return node.content
 
     if isinstance(node, ExpressionNode):
         try:
             result = PSXRuntime(context).evaluate_ast_expression(node)
-            # Keep PSXElement trees lazy. Rendering them here makes layout
-            # composition render the whole child tree eagerly, then the final
-            # AST render renders it again -- duplicating hydration scripts and
-            # interactive component markup. The PSXElement already carries its
-            # AST, so returning it is enough for introspection/composition.
             if isinstance(result, PSXElement):
                 return result
             return result.to_html() if hasattr(result, 'to_html') else str(result)
@@ -215,7 +213,6 @@ def _node_to_child(
         return el
 
     if isinstance(node, FragmentNode):
-        # Fragments flatten — callers must extend, not append
         return _children_to_elements(node.children, context)
 
     return str(node)
@@ -225,7 +222,6 @@ def _children_to_elements(
     nodes: List[PSXNodeUnion],
     context: Dict[str, Any],
 ) -> List[Union[str, PSXElement]]:
-    """Recursively convert a list of AST children to ``PSXElement`` children."""
     out: List[Union[str, PSXElement]] = []
     for node in nodes:
         converted = _node_to_child(node, context)
@@ -239,29 +235,10 @@ def _children_to_elements(
 # ── Parser ─────────────────────────────────────────────────────────────────────
 
 class PSXParser:
-    """
-    Production-grade PSX parser using recursive descent.
-
-    Design properties
-    -----------------
-    * **Thread-safe** — all mutable state lives on the call stack.
-      The only instance-level state is the stateless helper objects
-      (``ast_parser``, ``validator``, ``optimizer``).
-    * **Cross-platform** — deadline tracking uses ``time.monotonic()``;
-      no UNIX signals.
-    * **Unified dispatch** — components go through the same recursive
-      engine as elements; no regex short-cut that breaks on nesting.
-    * **Robust expressions** — ``_match_brace`` handles arbitrarily
-      nested braces so ``{obj['key']}`` and ``{fn({'a': 1})}`` parse
-      correctly.
-    """
-
     def __init__(self) -> None:
         self.ast_parser = PSXASTParser()
         self.validator  = PSXNodeValidator()
         self.optimizer  = PSXNodeOptimizer()
-
-    # ── Public API ─────────────────────────────────────────────────────────────
 
     def parse_psx(
         self,
@@ -269,14 +246,8 @@ class PSXParser:
         context: Dict[str, Any] = None,
         timeout: float = PARSE_TIMEOUT,
     ) -> PSXNodeUnion:
-        """
-        Parse *psx_str* and return an optimised AST node.
-
-        Falls back to a plain :class:`TextNode` on timeout or parse error
-        so callers always receive a usable value.
-        """
         context  = context or {}
-        psx_str  = process_python_logic(psx_str, context)
+        psx_str  = process_python_logic(psx_str, context, substitute_expressions=False)
         src      = psx_str.strip()
         deadline = time.monotonic() + timeout
 
@@ -291,15 +262,12 @@ class PSXParser:
 
         return self.optimizer.optimize_node(node)
 
-    # ── Root dispatch ──────────────────────────────────────────────────────────
-
     def _root(
         self,
         src: str,
         ctx: Dict[str, Any],
         dl: float,
     ) -> PSXNodeUnion:
-        """Select the right top-level parser for *src*."""
         if not src:
             return TextNode(content='')
 
@@ -313,8 +281,6 @@ class PSXParser:
 
         return TextNode(content=src)
 
-    # ── Tag-level dispatcher ───────────────────────────────────────────────────
-
     def _dispatch(
         self,
         code: str,
@@ -323,11 +289,6 @@ class PSXParser:
         dl: float,
         in_pre_tag: bool = False,
     ) -> Tuple[PSXNodeUnion, int]:
-        """
-        Peek at the tag name immediately after ``'<'`` and route to
-        :meth:`_parse_element`, :meth:`_parse_component`, or
-        :meth:`_parse_fragment_short`.
-        """
         self._tick(dl)
         assert code[index] == '<'
 
@@ -339,20 +300,16 @@ class PSXParser:
         tag = code[tag_start:peek]
 
         if not tag:
-            # Bare '<' with no valid tag name — treat as literal text
             return TextNode(content='<'), index + 1
 
         if tag[0].isupper():
             return self._parse_component(code, index, ctx, dl, in_pre_tag)
 
         if tag.lower() == 'fragment':
-            # <fragment …> … </fragment> — reuse element parser, wrap result
             el, new_i = self._parse_element(code, index, ctx, dl, in_pre_tag)
             return FragmentNode(children=el.children, shorthand=False), new_i
 
         return self._parse_element(code, index, ctx, dl, in_pre_tag)
-
-    # ── Fragment ───────────────────────────────────────────────────────────────
 
     def _parse_fragment_short(
         self,
@@ -362,14 +319,11 @@ class PSXParser:
         dl: float,
         in_pre_tag: bool = False,
     ) -> Tuple[FragmentNode, int]:
-        """Parse ``<> … </>`` shorthand fragment."""
-        index += 2   # consume '<>'
+        index += 2
         children, index = self._parse_children(code, index, '</>', ctx, dl, in_pre_tag)
         if code.startswith('</>', index):
             index += 3
         return FragmentNode(children=children, shorthand=True), index
-
-    # ── Element ────────────────────────────────────────────────────────────────
 
     def _parse_element(
         self,
@@ -379,9 +333,9 @@ class PSXParser:
         dl: float,
         in_pre_tag: bool = False,
     ) -> Tuple[ElementNode, int]:
-        """Parse a single lowercase HTML element recursively."""
         self._tick(dl)
-        index += 1   # consume '<'
+        pos = _position(code, index)
+        index += 1
 
         tag, index = self._read_tag_name(code, index)
         tag = tag or 'div'
@@ -390,11 +344,9 @@ class PSXParser:
             code, index, ctx, tag
         )
 
-        # Intrinsic self-closing check (e.g. <br> without />)
         if not self_closing and tag.lower() in SELF_CLOSING_TAGS:
             self_closing = True
 
-        # Check if this is a <pre> tag
         is_pre_tag = tag.lower() == 'pre'
 
         if self_closing:
@@ -405,6 +357,7 @@ class PSXParser:
                 children=[],
                 self_closing=True,
                 spread_props=spread,
+                position=pos,
             ), index
 
         closing = f'</{tag}>'
@@ -418,9 +371,8 @@ class PSXParser:
             events=events,
             children=children,
             spread_props=spread,
+            position=pos,
         ), index
-
-    # ── Component ──────────────────────────────────────────────────────────────
 
     def _parse_component(
         self,
@@ -430,15 +382,9 @@ class PSXParser:
         dl: float,
         in_pre_tag: bool = False,
     ) -> Tuple[ComponentNode, int]:
-        """
-        Parse a PSX component (UpperCase tag) using the same recursive
-        descent engine as :meth:`_parse_element`.
-
-        Previously this was a regex match, which broke on any nested
-        component of the same type.
-        """
         self._tick(dl)
-        index += 1   # consume '<'
+        pos = _position(code, index)
+        index += 1
 
         name, index = self._read_tag_name(code, index)
         props, events, spread, self_closing, index = self._read_attrs(
@@ -452,6 +398,7 @@ class PSXParser:
                 events=events,
                 children=[],
                 spread_props=spread,
+                position=pos,
             ), index
 
         closing = f'</{name}>'
@@ -465,9 +412,8 @@ class PSXParser:
             events=events,
             children=children,
             spread_props=spread,
+            position=pos,
         ), index
-
-    # ── Children ───────────────────────────────────────────────────────────────
 
     def _parse_children(
         self,
@@ -478,16 +424,6 @@ class PSXParser:
         dl: float,
         in_pre_tag: bool = False,
     ) -> Tuple[List[PSXNodeUnion], int]:
-        """
-        Parse child nodes until *sentinel* is found at the current depth.
-
-        Stops on any ``</`` prefix (not just the exact sentinel) to prevent
-        an unexpected closing tag from causing the stuck-parser fallback to
-        corrupt the buffer position.
-
-        If *in_pre_tag* is True, all content is treated as literal text
-        without expression interpolation (for <pre> tags).
-        """
         nodes: List[PSXNodeUnion] = []
         n     = len(code)
         iters = 0
@@ -503,17 +439,14 @@ class PSXParser:
                 )
                 break
 
-            # Skip inter-node whitespace
             while index < n and code[index] in ' \t\n\r':
                 index += 1
             if index >= n:
                 break
 
-            # Exact sentinel (our closing tag)
             if code.startswith(sentinel, index):
                 break
 
-            # Any closing tag at this level means we've gone too far
             if code[index:index + 2] == '</':
                 log.debug(
                     "Unexpected closing tag at %d while looking for %r; "
@@ -553,11 +486,8 @@ class PSXParser:
         dl: float,
         in_pre_tag: bool = False,
     ) -> Tuple[Optional[PSXNodeUnion], int]:
-        """Parse exactly one child node: element, component, expression, or text."""
         n = len(code)
 
-        # Whitespace already consumed by _parse_children, but guard here too
-        # in case _parse_child is called directly.
         while index < n and code[index] in ' \t\n\r':
             index += 1
         if index >= n:
@@ -565,18 +495,14 @@ class PSXParser:
 
         ch = code[index]
 
-        # ── Markup ─────────────────────────────────────────────────────────
         if ch == '<':
-            # HTML comment — skip entirely
             if code.startswith('<!--', index):
                 end = code.find('-->', index)
                 return None, (end + 3 if end != -1 else n)
 
-            # Fragment shorthand
             if code.startswith('<>', index):
                 return self._parse_fragment_short(code, index, ctx, dl, in_pre_tag)
 
-            # Anything else (element or component)
             return self._dispatch(code, index, ctx, dl, in_pre_tag)
 
         # ── Expression ─────────────────────────────────────────────────────
@@ -584,21 +510,21 @@ class PSXParser:
             end  = _match_brace(code, index)
             expr = code[index + 1 : end - 1].strip()
             if expr:
-                _CTRL_KW = ('if ', 'for ', 'while ', 'try', 'elif ', 'else', 'def ', 'class ', 'import ', 'from ')
-                if any(expr.startswith(k) for k in _CTRL_KW):
+                # [FIX] Intercept inline JavaScript so it is treated as literal text
+                if any(expr.startswith(k) for k in _CTRL_KW) or any(k in expr for k in _JS_KEYWORDS):
                     return TextNode(content=code[index:end]), end
+                    
             pexpr = self.ast_parser.parse_expression(expr)
-            return ExpressionNode(expression=expr, parsed_expression=pexpr), end
+            return ExpressionNode(expression=expr, parsed_expression=pexpr,
+                                  position=_position(code, index)), end
 
-        # ── Text (may contain inline {expressions}) ─────────────────────────
+        # ── Text ───────────────────────────────────────────────────────────
         start = index
-        # When inside <pre> tag, don't stop at '{' - treat it as literal text
         stop_chars = ('<',) if in_pre_tag else ('<', '{')
         while index < n and code[index] not in stop_chars:
             index += 1
         raw = code[start:index]
         
-        # If inside <pre> tag, treat everything as literal text
         if in_pre_tag:
             return TextNode(content=raw), index
         
@@ -607,13 +533,9 @@ class PSXParser:
             return None, index
         if len(parts) == 1:
             return parts[0], index
-        # Multiple mixed nodes — wrap in an inline fragment
         return FragmentNode(children=parts, shorthand=True), index
 
-    # ── Low-level readers ──────────────────────────────────────────────────────
-
     def _read_tag_name(self, code: str, index: int) -> Tuple[str, int]:
-        """Read a tag name (alphanumeric + ``-_:.``) from *code* at *index*."""
         n = len(code)
         start = index
         while index < n and (code[index].isalnum() or code[index] in '-_:.'):
@@ -627,25 +549,17 @@ class PSXParser:
         ctx:   Dict[str, Any],
         tag:   str,
     ) -> Tuple[Dict[str, Any], Dict[str, Any], List[str], bool, int]:
-        """
-        Read all attributes on an opening tag.
-
-        Returns ``(attributes, events, spread_props, is_self_closing, new_index)``.
-        Consumes the closing ``>`` or ``/>``.
-        """
         attributes: Dict[str, Any] = {}
         events:     Dict[str, Any] = {}
         spread:     List[str]      = []
         n = len(code)
 
         while index < n and code[index] not in ('>', '/'):
-            # Skip whitespace
             while index < n and code[index].isspace():
                 index += 1
             if index >= n or code[index] in ('>', '/'):
                 break
 
-            # Spread prop: {...obj}
             if code[index] == '{':
                 end  = _match_brace(code, index)
                 expr = code[index + 1 : end - 1].strip()
@@ -654,25 +568,23 @@ class PSXParser:
                 index = end
                 continue
 
-            # Attribute key
             ks = index
             while index < n and (code[index].isalnum() or code[index] in '-_:.'):
                 index += 1
             key = code[ks:index]
 
             if not key:
-                index += 1    # skip unexpected character
+                index += 1
                 continue
 
             while index < n and code[index].isspace():
                 index += 1
 
-            # Boolean attribute (no '=')
             if index >= n or code[index] != '=':
                 attributes[key] = True
                 continue
 
-            index += 1   # consume '='
+            index += 1
             while index < n and code[index].isspace():
                 index += 1
 
@@ -681,19 +593,30 @@ class PSXParser:
                 continue
 
             # ── Value ───────────────────────────────────────────────────
+            is_expr_value = False
             if code[index] == '{':
                 end   = _match_brace(code, index)
-                value: Any = code[index:end]   # preserve braces for runtime
+                value: Any = code[index:end]
+                is_expr_value = True
                 index = end
 
             elif code[index] in ('"', "'"):
                 q     = code[index]
                 index += 1
                 vs    = index
-                while index < n and code[index] != q:
+                
+                # [FIX] Handle escaped quotes so inline JS doesn't break strings
+                while index < n:
+                    if code[index] == '\\':
+                        index += 2  # skip escaped character
+                        continue
+                    if code[index] == q:
+                        break
                     index += 1
+                    
                 value = code[vs:index]
-                index += 1   # consume closing quote
+                if index < n:
+                    index += 1   # consume closing quote
 
             else:
                 vs = index
@@ -701,14 +624,16 @@ class PSXParser:
                     index += 1
                 value = code[vs:index]
 
-            # ── Special handling for code attribute ─────────────────────
-            # If this is the code attribute, mark the value as raw to prevent processing
-            if key == 'code':
-                value = f'_RAW_CODE:{value}'
+            # Quoted/bare attribute values are HTML — decode entities once
+            # here so the renderer can escape exactly once on emit. Unquoted
+            # {expr} values above are code, not HTML, and are left untouched
+            # (a quoted "{...}" string is still an HTML value, e.g. the JSON
+            # payload of data-psx-motion).
+            if not is_expr_value:
+                value = _html.unescape(value)
 
             # ── Categorise ──────────────────────────────────────────────
             if key == 'bind':
-                # Compiler directive; extract the bound variable name only
                 raw_var = (
                     value[1:-1].strip()
                     if isinstance(value, str)
@@ -719,10 +644,19 @@ class PSXParser:
                 attributes['_bind_target'] = raw_var
                 attributes['_bind_type'] = (
                     'checked'
-                    if tag.lower() == 'input'
-                       and attributes.get('type') == 'checkbox'
+                    if tag.lower() == 'input' and attributes.get('type') == 'checkbox'
                     else 'value'
                 )
+
+            elif key == 'ref':
+                # ref={name} / ref="name" → data-psx-ref so the client runtime
+                # can register the DOM node for useRef/getRef lookups.
+                raw = value
+                if isinstance(raw, str) and raw.startswith('{') and raw.endswith('}'):
+                    raw = raw[1:-1].strip()
+                if isinstance(raw, str) and len(raw) >= 2 and raw[0] in ('"', "'") and raw[-1] == raw[0]:
+                    raw = raw[1:-1]
+                attributes['_psx_ref'] = raw
 
             elif key.startswith('on'):
                 events[key] = value
@@ -742,15 +676,6 @@ class PSXParser:
         return attributes, events, spread, is_self_closing, index
 
     def _split_text_with_exprs(self, text: str) -> List[PSXNodeUnion]:
-        """
-        Split a raw text segment into :class:`TextNode` and
-        :class:`ExpressionNode` instances.
-
-        Uses :func:`_match_brace` so nested braces inside expressions
-        — e.g. ``{obj['key']}`` or ``{fn({'a': 1})}`` — are handled
-        correctly, unlike the former ``re.split(r'({[^}]+})', ...)``
-        approach.
-        """
         nodes: List[PSXNodeUnion] = []
         buf:   List[str]          = []
         i = 0
@@ -764,11 +689,12 @@ class PSXParser:
                 end  = _match_brace(text, i)
                 expr = text[i + 1 : end - 1].strip()
                 if expr:
-                    _CTRL_KW = ('if ', 'for ', 'while ', 'try', 'elif ', 'else', 'def ', 'class ', 'import ', 'from ')
-                    if any(expr.startswith(k) for k in _CTRL_KW):
+                    # [FIX] Intercept inline JS for text segments
+                    if any(expr.startswith(k) for k in _CTRL_KW) or any(k in expr for k in _JS_KEYWORDS):
                         nodes.append(TextNode(content=text[i:end]))
                         i = end
                         continue
+                        
                     pexpr = self.ast_parser.parse_expression(expr)
                     nodes.append(ExpressionNode(expression=expr, parsed_expression=pexpr))
                 i = end
@@ -783,11 +709,8 @@ class PSXParser:
 
         return nodes
 
-    # ── Deadline helper ────────────────────────────────────────────────────────
-
     @staticmethod
     def _tick(deadline: float) -> None:
-        """Raise :class:`_ParseTimeout` if the wall-clock deadline has passed."""
         if time.monotonic() > deadline:
             raise _ParseTimeout()
 
@@ -798,12 +721,6 @@ _tls = threading.local()
 
 
 def _get_parser() -> PSXParser:
-    """
-    Return the :class:`PSXParser` instance for the current thread.
-
-    One instance per thread means no shared mutable state even when
-    multiple requests are parsed concurrently.
-    """
     if not hasattr(_tls, 'parser'):
         _tls.parser = PSXParser()
     return _tls.parser
@@ -812,14 +729,6 @@ def _get_parser() -> PSXParser:
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def psx(psx_str: str, context: Dict[str, Any] = None) -> PSXElement:
-    """
-    Parse a PSX string and return a :class:`PSXElement`.
-
-    If *context* is omitted, the caller's local scope is captured
-    automatically (plain, non-callable, non-``None`` values only).
-    Pass an explicit dict to keep the scope clean and avoid accidental
-    exposure of large or sensitive objects.
-    """
     import inspect
 
     if context is None:
@@ -855,7 +764,6 @@ def psx(psx_str: str, context: Dict[str, Any] = None) -> PSXElement:
         el._psx_context = merged     # type: ignore[attr-defined]
         return el
 
-    # Fragment, Component, or other root forms → wrap in a neutral div
     if isinstance(ast_node, FragmentNode):
         kids = _children_to_elements(ast_node.children, merged)
     else:
@@ -874,29 +782,24 @@ def psx(psx_str: str, context: Dict[str, Any] = None) -> PSXElement:
 
 
 def render_psx(element: Any, context: Dict[str, Any] = None) -> str:
-    """Render a :class:`PSXElement` (or any value) to an HTML string."""
     if isinstance(element, PSXElement):
         return element.to_html(context)
     return str(element)
 
 
 def fragment(children: Any) -> str:
-    """Join multiple children into a single HTML string."""
     if isinstance(children, list):
         return ''.join(str(c) for c in children)
     return str(children)
 
 
 def key(key_value: str, element: PSXElement) -> PSXElement:
-    """Attach a reconciliation key to a :class:`PSXElement`."""
     element.key = key_value
     return element
 
 
 __all__ = [
-    # Legacy interface
     'PSXElement', 'PSXParser', 'psx', 'render_psx', 'fragment', 'key',
     'process_python_logic',
-    # Production AST tools
     'PSXASTParser', 'PSXNodeValidator', 'PSXNodeOptimizer',
 ]

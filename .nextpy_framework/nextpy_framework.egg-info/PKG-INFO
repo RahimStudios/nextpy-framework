@@ -1,14 +1,14 @@
 Metadata-Version: 2.4
 Name: nextpy-framework
-Version: 4.1.0
+Version: 5.1.4
 Summary: The Python Web Framework introducing file-based routing, SSR, and SSG and more
-Author: NextPy Team
+Author: RahimStudios
 License: MIT
-Project-URL: Homepage, https://github.com/IBRAHIMFONYUY/nextpy-framework
+Project-URL: Homepage, https://github.com/RahimStudios/nextpy-framework
 Project-URL: Documentation, https://nextpy-framework.readthedocs.io
-Project-URL: Repository, https://github.com/IBRAHIMFONYUY/nextpy-framework
+Project-URL: Repository, https://github.com/RahimStudios/nextpy-framework
 Keywords: web framework,nextjs,fastapi,ssr,ssg,file-based routing,htmx,jinja2
-Classifier: Development Status :: 4 - Beta
+Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Programming Language :: Python :: 3
@@ -32,6 +32,7 @@ Requires-Dist: uvicorn>=0.38.0
 Requires-Dist: watchdog>=6.0.0
 Requires-Dist: python-dotenv>=1.2.1
 Requires-Dist: sqlalchemy>=2.0.44
+Requires-Dist: pyjwt>=2.8.0
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
@@ -118,60 +119,27 @@ Build full-stack applications without switching languages.
 
 Write component-based user interfaces using NextPy's Python Syntax Extension.
 
-### AI Native
-
-NextPy includes an integrated AI coding assistant:
-
-```bash
-nextpy ai
-```
-
-Chat mode:
-
-```bash
-nextpy ai chatbot
-```
-
-Agent mode:
-
-```bash
-nextpy ai agent
-```
-
-Generate complete applications:
-
-```bash
-nextpy ai create ecommerce app
-```
-
-### Full-Stack by Default
-
-* Frontend
-* Backend
-* API Routes
-* Database Integration
-* Authentication
-* Deployment
-
-Everything in one framework.
 
 ---
 
-## Example
+## Example psx 
 
 ```python
-from nextpy import interactive_component as component, useState, create_onclick
+from nextpy.psx import component, useState
 
 @component
-def Home():
+def Home(props=None):
+    props = props or {}
     [count, setCount] = useState(0)
-    handle_count=create_onclick(lambda e: setCount(count + 1))
+
+    def handle_increment(e):
+        setCount(count + 1)
 
     return (
         <div>
             <h1>Welcome to NextPy</h1>
 
-            <button create_onclick={handle_count}>
+            <button onclick={handle_increment}>
                 Count: {count}
             </button>
         </div>
@@ -181,6 +149,117 @@ default = Home
 ```
 
 ---
+
+## Sever Side action
+
+```python
+# Define a server action
+from nextpy.server_actions import server_action
+
+@server_action()
+async def create_todo(title: str, session=None):
+    todo = Todo(title=title, completed=False)
+    session.add(todo)
+    session.commit()
+    return {"id": todo.id, "title": title}
+```
+
+And call it from client PSX:
+
+```python
+
+from nextpy.psx import component
+from nextpy.db import Todo, get_session
+from nextpy import fetch_api
+
+
+@component
+def TodoPage(props=None):
+    props = props or {}
+    todos = props.get("todos", [])
+    
+    return (
+        <main data-nextpy-crud="todo" class="min-h-screen px-4 py-12 bg-slate-100 text-slate-900">
+            <section class="max-w-2xl p-6 mx-auto bg-white shadow-sm rounded-xl">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <p class="text-sm font-semibold tracking-wide text-blue-600 uppercase">NextPy</p>
+                        <h1 class="text-3xl font-bold">Shared Todos</h1>
+                    </div>
+                    <span data-nextpy-status class="text-sm text-slate-500">Connecting...</span>
+                </div>
+                <form data-nextpy-action="create" class="flex gap-2 mb-6">
+                    <input data-nextpy-field="title" required maxlength="255" placeholder="What needs doing?" class="flex-1 min-w-0 px-3 py-2 border rounded-lg border-slate-300 focus:border-blue-500 focus:outline-none" />
+                    <button type="submit" class="px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Add</button>
+                </form>
+                <p data-nextpy-error class="hidden p-3 mb-4 text-sm text-red-700 rounded-lg bg-red-50"></p>
+                <ul data-nextpy-list class="space-y-2">
+                    {for todo in todos:
+                        <li data-nextpy-item={todo["id"]} class="flex items-center gap-3 p-3 border rounded-lg border-slate-200">
+                            <input data-nextpy-toggle={todo["id"]} type="checkbox" checked={todo["completed"]} aria-label="Complete todo" />
+                            <span class={"min-w-0 flex-1 " + ("text-slate-400 line-through" if todo["completed"] else "")}>{todo["title"]}</span>
+                            <button data-nextpy-delete={todo["id"]} type="button" class="text-sm font-semibold text-red-600">Delete</button>
+                        </li>
+                    }
+                </ul>
+            </section>
+        </main>
+    )
+
+
+def getServerSideProps(context):
+    with get_session() as db:
+        todos = db.query(Todo).order_by(Todo.created_at.desc()).limit(10).all()
+        
+        return {
+            "props": {
+                "title": "NextPy Full-Stack Demo",
+                "description": "Enhanced client-server communication with server actions and real-time sync",
+                "todos": [
+                    {
+                        "id": todo.id,
+                        "title": todo.title,
+                        "completed": todo.completed,
+                        "created_at": todo.created_at.isoformat() if todo.created_at else None
+                    }
+                    for todo in todos
+                ]
+            }
+        }
+
+
+default = TodoPage
+```
+
+
+### Full-Stack by Default
+
+* Frontend with PSX components
+* Backend with FastAPI
+* Server Actions for client-server communication
+* API Routes with automatic routing
+* Database Integration with SQLAlchemy
+* State Synchronization with WebSocket support
+* Authentication & Authorization
+* Real-time updates
+* Everything in one framework
+
+---
+
+## Full-Stack Capabilities
+
+NextPy v5.0 provides enhanced full-stack features:
+
+- **Server Actions**: Direct client-to-server function calls
+- **State Synchronization**: Real-time state management
+- **Type-Safe APIs**: Automatic validation and type checking
+- **WebSocket Integration**: Built-in real-time updates
+- **Database-Backed State**: Persistent state management
+
+
+[Read the Full-Stack Guide](FULLSTACK_GUIDE.md)
+
+
 
 ## Documentation
 
@@ -224,6 +303,11 @@ Before contributing, please read:
 
 * Contribution Guidelines
 * Code of Conduct
+
+- Go through this to know exactly what each file does https://github.com/RahimStudios/nextpy-framework/blob/main/.nextpy_framework/nextpy/docs/COMPLETE_FILE_DOCUMENTATION.md 
+
+- Go through this to see all what is implemented fully, partially and what is not, so it can guide you on anywhere to start 
+https://github.com/RahimStudios/nextpy-framework/blob/main/.nextpy_framework/nextpy/docs/FRAMEWORK_ANALYSIS.md
 
 Good first issues are available for new contributors looking to get involved.
 

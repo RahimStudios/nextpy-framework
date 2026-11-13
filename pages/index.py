@@ -19,7 +19,7 @@ def Home(props=None):
                 <div class="relative px-4 mx-auto max-w-7xl lg:px-8">
                     <div class="max-w-4xl mx-auto text-center">
                         <h1 class="text-6xl font-extrabold tracking-tight text-black sm:text-8xl animate-fadeIn">
-                            Build Your Next Idea <br />
+                            Build Your Next Ideas <br />
                             <span class="text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-gray-700 to-gray-500">Faster With Python</span>
                         </h1>
                         
@@ -269,7 +269,7 @@ def Home(props=None):
 def getServerSideProps(context):
     return {
         "props": {
-            "title": "NextPy - The Python Framework",
+            "title": "NextPy by RahimStudios - The Python Web Framework",
             "description": "NextPy is a modern Python web framework that combines the power of FastAPI with the elegance of server‑side rendering and file‑based routing."
         }
     }

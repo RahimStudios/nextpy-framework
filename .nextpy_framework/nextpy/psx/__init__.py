@@ -14,7 +14,7 @@ from .components.component import (
     register_component, clsx, Component, Props, Children,
     Head, Link, Script, Image, Meta, Title, Layout, Container,
     Row, Col, Form, Input, Button, Navbar, NavItem, Card, List,
-    Conditional, Loop, ErrorBoundary, Suspense,
+    Conditional, Loop, ErrorBoundary, Suspense, Motion, AnimatePresence,
     # React Hooks
     useState, useEffect, useContext, useReducer, useRef, useMemo, useCallback,
     useImperativeHandle, useLayoutEffect, useDebugValue, useTransition,
@@ -840,8 +840,11 @@ def render_psx_component(element, context=None):
         if ENHANCED_CLIENT_RUNTIME_SCRIPT:
             html = f"<script>{ENHANCED_CLIENT_RUNTIME_SCRIPT}</script>{html}"
         
-        # Inject legacy runtime for backwards compatibility
-        if 'data-handler-' in html or 'data-bind' in html or '<html' in html:
+        # Inject legacy runtime for backwards compatibility — but skip when
+        # the component already embedded it (interactive_component output),
+        # since the runtime is idempotent and ~80KB per duplicate.
+        if ('data-handler-' in html or 'data-bind' in html or '<html' in html) \
+                and '__nextpyActionRuntimeLoaded' not in html:
             html = f"<script>{JS_ACTION_RUNTIME_SCRIPT}</script>{html}"
             
     except ImportError:
@@ -870,6 +873,7 @@ __all__ = [
     'Head', 'Link', 'Script', 'Image', 'Meta', 'Title', 'Layout', 'Container',
     'Row', 'Col', 'Form', 'Input', 'Button', 'Navbar', 'NavItem', 'Card', 'List',
     'Conditional', 'Loop', 'ErrorBoundary', 'Suspense', 'ChildrenComponent',
+    'Motion', 'AnimatePresence',
     'register_component', 'clsx',
     
     # React Hooks

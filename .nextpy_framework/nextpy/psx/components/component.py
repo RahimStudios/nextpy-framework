@@ -10,6 +10,7 @@ import uuid
 import inspect
 import re
 import ast
+import json
 # FIX: Module-level variable to store component_id for current component execution
 _current_component_id = None
 import hashlib
@@ -388,6 +389,14 @@ class PSXHooks:
         )
         
         if deps_changed:
+            # Skip effect execution during SSR (no window/document)
+            if 'window' not in globals() or 'document' not in globals():
+                hook_data['deps'] = deps
+                hook_data['deps_hash'] = current_deps_hash
+                hook_data['has_run'] = True
+                component.hook_index += 1
+                return
+
             # Run cleanup if it exists
             if hook_data['cleanup']:
                 try:
@@ -401,7 +410,7 @@ class PSXHooks:
                 except Exception as e:
                     # Log cleanup error but don't crash
                     print(f"Effect cleanup error: {e}")
-            
+
             # Run effect
             try:
                 # Check if effect is async
@@ -412,20 +421,20 @@ class PSXHooks:
                     cleanup = None
                 else:
                     cleanup = effect()
-                
+
                 if callable(cleanup):
                     component.cleanup_functions.append(cleanup)
                     hook_data['cleanup'] = cleanup
-                
+
                 hook_data['deps'] = deps
                 hook_data['deps_hash'] = current_deps_hash
                 hook_data['has_run'] = True
                 hook_data['is_async'] = False
-                
+
             except Exception as e:
                 print(f"Effect execution error: {e}")
                 hook_data['has_run'] = False
-        
+
         component.hook_index += 1
     
     @staticmethod
@@ -2702,10 +2711,64 @@ def Suspense(props: Dict[str, Any]) -> PSXElement:
     return _component_element('div', {}, *_component_children(props))
 
 
+@Component
+def Motion(props: Dict[str, Any]) -> PSXElement:
+    """Framer-Motion-style animation wrapper.
+
+    SSR-renders children inside an element tagged with ``data-psx-motion``
+    carrying a JSON config; the client runtime plays the animation with the
+    Web Animations API — no JS bundle required.
+
+    Props:
+        as:          HTML tag to render (default 'div')
+        initial:     Style dict applied before mount (e.g. {'opacity': 0})
+        animate:     Target style dict, values scalar or [from, to, ...]
+        exit:        Style dict played before conditional removal
+        transition:  {'duration': 0.3, 'easing': 'ease-out', 'delay': 0}
+        layout:      True → FLIP-animate layout changes via rAF flush
+        whileHover / whileTap: style dicts for pointer states
+        className / style / children: standard
+    """
+    config: Dict[str, Any] = {}
+    for key in ('initial', 'animate', 'exit', 'transition',
+                'whileHover', 'whileTap', 'layout'):
+        if props.get(key) is not None:
+            config[key] = props[key]
+
+    attrs: Dict[str, Any] = {}
+    if config:
+        # Marker attribute — the renderer emits it as data-psx-motion without
+        # interpreting the JSON braces as a PSX expression.
+        attrs['_psx_motion'] = json.dumps(config)
+    if props.get('className') is not None:
+        attrs['class'] = props['className']
+    if props.get('style') is not None:
+        attrs['style'] = props['style']
+    if props.get('id') is not None:
+        attrs['id'] = props['id']
+
+    return _component_element(props.get('as', 'div'), attrs, *_component_children(props))
+
+
+@Component
+def AnimatePresence(props: Dict[str, Any]) -> PSXElement:
+    """Marker wrapper for exit animations.
+
+    Renders children inside a ``display:contents`` span so descendant
+    ``Motion`` elements keep their exit animations when a surrounding
+    conditional removes them. Layout-neutral by design.
+    """
+    return _component_element(
+        'span',
+        {'style': 'display:contents', 'data-psx-presence': ''},
+        *_component_children(props),
+    )
+
+
 for _component_name in (
     'Head', 'Link', 'Script', 'Image', 'Meta', 'Title', 'Layout', 'Container',
     'Row', 'Col', 'Form', 'Input', 'Button', 'Navbar', 'NavItem', 'Card', 'List',
-    'Conditional', 'Loop', 'ErrorBoundary', 'Suspense',
+    'Conditional', 'Loop', 'ErrorBoundary', 'Suspense', 'Motion', 'AnimatePresence',
 ):
     register_component(_component_name, globals()[_component_name])
 

@@ -148,6 +148,24 @@ async def broadcast_error(error_data: Dict[str, Any]):
     await manager.broadcast(error_data)
 
 
+def broadcast_hot_reload() -> None:
+    """Signal every SSE-connected browser tab to reload the page.
+
+    This triggers the HMR (Hot Module Reload) mechanism introduced in
+    NextPy 5.1.  It is safe to call from any thread or async context.
+
+    Example::
+
+        from nextpy.websocket import broadcast_hot_reload
+        broadcast_hot_reload()  # all open browser tabs reload immediately
+    """
+    try:
+        from nextpy.server.app import _hmr_signal_all
+        _hmr_signal_all()
+    except Exception:
+        pass  # Best-effort; never raise from a utility helper
+
+
 async def handle_websocket(websocket: WebSocket):
     """Enhanced WebSocket handler with client ID support and multi-user sync"""
     client_id = None

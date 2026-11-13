@@ -1,4 +1,4 @@
-from nextpy.psx import component, Link
+from nextpy.psx import component, Link, Motion
 from nextpy.db import get_session, Job
 
 @component
@@ -10,6 +10,11 @@ def JobsHome(props=None):
     
     return (
         <div>
+            <Motion
+                initial={{"opacity": 0, "transform": "translateY(30px)"}}
+                animate={{"opacity": 1, "transform": "translateY(0px)"}}
+                transition={{"duration": 0.6, "easing": "ease-out"}}
+            >
             <section class="px-8 py-16 overflow-hidden text-center text-white shadow-xl rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700">
                 <h1 class="mb-4 text-4xl font-extrabold tracking-tight sm:text-5xl">
                     Find your next <span class="text-yellow-300">dream job</span>
@@ -21,6 +26,7 @@ def JobsHome(props=None):
                     Browse All Jobs
                 </a>
             </section>
+            </Motion>
 
             <div class="flex flex-wrap justify-center gap-3 mt-8">
                 <a href="/jobs/browse?job_type=full_time" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-full hover:border-indigo-500 hover:text-indigo-600">Full-time</a>
@@ -37,12 +43,18 @@ def JobsHome(props=None):
                 }
                 <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                     {for job in featured:
-                        <Link href="/jobs/{job['id']}" class="block p-6 transition bg-white border border-gray-200 shadow-sm group rounded-xl hover:shadow-md hover:border-indigo-300">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                        <Motion
+                            initial={{"opacity": 0, "transform": "translateY(20px)"}}
+                            animate={{"opacity": 1, "transform": "translateY(0px)"}}
+                            transition={{"duration": 0.45, "delay": job["anim_delay"], "easing": "ease-out"}}
+                            whileHover={{"y": -4}}
+                        >
+                        <Link href="/jobs/{job['id']}" class="block p-6 h-full bg-white border border-gray-200 shadow-sm rounded-2xl transition hover:shadow-lg hover:border-indigo-300 group">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="inline-block rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
                                     {job.get("job_type", "full_time").replace("_", " ").title()}
                                 </span>
-                                <span class="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                <span class="inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
                                     {job.get("experience_level", "mid").title()}
                                 </span>
                             </div>
@@ -52,6 +64,7 @@ def JobsHome(props=None):
                                 <span>{job.get("location") or "Remote"}</span>
                             </div>
                         </Link>
+                        </Motion>
                     }
                 </div>
             </section>
@@ -91,8 +104,9 @@ def getStaticProps(context):
                 "job_type": job.job_type,
                 "experience_level": job.experience_level,
                 "location": job.location,
+                "anim_delay": round(i * 0.08, 3),
             }
-            for job in jobs
+            for i, job in enumerate(jobs)
         ]
         return {
             "props": {
