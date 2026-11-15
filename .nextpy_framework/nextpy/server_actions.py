@@ -65,6 +65,24 @@ class ServerAction:
             auth: Require an authenticated user
             roles: Optional tuple/set of allowed user roles
         """
+        # Support bare ``@server_action`` usage (no parentheses): Python then
+        # passes the decorated function as the first positional argument.
+        if callable(name) and validate is None and schema is None and not auth and not roles:
+            func = name
+            name = None
+            action_name = func.__name__
+            cls._actions[action_name] = func
+
+            @wraps(func)
+            async def bare_wrapper(*args, **kwargs):
+                if inspect.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                return func(*args, **kwargs)
+
+            bare_wrapper._original_func = func
+            bare_wrapper._action_name = action_name
+            return bare_wrapper
+
         def decorator(func: Callable) -> Callable:
             action_name = name or func.__name__
             cls._actions[action_name] = func
@@ -76,69 +94,31 @@ class ServerAction:
                 cls._auth[action_name] = True
             if roles:
                 cls._roles[action_name] = set(roles)
-            
+
             @wraps(func)
             async def wrapper(*args, **kwargs):
-                try:
-                    # Run validation if provided
-                    if validate:
-                        validation_result = validate(**kwargs)
-                        if validation_result is not True:
-                            if isinstance(validation_result, dict):
-                                raise ValidationError(
-                                    validation_result.get('field', 'unknown'),
-                                    validation_result.get('message', 'Validation failed')
-                                )
-                            else:
-                                raise ValidationError('input', str(validation_result))
-                    
-                    # Execute the action
-                    if inspect.iscoroutinefunction(func):
-                        result = await func(*args, **kwargs)
-                    else:
-                        result = func(*args, **kwargs)
-                    
-                    return {
-                        "success": True,
-                        "data": result,
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                    
-                except ValidationError as e:
-                    return {
-                        "success": False,
-                        "error": {
-                            "type": "validation",
-                            "field": e.field,
-                            "message": e.message
-                        },
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                except ServerActionError as e:
-                    return {
-                        "success": False,
-                        "error": {
-                            "type": "server_action",
-                            "code": e.code,
-                            "message": e.message
-                        },
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "error": {
-                            "type": "internal",
-                            "message": str(e)
-                        },
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-            
+                # Direct callers get the raw result (or a raised exception);
+                # the {success, data, timestamp} envelope is added by
+                # ServerAction.execute for the HTTP endpoint.
+                if validate:
+                    validation_result = validate(**kwargs)
+                    if validation_result is not True:
+                        if isinstance(validation_result, dict):
+                            raise ValidationError(
+                                validation_result.get('field', 'unknown'),
+                                validation_result.get('message', 'Validation failed')
+                            )
+                        raise ValidationError('input', str(validation_result))
+
+                if inspect.iscoroutinefunction(func):
+                    return await func(*args, **kwargs)
+                return func(*args, **kwargs)
+
             # Store original function for direct access
             wrapper._original_func = func
             wrapper._action_name = action_name
             return wrapper
-        
+
         return decorator
     
     @classmethod
@@ -178,8 +158,38 @@ class ServerAction:
             raise HTTPException(status_code=404, detail=f"Action '{name}' not found")
 
         func = getattr(action, '_original_func', action)
-        sig = inspect.signature(func)
+        sig = getattr(func, '_nextpy_signature', None)
+        if sig is None:
+            sig = inspect.signature(func)
+            try:
+                func._nextpy_signature = sig
+            except (AttributeError, TypeError):
+                pass
         kwargs = cls._filter_params(sig, params)
+
+        validator = cls._validators.get(name)
+        if validator is not None:
+            vresult = validator(**kwargs)
+            if vresult is not True:
+                if isinstance(vresult, dict):
+                    return {
+                        "success": False,
+                        "error": {
+                            "type": "validation",
+                            "field": vresult.get('field', 'unknown'),
+                            "message": vresult.get('message', 'Validation failed'),
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                return {
+                    "success": False,
+                    "error": {
+                        "type": "validation",
+                        "field": "input",
+                        "message": str(vresult),
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
 
         schema = cls._schemas.get(name)
         if schema is not None:

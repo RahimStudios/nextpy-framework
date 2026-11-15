@@ -5,7 +5,7 @@ Test create_on utilities and inline lambda handlers
 """
 
 import sys
-sys.path.insert(0, '/home/ibrahim-fonyuy/Downloads/NextPyVision (1)/NextPyVision/.nextpy_framework')
+sys.path.insert(0, '.nextpy_framework')
 
 from nextpy.psx import psx, component, useState, create_onclick, create_onchange
 from nextpy.psx.hydration import interactive_component

@@ -1,278 +1,423 @@
-from nextpy.psx import component
+from nextpy.psx import component, Link, psx
+import html
+
 
 @component
-def Home(props=None):
+def EnhancedCodeBlock(props=None):
+    """Enhanced code block component for displaying code snippets"""
+    props = props or {}
+    snippet = props.get("snippet", props.get("code", ""))
+    if isinstance(snippet, str):
+        snippet = snippet.replace('_RAW_CODE:', '')
+        snippet = html.unescape(snippet)
+        snippet = snippet.replace('&#10;', '\n')
+        snippet = snippet.replace('\\n', '\n')
+
+    lang = props.get("lang", "python")
+    filename = props.get("filename", None)
+
+    lang_display = html.escape(str(lang))
+    code_class = f"language-{lang_display} font-mono block whitespace-pre"
+
+    filename_html = ''
+    if filename:
+        filename_html = (
+            '<span class="text-xs font-mono font-medium text-zinc-300/90 select-none tracking-tight truncate max-w-[280px] inline-block align-bottom">'
+            + html.escape(str(filename)) + '</span>'
+        )
+
+    return psx(f"""
+        <div class="my-6 overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0a0a0c] font-sans shadow-[0_8px_30px_rgb(0,0,0,0.35)] antialiased group ring-1 ring-white/[0.03]">
+            <div class="flex items-center justify-between pl-4 pr-3 py-2.5 border-b border-zinc-800/60 bg-gradient-to-b from-zinc-900/70 to-zinc-900/30 select-none">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="flex items-center gap-1.5 shrink-0" aria-hidden="true">
+                        <span class="w-3 h-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                        <span class="w-3 h-3 rounded-full bg-[#febc2e] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                        <span class="w-3 h-3 rounded-full bg-[#28c840] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                    </div>
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        {filename_html}
+                        <span class="shrink-0 px-1.5 py-0.5 text-[10px] font-mono font-semibold tracking-wider text-zinc-500 uppercase bg-zinc-900/80 rounded-md border border-zinc-800/80">
+                            {lang_display}
+                        </span>
+                    </div>
+                </div>
+                <button
+                    class="shrink-0 ml-3 inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-100 bg-zinc-900/60 hover:bg-zinc-800/70 border border-zinc-800/70 hover:border-zinc-700 rounded-lg transition-all duration-150"
+                    onclick="navigator.clipboard.writeText(this.closest('.group').querySelector('code').innerText);var l=this.querySelector('.cb-label');l.textContent='Copied';setTimeout(()=>l.textContent='Copy',1500)"
+                >
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                    <span class="cb-label">Copy</span>
+                </button>
+            </div>
+            <code class="block p-5 overflow-x-auto text-[13px] leading-[1.7] text-zinc-200 scrollbar-thin bg-[#0a0a0c] selection:bg-blue-500/25 selection:text-blue-100 {code_class}">{{snippet}}</code>
+        </div>
+    """)
+
+
+@component
+def Page(props=None):
     props = props or {}
     title = props.get("title", "NextPy - The Python Framework")
-    
-    
+
     description = props.get(
         "description",
-        "NextPy is a modern Python web framework that combines the power of FastAPI with the elegance of server‑side rendering and file‑based routing."
+        "NextPy is a Python-first full-stack framework. Build reactive interfaces, "
+        "render pages on the server, and power your entire application with Python."
+    )
+
+    counter_code = (
+        "from nextpy.psx import component, useState\n\n"
+        "@component\n"
+        "def Counter(props=None):\n"
+        "    [count, set_count] = useState(0)\n\n"
+        "    def increment():\n"
+        "        set_count(count + 1)\n\n"
+        "    return (\n"
+        "        <div>\n"
+        "            <h1>{count}</h1>\n"
+        "            <button onClick={increment}>\n"
+        "                Increment\n"
+        "            </button>\n"
+        "        </div>\n"
+        "    )"
     )
 
     return (
-        <div class="font-sans antialiased">
-            {/* Hero Section */}
-            <section class="relative min-h-screen pt-0 pb-24 overflow-hidden bg-white place-content-center">
-                <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,#000_70%,transparent_100%)]"></div>
-                <div class="relative px-4 mx-auto max-w-7xl lg:px-8">
-                    <div class="max-w-4xl mx-auto text-center">
-                        <h1 class="text-6xl font-extrabold tracking-tight text-black sm:text-8xl animate-fadeIn">
-                            Build Your Next Ideas <br />
-                            <span class="text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-gray-700 to-gray-500">Faster With Python</span>
-                        </h1>
-                        
-                        <p class="max-w-2xl mx-auto mt-8 text-xl leading-8 text-gray-600">
-                            {description}
-                        </p>
-                        
-                        
-                        <div class="flex flex-col items-center justify-center mt-12 gap-y-4 sm:flex-row sm:gap-x-6">
-                            <a href="/documentation" class="w-full px-8 py-4 text-sm font-bold text-white transition-all bg-black rounded-full shadow-xl sm:w-auto hover:bg-gray-800 shadow-gray-200">
-                                Get Started →
-                            </a>
-                            <a href="/features" class="w-full px-8 py-4 text-sm font-bold text-black transition-all bg-white border border-gray-200 rounded-full sm:w-auto hover:bg-gray-50">
-                                Explore Components
-                            </a>
+        <div class="font-sans antialiased bg-white text-gray-900">
+
+            {/* Hero */}
+            <section class="relative overflow-hidden min-h-screen flex items-center bg-gradient-to-b from-blue-50 to-white">
+                <div class="absolute inset-0 bg-[radial-gradient(#e0e7ff_1px,transparent_4px)] [background-size:20px_20px] opacity-50"></div>
+
+                <div class="relative mx-auto max-w-7xl px-6 py-20 lg:px-8">
+                    <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16 items-center">
+                        {/* Left - Content */}
+                        <div>
+                            <h1 class="mt-8 text-5xl font-bold leading-[1.1] tracking-tight text-gray-900 sm:text-6xl lg:text-7xl">
+                                Write Python.<br />
+                                <span class="text-blue-600">Build the modern web.</span>
+                            </h1>
+
+                            <p class="mt-8 max-w-xl text-lg leading-relaxed text-gray-600">
+                                {description}
+                            </p>
+
+                            <div class="mt-10 flex flex-wrap items-center gap-4">
+                                <Link href="/documentation" className="bg-blue-600 px-8 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 shadow-lg shadow-blue-600/30">
+                                    Get Started →
+                                </Link>
+                                <Link href="/documentation" className="border border-gray-300 bg-white px-8 py-3.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">
+                                    Explore Docs
+                                </Link>
+                            </div>
+
+                            <p class="mt-8 text-sm text-gray-500">
+                                Built with NextPy · Python UI · A single Python-first development experience
+                            </p>
+                        </div>
+
+                        {/* Right - Code preview */}
+                        <div class="relative">
+                            <EnhancedCodeBlock
+                                snippet={counter_code}
+                                lang="Python"
+                                filename="pages/counter.py"
+                            />
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Feature Grid */}
-            <section class="py-32 overflow-hidden bg-white">
-                <div class="relative z-10 px-8 mx-auto max-w-7xl lg:px-8">
-                    <div class="grid max-w-2xl grid-cols-1 mx-auto gap-x-12 gap-y-24 sm:gap-y-28 lg:mx-0 lg:max-w-none lg:grid-cols-3">
-                        {/* Left Column / Hero Text */}
-                        <div class="lg:pr-16">
-                            <div class="p-10 transition-all duration-700 border border-gray-200 shadow-2xl backdrop-blur-lg bg-white/60 rounded-3xl hover:shadow-3xl hover:bg-white/70 hover:scale-105">
-                                <h2 class="text-base font-semibold leading-7 text-transparent transition-all duration-500 bg-gradient-to-r from-gray-900 to-gray-300 bg-clip-text ">Performance First</h2>
-                                <p class="mt-4 text-4xl font-bold tracking-tight text-gray-900 transition-all duration-500 sm:text-5xl hover:text-gray-700">Everything you need</p>
-                                <p class="mt-8 text-lg leading-8 text-gray-700 transition-all duration-500 hover:text-gray-600">
-                                    NextPy provides a comprehensive suite of tools to build production-ready applications without boilerplate.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Right Column / Feature List */}
-                        <dl class="grid grid-cols-1 col-span-2 gap-x-12 gap-y-12 sm:grid-cols-2 lg:gap-y-16">
-                            {/* Feature Item 1 */}
-                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
-                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
-                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
-                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 22.5 12 13.5H3.75z" />
-                                        </svg>
-                                    </div>
-                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">FastAPI Powered</span>
-                                </dt>
-                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">Lightning-fast async performance using modern FastAPI core.</dd>
-                            </div>
-
-                            {/* Feature Item 2 */}
-                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
-                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
-                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
-                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" />
-                                        </svg>
-                                    </div>
-                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">File-Based Routing</span>
-                                </dt>
-                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">No complex configuration. Drop a file in pages/ and it's a route.</dd>
-                            </div>
-
-                            {/* Feature Item 3 */}
-                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
-                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
-                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
-                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    </div>
-                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">SSR & HTMX</span>
-                                </dt>
-                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">SEO-friendly server rendering with htmx for smooth transitions.</dd>
-                            </div>
-
-                            {/* Feature Item 4 */}
-                            <div class="relative p-6 pl-20 transition-all duration-700 ease-in-out border border-gray-200 shadow-lg group hover:bg-white/70 backdrop-blur-md rounded-2xl hover:shadow-2xl hover:scale-105">
-                                <dt class="flex items-center text-base font-semibold leading-7 text-gray-900 transition-all duration-500 group-hover:text-gray-700">
-                                    <div class="absolute flex items-center justify-center text-white transition-all duration-500 transform border border-gray-300 shadow-xl top-6 left-6 w-14 h-14 bg-gradient-to-br from-gray-900 to-gray-500 rounded-xl group-hover:scale-110 group-hover:rotate-3 backdrop-blur-sm">
-                                        <svg class="transition-all duration-500 w-7 h-7 group-hover:rotate-12" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                                        </svg>
-                                    </div>
-                                    <span class="ml-6 text-lg transition-all duration-500 group-hover:text-gray-800">Auth Built-in</span>
-                                </dt>
-                                <dd class="mt-3 text-base leading-7 text-gray-600 transition-all duration-500 group-hover:text-gray-700">Secure user management and authentication ready to go.</dd>
-                            </div>
-                        </dl>
-                    </div>
-                </div>
-            </section>
-
-            {/* Tech Stack Section */}
-            <section class="py-24 border-t border-gray-100 bg-gray-50/50">
+            {/* Capabilities */}
+            <section class="py-24 bg-gray-50">
                 <div class="px-6 mx-auto max-w-7xl lg:px-8">
                     <div class="max-w-2xl mx-auto lg:text-center">
-                        <h2 class="text-base font-semibold leading-7 text-blue-600">The Modern Stack</h2>
-                        <p class="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Built on Giants</p>
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Everything included</p>
+                        <h2 class="mt-3 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">One framework, every layer</h2>
+                        <p class="mt-4 text-lg text-gray-600">NextPy covers rendering, reactivity, data and deployment — so you can focus on product, not plumbing.</p>
                     </div>
-                    
-                    <div class="grid max-w-lg grid-cols-1 gap-8 mx-auto mt-16 sm:max-w-none sm:grid-cols-2 lg:grid-cols-4">
-                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                                <span class="w-2 h-2 bg-blue-600 rounded-full"></span>
-                                FastAPI and more
+
+                    <div class="grid max-w-6xl grid-cols-1 gap-6 mx-auto mt-16 sm:grid-cols-2 lg:grid-cols-3">
+                        <Link href="/documentation/concepts/rendering" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                </svg>
                             </div>
-                            <p class="mt-4 text-sm leading-7 text-gray-600">High-performance async backend with automatic OpenAPI documentation.</p>
-                        </div>
-                        
-                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                                <span class="w-2 h-2 bg-indigo-600 rounded-full"></span>
-                                Tailwind CSS
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">Rendering</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">SSR, SSG and supported revalidation — pick per page with getServerSideProps, getStaticProps and getStaticPaths.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+
+                        <Link href="/documentation/concepts/psx-internals" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 22.5 12 13.5H3.75z" />
+                                </svg>
                             </div>
-                            <p class="mt-4 text-sm leading-7 text-gray-600">Utility-first styling for rapid, responsive design directly in your templates.</p>
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">Reactive UI</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">Build interactive interfaces with PSX — useState, useEffect and useRef with fine-grained DOM updates.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+
+                        <Link href="/documentation/getting-started/layouts-pages" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">Routing</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">Organize applications using file-based routing — drop a .py file in pages/ and it's a route.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+
+                        <Link href="/documentation/reference/server-actions" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                                </svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">Server Actions</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">Connect frontend interactions to Python logic — callServerAction with built-in loading and error state.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+
+                        <Link href="/documentation/howto/api" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                </svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">API Development</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">Build application endpoints in Python — REST APIs under pages/api plus streaming for real-time.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+
+                        <Link href="/documentation/howto/database" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-rose-500 to-rose-600 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                </svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">Data & Auth</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">SQLAlchemy models, sessions, and protected routes built in — write queries in Python, render results in PSX.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+
+                        <Link href="/documentation" className="group block p-8 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl">
+                            <div class="flex items-center justify-center w-12 h-12 text-white bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl shadow-lg">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                                </svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-bold text-gray-900">Developer Experience</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-600">CLI, debugging and development tooling — fast iteration with hot reload and error overlays.</p>
+                            <span class="inline-block mt-4 text-sm font-semibold text-blue-600 group-hover:text-blue-700">Learn more →</span>
+                        </Link>
+                    </div>
+                </div>
+            </section>
+
+            {/* How it works */}
+            <section class="py-24 bg-white">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-20 items-center">
+                        <div>
+                            <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">How it works</p>
+                            <h2 class="mt-3 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">One language. Your entire application.</h2>
+                            <p class="mt-4 text-lg text-gray-600">NextPy isn't just a backend framework with HTML templates. It's a complete Python-first development experience.</p>
+
+                            <div class="mt-8 space-y-4">
+                                <div class="flex items-start gap-4">
+                                    <div class="flex items-center justify-center flex-shrink-0 w-8 h-8 text-white bg-blue-600 font-bold rounded-full">1</div>
+                                    <div>
+                                        <h3 class="text-lg font-semibold text-gray-900">Write components in Python</h3>
+                                        <p class="text-sm text-gray-600">Use PSX markup to create reactive UI components with useState, useEffect and useRef.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-4">
+                                    <div class="flex items-center justify-center flex-shrink-0 w-8 h-8 text-white bg-blue-600 font-bold rounded-full">2</div>
+                                    <div>
+                                        <h3 class="text-lg font-semibold text-gray-900">Define routes and layouts</h3>
+                                        <p class="text-sm text-gray-600">File-based routing with dynamic segments, layouts and nested pages.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-4">
+                                    <div class="flex items-center justify-center flex-shrink-0 w-8 h-8 text-white bg-blue-600 font-bold rounded-full">3</div>
+                                    <div>
+                                        <h3 class="text-lg font-semibold text-gray-900">Fetch and manage data</h3>
+                                        <p class="text-sm text-gray-600">getServerSideProps, getStaticProps and SQLAlchemy for data fetching and ORM.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-4">
+                                    <div class="flex items-center justify-center flex-shrink-0 w-8 h-8 text-white bg-blue-600 font-bold rounded-full">4</div>
+                                    <div>
+                                        <h3 class="text-lg font-semibold text-gray-900">Render and hydrate</h3>
+                                        <p class="text-sm text-gray-600">SSR, SSG and ISR with selective hydration for optimal performance.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-4">
+                                    <div class="flex items-center justify-center flex-shrink-0 w-8 h-8 text-white bg-blue-600 font-bold rounded-full">5</div>
+                                    <div>
+                                        <h3 class="text-lg font-semibold text-gray-900">Build and deploy</h3>
+                                        <p class="text-sm text-gray-600">nextpy build produces production-ready output for any platform.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <a href="/documentation/tutorials/first-app" className="inline-flex items-center mt-8 text-sm font-semibold text-blue-600 hover:text-blue-700" data-nextpy-link="true" data-nextpy-prefetch="true">Follow the first-app tutorial →</a>
                         </div>
 
-                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                                <span class="w-2 h-2 bg-purple-600 rounded-full"></span>
-                                HTMX
-                            </div>
-                            <p class="mt-4 text-sm leading-7 text-gray-600">Dynamic user interfaces without the complexity of a full JS framework.</p>
-                        </div>
-
-                        <div class="flex flex-col p-8 transition-all bg-white border border-gray-100 shadow-sm rounded-2xl hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center text-lg font-bold text-gray-900 gap-x-3">
-                                <span class="w-2 h-2 bg-green-600 rounded-full"></span>
-                                SQLAlchemy
-                            </div>
-                            <p class="mt-4 text-sm leading-7 text-gray-600">Powerful ORM supporting multiple databases with type-safe queries.</p>
+                        <div class="relative">
+                            <EnhancedCodeBlock
+                                snippet={counter_code}
+                                lang="Python"
+                                filename="pages/counter.py"
+                            />
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Statistics Section */}
-            <section class="py-20 bg-white">
-                <div class="max-w-6xl px-4 mx-auto sm:px-6 lg:px-8">
-                    <div class="grid gap-12 text-center md:grid-cols-4">
-                        <div class="group">
-                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text group-hover:scale-110">34+</div>
-                            <p class="font-semibold text-gray-600">Python Modules</p>
+            {/* Real Applications */}
+            <section class="py-24 bg-gray-50 border-y border-gray-200">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="max-w-2xl mx-auto lg:text-center">
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Built for real applications</p>
+                        <h2 class="mt-3 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">Production-ready by design</h2>
+                        <p class="mt-4 text-lg text-gray-600">NextPy powers real applications — from SaaS dashboards to AI apps and real-time systems.</p>
+                    </div>
+
+                    <div class="grid max-w-5xl grid-cols-1 gap-6 mx-auto mt-16 sm:grid-cols-2 lg:grid-cols-3">
+                        <div class="p-8 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
+                            <h3 class="text-lg font-bold text-gray-900">SaaS Dashboards</h3>
+                            <p class="mt-2 text-sm text-gray-600">Build data-rich dashboards with SQLAlchemy, server actions and reactive components.</p>
                         </div>
-                        
-                        <div class="group">
-                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text group-hover:scale-110">20+</div>
-                            <p class="font-semibold text-gray-600">UI Components</p>
+                        <div class="p-8 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
+                            <h3 class="text-lg font-bold text-gray-900">AI Applications</h3>
+                            <p class="mt-2 text-sm text-gray-600">Streaming responses, API routes and server-side logic for AI-powered features.</p>
                         </div>
-                        
-                        <div class="group">
-                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text group-hover:scale-110">3</div>
-                            <p class="font-semibold text-gray-600">Database Options</p>
+                        <div class="p-8 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
+                            <h3 class="text-lg font-bold text-gray-900">Blogs & Publishing</h3>
+                            <p class="mt-2 text-sm text-gray-600">SSG and ISR for fast, SEO-friendly content sites with markdown support.</p>
                         </div>
-                        
-                        <div class="group">
-                            <div class="mb-3 text-5xl font-bold text-transparent transition-transform bg-gradient-to-r from-green-600 to-green-700 bg-clip-text group-hover:scale-110">100%</div>
-                            <p class="font-semibold text-gray-600">Python-Based</p>
+                        <div class="p-8 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
+                            <h3 class="text-lg font-bold text-gray-900">Business Systems</h3>
+                            <p class="mt-2 text-sm text-gray-600">CRUD applications with authentication, database ORM and file-based routing.</p>
+                        </div>
+                        <div class="p-8 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
+                            <h3 class="text-lg font-bold text-gray-900">Real-time Apps</h3>
+                            <p class="mt-2 text-sm text-gray-600">WebSocket support and streaming for live updates and collaborative features.</p>
+                        </div>
+                        <div class="p-8 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all">
+                            <h3 class="text-lg font-bold text-gray-900">E-commerce</h3>
+                            <p class="mt-2 text-sm text-gray-600">Product catalogs, checkout flows and inventory management in Python.</p>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Quick Navigation */}
-            <section class="py-20 bg-gray-50">
-                <div class="max-w-6xl px-4 mx-auto sm:px-6 lg:px-8">
-                    <h2 class="mb-16 text-4xl font-bold text-center text-gray-900">Explore Everything</h2>
-                    
-                    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                        <a href="/documentation" class="p-8 transition-all bg-white border-t-4 border-gray-900 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-900 to-gray-700">
-                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" />
-                                </svg>
+            {/* Developer Experience */}
+            <section class="py-24 bg-white">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-20 items-center">
+                        <div>
+                            <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Developer Experience</p>
+                            <h2 class="mt-3 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">Get started in seconds</h2>
+                            <p class="mt-4 text-lg text-gray-600">Install NextPy and start building immediately. No JavaScript toolchain required.</p>
+
+                            <div class="mt-8 bg-gray-900 border border-gray-800 p-6 font-mono text-sm">
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-gray-500"># Install</span>
+                                    <button class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                                </div>
+                                <p class="text-gray-300"><span class="text-blue-400">$</span> pip install nextpy-framework</p>
+                                <div class="mt-4 flex items-center justify-between mb-4">
+                                    <span class="text-gray-500"># Create project</span>
+                                    <button class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                                </div>
+                                <p class="text-gray-300"><span class="text-blue-400">$</span> nextpy create my-app</p>
+                                <div class="mt-4 flex items-center justify-between mb-4">
+                                    <span class="text-gray-500"># Run dev server</span>
+                                    <button class="text-xs text-blue-400 hover:text-blue-300">Copy</button>
+                                </div>
+                                <p class="text-gray-300"><span class="text-blue-400">$</span> cd my-app && nextpy dev</p>
                             </div>
-                            <h3 class="mb-2 text-xl font-bold text-gray-900">Documentation</h3>
-                            <p class="text-sm text-gray-600">Complete guides and API reference</p>
+
+                            <p class="mt-4 text-sm text-gray-500">From zero to a running full-stack app in under a minute.</p>
+                        </div>
+
+                        <div class="overflow-hidden bg-white border border-gray-200 shadow-2xl">
+                            <div class="flex items-center gap-2 px-5 py-3 border-b border-gray-200 bg-gray-50">
+                                <span class="w-2.5 h-2.5 bg-red-400"></span>
+                                <span class="w-2.5 h-2.5 bg-yellow-400"></span>
+                                <span class="w-2.5 h-2.5 bg-green-400"></span>
+                                <span class="ml-3 text-xs font-mono text-gray-500">terminal</span>
+                            </div>
+                            <div class="p-6 space-y-3 font-mono text-sm bg-gray-900">
+                                <p class="text-gray-400"># Create a new NextPy project</p>
+                                <p class="text-blue-400">$ nextpy create my-app</p>
+                                <p class="text-gray-600">✓ Project created successfully</p>
+                                <p class="text-blue-400">$ cd my-app && nextpy dev</p>
+                                <p class="text-gray-600">✓ Server running at http://localhost:8000</p>
+                                <p class="text-gray-400 mt-4"># Hot reload enabled — changes apply instantly</p>
+                                <p class="text-blue-400">$ nextpy build</p>
+                                <p class="text-gray-600">✓ Production build complete</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Ecosystem */}
+            <section class="py-24 bg-gray-50 border-y border-gray-200">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="max-w-2xl mx-auto lg:text-center">
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Ecosystem & Community</p>
+                        <h2 class="mt-3 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">Built in the open</h2>
+                        <p class="mt-4 text-lg text-gray-600">NextPy is open source and community-driven. Contribute, learn, and build together.</p>
+                    </div>
+
+                    <div class="grid max-w-4xl grid-cols-1 gap-6 mx-auto mt-16 sm:grid-cols-2 lg:grid-cols-4">
+                        <a href="https://github.com/RAHIMSTUDIOS/nextpy-framework" target="_blank" className="group block p-6 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg text-center">
+                            <h3 class="text-lg font-bold text-gray-900">GitHub</h3>
+                            <p class="mt-2 text-sm text-gray-600">Source code, issues and pull requests.</p>
                         </a>
-                        
-                        <a href="/features" class="p-8 transition-all bg-white border-t-4 border-gray-800 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-800 to-gray-600">
-                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-                                </svg>
-                            </div>
-                            <h3 class="mb-2 text-xl font-bold text-gray-900">Features</h3>
-                            <p class="text-sm text-gray-600">All framework capabilities</p>
-                        </a>
-                        
-                        <a href="/examples" class="p-8 transition-all bg-white border-t-4 border-gray-700 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-700 to-gray-500">
-                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
-                                </svg>
-                            </div>
-                            <h3 class="mb-2 text-xl font-bold text-gray-900">Components</h3>
-                            <p class="text-sm text-gray-600">UI components showcase</p>
-                        </a>
-                        
-                        <a href="/fullstack_demo" class="p-8 transition-all bg-white border-t-4 border-blue-600 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-blue-600 to-blue-400">
-                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-                                </svg>
-                            </div>
-                            <h3 class="mb-2 text-xl font-bold text-gray-900">Full-Stack Demo</h3>
-                            <p class="text-sm text-gray-600">Server actions & state sync</p>
-                        </a>
-                        
-                        <a href="/blog" class="p-8 transition-all bg-white border-t-4 border-gray-600 rounded-lg shadow-sm group hover:shadow-lg hover:-translate-y-1">
-                            <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 text-white rounded-lg shadow-lg bg-gradient-to-br from-gray-600 to-gray-400">
-                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                </svg>
-                            </div>
-                            <h3 class="mb-2 text-xl font-bold text-gray-900">Blog</h3>
-                            <p class="text-sm text-gray-600">Tutorials and best practices</p>
+                        <Link href="/documentation" className="group block p-6 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg text-center">
+                            <h3 class="text-lg font-bold text-gray-900">Documentation</h3>
+                            <p class="mt-2 text-sm text-gray-600">Tutorials, guides and API reference.</p>
+                        </Link>
+                        <Link href="/examples" className="group block p-6 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg text-center">
+                            <h3 class="text-lg font-bold text-gray-900">Examples</h3>
+                            <p class="mt-2 text-sm text-gray-600">Interactive demos and code samples.</p>
+                        </Link>
+                        <a href="https://github.com/RAHIMSTUDIOS/nextpy-framework/discussions" target="_blank" className="group block p-6 transition-all bg-white border border-gray-200 hover:border-blue-300 hover:shadow-lg text-center">
+                            <h3 class="text-lg font-bold text-gray-900">Community</h3>
+                            <p class="mt-2 text-sm text-gray-600">Discussions and support.</p>
                         </a>
                     </div>
                 </div>
             </section>
 
-            {/* CTA Section */}
-            <section class="relative px-6 py-24 overflow-hidden border-t border-gray-100 bg-gradient-to-br from-gray-50 to-white isolate sm:py-32 lg:px-8">
-                <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] opacity-30"></div>
-                <div class="relative max-w-2xl mx-auto text-center">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Ready to build?</h2>
-                    <p class="max-w-xl mx-auto mt-6 text-lg leading-8 text-gray-600">
-                        Join thousands of developers building modern web applications with the simplicity of Python.
-                    </p>
-                    <div class="flex items-center justify-center mt-10 gap-x-6">
-                        <a href="/documentation" class="rounded-full bg-black px-8 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black transition-all hover:shadow-lg">Get Started</a>
-                        <a href="https://github.com" class="flex items-center gap-2 text-sm font-semibold leading-6 text-gray-900 transition-colors hover:text-blue-600">
-                            View on GitHub 
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                            </svg>
+            {/* Final CTA */}
+            <section class="py-32 bg-gradient-to-b from-blue-50 to-white">
+                <div class="px-6 mx-auto max-w-4xl text-center lg:px-8">
+                    <h2 class="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
+                        The web is evolving.<br />
+                        <span class="text-blue-600">Build it with Python.</span>
+                    </h2>
+                    <p class="mt-6 text-lg text-gray-600">Start building your next application with NextPy today.</p>
+                    <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
+                        <Link href="/documentation" className="bg-blue-600 px-8 py-4 text-base font-semibold text-white transition-colors hover:bg-blue-700 shadow-lg shadow-blue-600/30">
+                            Get Started →
+                        </Link>
+                        <a href="https://github.com/RAHIMSTUDIOS/nextpy-framework" target="_blank" className="border border-gray-300 bg-white px-8 py-4 text-base font-semibold text-gray-700 transition-colors hover:bg-gray-50">
+                            Explore GitHub
                         </a>
                     </div>
                 </div>
             </section>
+
         </div>
     )
-
-
-def getServerSideProps(context):
-    return {
-        "props": {
-            "title": "NextPy by RahimStudios - The Python Web Framework",
-            "description": "NextPy is a modern Python web framework that combines the power of FastAPI with the elegance of server‑side rendering and file‑based routing."
-        }
-    }
-
-
-default = Home

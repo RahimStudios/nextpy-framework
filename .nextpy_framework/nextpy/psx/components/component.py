@@ -6,6 +6,7 @@
 import os
 import time
 import threading
+import asyncio
 import uuid
 import inspect
 import re
@@ -72,6 +73,26 @@ def reset_component_state():
             state.cleanup_functions.clear()
             state.mount_actions.clear()
             state.registered_functions.clear()
+
+
+# Context provider stack — thread-local like component state so concurrent
+# renders on the same thread don't leak provider values into each other.
+_context_state = threading.local()
+_CONTEXT_MISSING = object()
+
+
+def _context_stack() -> List[tuple]:
+    if not hasattr(_context_state, 'stack'):
+        _context_state.stack = []
+    return _context_state.stack
+
+
+def _lookup_context(context: 'Context') -> Any:
+    """Return the value of the nearest enclosing provider for ``context``."""
+    for provided, value in reversed(_context_stack()):
+        if provided is context or provided == context:
+            return value
+    return _CONTEXT_MISSING
 
 
 class PSXComponent:
@@ -332,14 +353,15 @@ class PSXHooks:
         else:
             hook_data = component.hooks[component.hook_index]
         
-        # Process queued updates
+        # Process queued updates — apply EVERY queued update in order so
+        # functional updaters compose correctly (set(c=>c+1); set(c=>c+1)
+        # must yield +2, matching React semantics).
         if hook_data['queue']:
-            # Apply latest update for performance
-            latest_update = hook_data['queue'][-1]
-            if callable(latest_update):
-                hook_data['value'] = latest_update(hook_data['value'])
-            else:
-                hook_data['value'] = latest_update
+            for update in hook_data['queue']:
+                if callable(update):
+                    hook_data['value'] = update(hook_data['value'])
+                else:
+                    hook_data['value'] = update
             hook_data['queue'] = []
             hook_data['version'] += 1
         
@@ -401,11 +423,16 @@ class PSXHooks:
             if hook_data['cleanup']:
                 try:
                     cleanup_result = hook_data['cleanup']()
-                    # Handle async cleanup
-                    if hasattr(cleanup_result, '__await__'):
-                        import asyncio
-                        if asyncio.iscoroutine(cleanup_result):
-                            # In real implementation, would handle async cleanup
+                    # Handle async cleanup — schedule on the running loop
+                    # instead of silently dropping the coroutine.
+                    if asyncio.iscoroutine(cleanup_result):
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.ensure_future(cleanup_result)
+                            else:
+                                loop.run_until_complete(cleanup_result)
+                        except RuntimeError:
                             pass
                 except Exception as e:
                     # Log cleanup error but don't crash
@@ -413,12 +440,22 @@ class PSXHooks:
 
             # Run effect
             try:
-                # Check if effect is async
-                if hasattr(effect, '__code__') and effect.__code__.co_flags & 0x80:  # CO_GENERATOR
-                    # Async effect
+                # Check if effect is async — coroutine functions have
+                # CO_COROUTINE (0x80); previously detected but never run.
+                if asyncio.iscoroutinefunction(effect):
                     hook_data['is_async'] = True
-                    # In real implementation, would handle async effects
-                    cleanup = None
+                    coro = effect()
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # Inside a request handler — schedule without
+                            # blocking the render.
+                            asyncio.ensure_future(coro)
+                            cleanup = None
+                        else:
+                            cleanup = loop.run_until_complete(coro)
+                    except RuntimeError:
+                        cleanup = None
                 else:
                     cleanup = effect()
 
@@ -466,13 +503,17 @@ class PSXHooks:
     @staticmethod
     def use_context(context: 'Context') -> Any:
         """
-        useContext hook with performance optimizations
-        Features: Context caching, subscription management
+        useContext hook — returns the value of the nearest enclosing
+        ``<Provider context={...} value={...}>`` subtree, or the context's
+        default value when no provider is active.
+
+        Providers only exist for the duration of a server render
+        (``Provider.to_html`` pushes/pops the frame), so context propagation
+        is SSR-only — the client hydration runtime has no hook layer.
         """
-        component = get_current_component()
-        
-        # For simplicity, return default value
-        # In real implementation, would subscribe to context changes
+        value = _lookup_context(context)
+        if value is not _CONTEXT_MISSING:
+            return value
         return context.default_value
     
     @staticmethod
@@ -525,21 +566,27 @@ class PSXHooks:
             component.hooks.append(hook_data)
         else:
             hook_data = component.hooks[component.hook_index]
-        
-        # Create immutable ref object
-        ref = type('Ref', (), {
-            'current': hook_data['current'],
-            '__setattr__': lambda self, name, value: None  # Make immutable
-        })()
-        
-        # Provide setter through separate method
-        def set_ref(new_value: Any):
-            hook_data['current'] = new_value
-        
-        ref._set = set_ref
-        
+
+        # Mutable ref object backed by hook_data — ref.current reads and
+        # writes live state (the previous version froze the value at
+        # creation and silently dropped writes).
+        if 'ref_obj' not in hook_data:
+            class _Ref:
+                __slots__ = ('_data',)
+                def __init__(self, data):
+                    self._data = data
+                @property
+                def current(self):
+                    return self._data['current']
+                @current.setter
+                def current(self, value):
+                    self._data['current'] = value
+                def _set(self, value):  # backwards-compat alias
+                    self._data['current'] = value
+            hook_data['ref_obj'] = _Ref(hook_data)
+
         component.hook_index += 1
-        return ref
+        return hook_data['ref_obj']
     
     @staticmethod
     def use_memo(factory: Callable, deps: Optional[List[Any]] = None) -> Any:
@@ -610,26 +657,39 @@ class PSXHooks:
             hook_data = {
                 'deps': deps,
                 'deps_hash': PSXHooks._hash_deps(deps),
-                'handle': None
+                'handle': None,
+                'has_run': False
             }
             component.hooks.append(hook_data)
         else:
             hook_data = component.hooks[component.hook_index]
-        
-        # Check if dependencies changed
+
+        # Check if dependencies changed (deps=None re-runs every render,
+        # matching useEffect/React semantics)
         current_deps_hash = PSXHooks._hash_deps(deps)
-        deps_changed = hook_data['deps_hash'] != current_deps_hash
-        
+        deps_changed = (
+            not hook_data['has_run'] or
+            hook_data['deps_hash'] != current_deps_hash or
+            deps is None
+        )
+
         if deps_changed:
             try:
                 new_handle = create_handle()
-                ref['current'] = new_handle
+                # useRef returns a live ref object with a ``.current``
+                # property; plain dict refs use ``ref['current']``. Support
+                # both shapes so the handle lands where callers read it.
+                if isinstance(ref, dict):
+                    ref['current'] = new_handle
+                else:
+                    ref.current = new_handle
                 hook_data['handle'] = new_handle
                 hook_data['deps'] = deps
                 hook_data['deps_hash'] = current_deps_hash
+                hook_data['has_run'] = True
             except Exception as e:
                 print(f"useImperativeHandle error: {e}")
-        
+
         component.hook_index += 1
     
     @staticmethod
@@ -685,26 +745,37 @@ class PSXHooks:
         if component.hook_index >= len(component.hooks):
             hook_data = {
                 'is_pending': False,
-                'queue': [],
-                'priority': 'normal'
+                'pending_count': 0,
+                'reported': False
             }
             component.hooks.append(hook_data)
         else:
             hook_data = component.hooks[component.hook_index]
-        
+
+        # SSR approximation of React's pending state: there is no concurrent
+        # scheduler, so a transition "completes" on the next render pass.
+        # ``is_pending`` reports True for exactly one render after
+        # ``start_transition`` ran, then clears.
+        if hook_data['pending_count'] > 0 and not hook_data['reported']:
+            hook_data['is_pending'] = True
+            hook_data['reported'] = True
+        elif hook_data['reported']:
+            hook_data['is_pending'] = False
+            hook_data['reported'] = False
+            hook_data['pending_count'] = 0
+
         def start_transition(callback: Callable):
-            def wrapped_callback():
-                hook_data['is_pending'] = True
-                try:
-                    result = callback()
-                    return result
-                finally:
-                    hook_data['is_pending'] = False
-            
-            # Queue the transition
-            hook_data['queue'].append(wrapped_callback)
+            # The callback runs inline — Python SSR has no scheduler to defer
+            # it to. Pending state is still tracked so the following render
+            # reports is_pending=True (see above).
+            hook_data['pending_count'] += 1
             component.state['_needs_rerender'] = True
-        
+            try:
+                return callback()
+            except Exception:
+                hook_data['pending_count'] = max(0, hook_data['pending_count'] - 1)
+                raise
+
         component.hook_index += 1
         return hook_data['is_pending'], start_transition
     
@@ -720,19 +791,23 @@ class PSXHooks:
             hook_data = {
                 'current': value,
                 'pending': None,
-                'timeout': None
+                'has_pending': False
             }
             component.hooks.append(hook_data)
         else:
             hook_data = component.hooks[component.hook_index]
-        
-        # In real implementation, would defer the value
-        # For now, return current value
-        if hook_data['current'] != value:
+
+        # Deferred semantics: when the input changes, keep returning the
+        # previous value for one render tick, then commit the pending value
+        # on the next render (React-like lag, without a client scheduler).
+        if hook_data['has_pending'] and hook_data['pending'] == value:
+            hook_data['current'] = hook_data['pending']
+            hook_data['pending'] = None
+            hook_data['has_pending'] = False
+        elif hook_data['current'] != value:
             hook_data['pending'] = value
-            # Schedule update (in real implementation)
-            hook_data['current'] = value
-        
+            hook_data['has_pending'] = True
+
         component.hook_index += 1
         return hook_data['current']
     
@@ -746,7 +821,12 @@ class PSXHooks:
         
         if not hasattr(component, '_id_counter'):
             component._id_counter = 0
-            component._id_prefix = f"psx-{id(component) % 10000}"
+            # Stable per-component prefix — id()/hash() change every
+            # process, which breaks SSR/CSR hydration matching. crc32 is
+            # deterministic across processes.
+            import zlib
+            _name = str(getattr(component, 'name', 'c'))
+            component._id_prefix = f"psx-{zlib.crc32(_name.encode()) % 100000}"
         
         component._id_counter += 1
         return f"{component._id_prefix}-{component._id_counter}"
@@ -757,7 +837,7 @@ class CustomHooks:
     """Collection of useful custom hooks with performance optimizations"""
     
     @staticmethod
-    def use_counter(initial_value: int = 0, step: int = 1) -> tuple[int, Callable, Callable]:
+    def use_counter(initial_value: int = 0, step: int = 1) -> tuple[int, Callable, Callable, Callable, Callable]:
         """
         useCounter custom hook with performance optimizations
         Features: Configurable step, min/max bounds, performance tracking
@@ -780,7 +860,7 @@ class CustomHooks:
         return count, increment, decrement, reset, set_value
     
     @staticmethod
-    def use_toggle(initial_value: bool = False) -> tuple[bool, Callable]:
+    def use_toggle(initial_value: bool = False) -> tuple[bool, Callable, Callable, Callable]:
         """
         useToggle custom hook with performance optimizations
         Features: State tracking, toggle history, performance metrics
@@ -805,24 +885,32 @@ class CustomHooks:
         Features: Debounced saves, type safety, error handling
         """
         value, set_value = PSXHooks.use_state(initial_value)
-        
+
+        # localStorage is a browser API — on the server this hook degrades
+        # to plain useState (returns initial_value, no persistence).
+        _ls = globals().get('localStorage')
+
         # Load from localStorage on mount
         def load_from_storage():
+            if _ls is None:
+                return
             try:
                 import json
-                stored = json.loads(localStorage.getItem(key) or 'null')
+                stored = json.loads(_ls.getItem(key) or 'null')
                 if stored is not None:
                     set_value(stored)
             except Exception as e:
                 print(f"LocalStorage load error: {e}")
-        
+
         PSXHooks.use_effect(load_from_storage, [])
-        
+
         # Debounced save to localStorage
         def save_to_storage():
+            if _ls is None:
+                return
             try:
                 import json
-                localStorage.setItem(key, json.dumps(value))
+                _ls.setItem(key, json.dumps(value))
             except Exception as e:
                 print(f"LocalStorage save error: {e}")
         
@@ -1109,15 +1197,10 @@ class CustomHooks:
         Features: Event-based updates, cross-browser support
         """
         matches, set_matches = PSXHooks.use_state(False)
-        
-        # In real implementation, would use window.matchMedia
-        def update_matches():
-            # Simulate media query check
-            simulated_match = query == "(max-width: 768px)"  # Example
-            set_matches(simulated_match)
-        
-        PSXHooks.use_effect(update_matches, [query])
-        
+
+        # window.matchMedia is browser-only — SSR conservatively reports
+        # False for every query (previously simulated a match for one
+        # hardcoded query string, which was misleading).
         return matches
     
     @staticmethod
@@ -1133,23 +1216,12 @@ class CustomHooks:
         def get_location():
             set_loading(True)
             set_error(None)
-            
-            # In real implementation, would use navigator.geolocation
-            try:
-                # Simulate geolocation
-                import time
-                time.sleep(0.1)
-                mock_position = {
-                    'latitude': 40.7128,
-                    'longitude': -74.0060,
-                    'accuracy': 10,
-                    'timestamp': time.time()
-                }
-                set_position(mock_position)
-            except Exception as e:
-                set_error(str(e))
-            finally:
-                set_loading(False)
+
+            # navigator.geolocation is a browser API — unavailable during
+            # SSR. Report honestly instead of returning fabricated
+            # coordinates (previously hardcoded NYC + a blocking sleep).
+            set_error("Geolocation is only available in the browser")
+            set_loading(False)
         
         PSXHooks.use_effect(get_location, [])
         
@@ -1170,26 +1242,14 @@ class CustomHooks:
         memory, set_memory = PSXHooks.use_state(0)
         render_time, set_render_time = PSXHooks.use_state(0)
         
-        # In real implementation, would use performance APIs
-        def update_metrics():
-            # Simulate performance monitoring
-            import time
-            import random
-            
-            def update():
-                set_fps(random.randint(55, 60))
-                set_memory(random.randint(50, 100))
-                set_render_time(random.uniform(10, 20))
-            
-            import threading
-            threading.Timer(1.0, update).start()
-        
-        PSXHooks.use_effect(update_metrics, [])
-        
+        # performance APIs (requestAnimationFrame, performance.memory) are
+        # browser-only — SSR reports honest zeros instead of fabricated
+        # random metrics (previously random FPS/memory via threading.Timer).
         return {
             'fps': fps,
             'memory': memory,
-            'render_time': render_time
+            'render_time': render_time,
+            'available': False,
         }
 
 
@@ -1208,11 +1268,71 @@ def create_context(name: str, default_value: Any) -> Context:
 
 class Provider:
     """Provider for context values"""
-    
+
     def __init__(self, context: Context, value: Any, children=None):
         self.context = context
         self.value = value
         self.children = children
+
+    def to_html(self, context: Optional[Dict[str, Any]] = None) -> str:
+        """Render the children with ``context`` bound to ``value``.
+
+        The provider frame is pushed onto the thread-local context stack for
+        the duration of the child render, so ``useContext(context)`` calls in
+        descendant components resolve to ``value``. The frame is popped in a
+        ``finally`` so sibling subtrees outside the provider still see the
+        default value. This is SSR-only: the client hydration runtime does
+        not re-run component functions, so there is no client-side context
+        propagation.
+        """
+        from ..core.runtime import PSXRuntime
+
+        ctx: Dict[str, Any] = {}
+        child_ctx = getattr(self.children, '_psx_context', None)
+        if child_ctx:
+            ctx.update(child_ctx)
+        own_ctx = getattr(self, '_psx_context', None)
+        if own_ctx:
+            ctx.update(own_ctx)
+        if context:
+            ctx.update(context)
+
+        runtime = PSXRuntime(ctx)
+        _context_stack().append((self.context, self.value))
+        try:
+            return self._render_children(runtime, ctx)
+        finally:
+            _context_stack().pop()
+
+    def _render_children(self, runtime, ctx: Dict[str, Any]) -> str:
+        from ..core.ast_nodes import PSXNode
+
+        kids = self.children
+        if kids is None:
+            return ''
+        items = list(kids) if isinstance(kids, (list, tuple)) else [kids]
+        return ''.join(self._render_child_item(runtime, ctx, kid) for kid in items)
+
+    def _render_child_item(self, runtime, ctx: Dict[str, Any], kid: Any) -> str:
+        from ..core.ast_nodes import PSXNode
+
+        if kid is None:
+            return ''
+        if hasattr(kid, '_ast_node') and getattr(kid, '_ast_node') is not None:
+            return runtime._render_node(kid._ast_node)
+        if isinstance(kid, PSXElement):
+            # Component children arrive as a ``fragment`` PSXElement whose
+            # ``children`` are AST nodes — render them without emitting a
+            # literal <fragment> wrapper.
+            if any(isinstance(c, PSXNode) for c in getattr(kid, 'children', [])):
+                return ''.join(self._render_child_item(runtime, ctx, c)
+                               for c in kid.children)
+            return kid.to_html(ctx)
+        if isinstance(kid, PSXNode):
+            return runtime._render_node(kid)
+        if hasattr(kid, 'to_html'):
+            return kid.to_html(ctx)
+        return str(kid)
 
 
 # Export all hooks
@@ -2498,6 +2618,10 @@ class ComponentRegistry:
 
 # Global component registry
 component_registry = ComponentRegistry()
+
+# <Provider context={...} value={...}> resolves through this registry when the
+# page hasn't imported Provider into its render context.
+component_registry.register('Provider', Provider)
 
 
 def register_component(name: str, component: Callable):

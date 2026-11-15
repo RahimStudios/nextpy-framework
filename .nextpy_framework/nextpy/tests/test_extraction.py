@@ -5,7 +5,7 @@ Test if extract_create_handler_assignments works
 """
 
 import sys
-sys.path.insert(0, '/home/ibrahim-fonyuy/Downloads/NextPyVision (1)/NextPyVision/.nextpy_framework')
+sys.path.insert(0, '.nextpy_framework')
 
 from nextpy.psx.hydration.decorators import extract_create_handler_assignments
 from nextpy.psx import create_onclick, useState

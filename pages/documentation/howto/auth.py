@@ -1,43 +1,54 @@
-from nextpy.psx import register_component, component, psx, interactive_component, useState, useEffect
+from nextpy.psx import register_component, component, psx, interactive_component, useState, Link
 
 
 @component
 def AuthenticationGuide():
     return psx("""
         <div class="mx-auto max-w-6xl">
-        <div class="grid gap-12 lg:grid-cols-[1fr_260px]">
-        <article class="min-w-0">
-        <DocsScrollSpy />
-            <div class="mb-8 pb-6 border-b border-gray-800">
-                <div class="flex items-center gap-3 mb-4">
-                    <span class="px-2 py-1 text-xs font-medium border rounded bg-green-500/20 text-green-400 border-green-500">
-                        How-to Guide
-                    </span>
-                    <span class="px-2 py-1 text-xs font-medium border rounded bg-yellow-500/20 text-yellow-400 border-yellow-500">
-                        Intermediate
-                    </span>
-                    <span class="px-2 py-1 text-xs font-medium border rounded bg-gray-700 text-gray-300 border-gray-600">
-                        NextPy 5.0.0
-                    </span>
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full">
+        <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 pb-24 pt-6">
+                        <!-- Top Breadcrumb & Actions -->
+            <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
+                <div class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                    <span>Documentation</span>
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                    <span class="text-white">Implement Authentication</span>
                 </div>
-                
-                <h1 class="text-4xl font-bold text-white">
+                <div class="relative flex items-center rounded-md border border-zinc-800 bg-zinc-950 overflow-hidden">
+                    <button class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-zinc-900 transition-colors border-r border-zinc-800"
+                        onclick="navigator.clipboard.writeText(document.querySelector('article').innerText);var l=this.querySelector('.cp-label');l.textContent='Copied';setTimeout(()=>l.textContent='Copy page',1500)">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                        <span class="cp-label">Copy page</span>
+                    </button>
+                    <button class="px-2 py-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300 transition-colors"
+                        onclick="var m=this.parentElement.querySelector('.copy-menu');m.style.display=m.style.display==='none'?'block':'none'">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div class="copy-menu absolute right-0 top-full mt-1 w-44 rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl z-50 py-1" style="display:none">
+                        <button class="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800" onclick="navigator.clipboard.writeText(document.querySelector('article').innerText);this.closest('.copy-menu').style.display='none'">Copy page</button>
+                        <button class="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800" onclick="navigator.clipboard.writeText(window.location.href);this.closest('.copy-menu').style.display='none'">Copy link</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Page Header -->
+            <header class="mb-12">
+                <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">
                     Implement Authentication
                 </h1>
-                
-                <p class="mt-4 text-lg text-gray-400">
+                <p class="leading-relaxed text-zinc-300">
                     Learn how to add user authentication to your NextPy application with login, registration, and session management.
                 </p>
-            </div>
+            </header>
             
-            <div class="my-6 p-4 border border-gray-700 bg-gray-800 rounded-lg">
+            <div class="my-6 p-4 border border-zinc-700 bg-zinc-800 rounded-lg">
                 <div class="flex items-start gap-3">
-                    <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-zinc-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
                     <div class="flex-1">
-                        <h4 class="font-semibold text-gray-200">Prerequisites</h4>
-                        <ul class="mt-2 space-y-1 text-sm text-gray-400">
+                        <h4 class="font-semibold text-zinc-200">Prerequisites</h4>
+                        <ul class="mt-2 space-y-1 text-sm text-zinc-300">
                             <li class="flex items-center gap-2">
                                 <svg class="w-3 h-3 text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -61,14 +72,14 @@ def AuthenticationGuide():
                 </div>
             </div>
             
-            <section id="overview" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="overview" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     What You'll Learn
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     This guide covers:
                 </p>
-                <ul class="list-disc list-inside space-y-2 text-gray-300 ml-4">
+                <ul class="list-disc list-inside space-y-2 text-zinc-300 ml-4">
                     <li>Setting up user models with SQLAlchemy</li>
                     <li>Creating server actions for authentication</li>
                     <li>Implementing login and registration forms</li>
@@ -77,18 +88,18 @@ def AuthenticationGuide():
                 </ul>
             </section>
             
-            <section id="user-model" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="user-model" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Step 1: Create User Model
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     First, create a user model to store user credentials:
                 </p>
                 
-                <div class="my-6 overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                    <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800">
-                        <span class="text-sm text-gray-400 font-mono">models/user.py</span>
-                        <span class="px-2 py-0.5 text-xs font-medium text-gray-300 uppercase bg-gray-700 rounded">
+                <div class="my-6 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                    <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-700 bg-zinc-800">
+                        <span class="text-sm text-zinc-400 font-mono">models/user.py</span>
+                        <span class="px-2 py-0.5 text-xs font-medium text-zinc-300 uppercase bg-zinc-700 rounded">
                             python
                         </span>
                     </div>
@@ -124,7 +135,7 @@ class User(Base):
                         </svg>
                         <div class="flex-1">
                             <h4 class="font-semibold text-yellow-400">Security Note</h4>
-                            <div class="mt-1 text-sm text-gray-300">
+                            <div class="mt-1 text-sm text-zinc-300">
                                 Never store passwords in plain text. Always use bcrypt or another secure hashing algorithm.
                             </div>
                         </div>
@@ -132,18 +143,18 @@ class User(Base):
                 </div>
             </section>
             
-            <section id="auth-actions" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="auth-actions" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Step 2: Create Authentication Actions
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     Create server actions for registration and login:
                 </p>
                 
-                <div class="my-6 overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                    <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800">
-                        <span class="text-sm text-gray-400 font-mono">pages/auth/actions.py</span>
-                        <span class="px-2 py-0.5 text-xs font-medium text-gray-300 uppercase bg-gray-700 rounded">
+                <div class="my-6 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                    <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-700 bg-zinc-800">
+                        <span class="text-sm text-zinc-400 font-mono">pages/auth/actions.py</span>
+                        <span class="px-2 py-0.5 text-xs font-medium text-zinc-300 uppercase bg-zinc-700 rounded">
                             python
                         </span>
                     </div>
@@ -197,18 +208,18 @@ def login(email, password):
                 </div>
             </section>
             
-            <section id="login-page" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="login-page" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Step 3: Create Login Page
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     Create a login page with form validation:
                 </p>
                 
-                <div class="my-6 overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                    <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800">
-                        <span class="text-sm text-gray-400 font-mono">pages/auth/login.py</span>
-                        <span class="px-2 py-0.5 text-xs font-medium text-gray-300 uppercase bg-gray-700 rounded">
+                <div class="my-6 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                    <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-700 bg-zinc-800">
+                        <span class="text-sm text-zinc-400 font-mono">pages/auth/login.py</span>
+                        <span class="px-2 py-0.5 text-xs font-medium text-zinc-300 uppercase bg-zinc-700 rounded">
                             python
                         </span>
                     </div>
@@ -238,7 +249,7 @@ def LoginPage():
     return (
         &lt;div class="min-h-screen flex items-center justify-center bg-gray-900"&gt;
             &lt;div class="max-w-md w-full p-8 bg-gray-800 rounded-lg"&gt;
-                &lt;h1 class="text-3xl font-bold text-white mb-6"&gt;Login&lt;/h1&gt;
+                &lt;h1 class="text-2xl font-semibold text-white tracking-tight mb-6"&gt;Login&lt;/h1&gt;
                 
                 {if error:
                     &lt;div class="mb-4 p-3 text-red-400 bg-red-900/20 rounded"&gt;
@@ -254,7 +265,7 @@ def LoginPage():
                             value={email}
                             oninput={lambda e: setEmail(e.target.value)}
                             required
-                            class="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         /&gt;
                     &lt;/div&gt;
                     
@@ -265,7 +276,7 @@ def LoginPage():
                             value={password}
                             oninput={lambda e: setPassword(e.target.value)}
                             required
-                            class="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         /&gt;
                     &lt;/div&gt;
                     
@@ -286,25 +297,23 @@ def LoginPage():
     )
 
 
-
-
 default = LoginPage</code>
                     </pre>
                 </div>
             </section>
             
-            <section id="register-page" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="register-page" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Step 4: Create Registration Page
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     Create a registration page similar to login:
                 </p>
                 
-                <div class="my-6 overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                    <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800">
-                        <span class="text-sm text-gray-400 font-mono">pages/auth/register.py</span>
-                        <span class="px-2 py-0.5 text-xs font-medium text-gray-300 uppercase bg-gray-700 rounded">
+                <div class="my-6 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                    <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-700 bg-zinc-800">
+                        <span class="text-sm text-zinc-400 font-mono">pages/auth/register.py</span>
+                        <span class="px-2 py-0.5 text-xs font-medium text-zinc-300 uppercase bg-zinc-700 rounded">
                             python
                         </span>
                     </div>
@@ -341,7 +350,7 @@ def RegisterPage():
     return (
         &lt;div class="min-h-screen flex items-center justify-center bg-gray-900"&gt;
             &lt;div class="max-w-md w-full p-8 bg-gray-800 rounded-lg"&gt;
-                &lt;h1 class="text-3xl font-bold text-white mb-6"&gt;Register&lt;/h1&gt;
+                &lt;h1 class="text-2xl font-semibold text-white tracking-tight mb-6"&gt;Register&lt;/h1&gt;
                 
                 {if error:
                     &lt;div class="mb-4 p-3 text-red-400 bg-red-900/20 rounded"&gt;
@@ -357,7 +366,7 @@ def RegisterPage():
                             value={full_name}
                             oninput={lambda e: setFullName(e.target.value)}
                             required
-                            class="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         /&gt;
                     &lt;/div&gt;
                     
@@ -368,7 +377,7 @@ def RegisterPage():
                             value={username}
                             oninput={lambda e: setUsername(e.target.value)}
                             required
-                            class="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         /&gt;
                     &lt;/div&gt;
                     
@@ -379,7 +388,7 @@ def RegisterPage():
                             value={email}
                             oninput={lambda e: setEmail(e.target.value)}
                             required
-                            class="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         /&gt;
                     &lt;/div&gt;
                     
@@ -390,7 +399,7 @@ def RegisterPage():
                             value={password}
                             oninput={lambda e: setPassword(e.target.value)}
                             required
-                            class="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         /&gt;
                     &lt;/div&gt;
                     
@@ -415,18 +424,18 @@ default = RegisterPage</code>
                 </div>
             </section>
             
-            <section id="middleware" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="middleware" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Step 5: Protect Routes
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     Create middleware to protect authenticated routes:
                 </p>
                 
-                <div class="my-6 overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
-                    <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800">
-                        <span class="text-sm text-gray-400 font-mono">middleware/auth.py</span>
-                        <span class="px-2 py-0.5 text-xs font-medium text-gray-300 uppercase bg-gray-700 rounded">
+                <div class="my-6 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                    <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-700 bg-zinc-800">
+                        <span class="text-sm text-zinc-400 font-mono">middleware/auth.py</span>
+                        <span class="px-2 py-0.5 text-xs font-medium text-zinc-300 uppercase bg-zinc-700 rounded">
                             python
                         </span>
                     </div>
@@ -451,11 +460,11 @@ def require_auth(func):
                 </div>
             </section>
             
-            <section id="best-practices" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="best-practices" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Security Best Practices
                 </h2>
-                <ul class="space-y-3 text-gray-300">
+                <ul class="space-y-3 text-zinc-300">
                     <li class="flex items-start gap-3">
                         <svg class="mt-1 w-5 h-5 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -489,14 +498,14 @@ def require_auth(func):
                 </ul>
             </section>
             
-            <section id="summary" class="my-12 scroll-mt-20">
-                <h2 class="text-3xl font-bold text-white mb-6">
+            <section id="summary" class="my-12 pt-8 border-t border-zinc-800/50 scroll-mt-20">
+                <h2 class="text-2xl font-semibold text-white tracking-tight mb-6">
                     Summary
                 </h2>
-                <p class="text-gray-300 mb-4">
+                <p class="text-zinc-300 mb-4">
                     You've learned how to:
                 </p>
-                <ul class="list-disc list-inside space-y-2 text-gray-300 ml-4">
+                <ul class="list-disc list-inside space-y-2 text-zinc-300 ml-4">
                     <li>✅ Create user models with password hashing</li>
                     <li>✅ Implement server actions for auth</li>
                     <li>✅ Build login and registration forms</li>
@@ -504,9 +513,30 @@ def require_auth(func):
                     <li>✅ Protect routes with middleware</li>
                 </ul>
             </section>
+            <!-- Footer Pagination -->
+            <footer class="py-12 flex items-center justify-between gap-6 border-t border-zinc-800/50 mt-12">
+                <div class="w-1/2">
+                    <Link href="/documentation/tutorials/dashboard" class="group block p-5 rounded-xl border border-zinc-800/60 bg-zinc-950/20 hover:border-zinc-700 hover:bg-zinc-900/20 transition-all">
+                        <span class="block text-xs font-medium text-zinc-500 tracking-wide uppercase mb-1">Previous</span>
+                        <span class="text-base font-bold text-white group-hover:text-blue-400 flex items-center gap-1 transition-colors">
+                            <svg class="w-4 h-4 text-zinc-500 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                            Dashboard App
+                        </span>
+                    </Link>
+                </div>
+                <div class="w-1/2 text-right">
+                    <Link href="/documentation/howto/database" class="group block p-5 rounded-xl border border-zinc-800/60 bg-zinc-950/20 hover:border-zinc-700 hover:bg-zinc-900/20 transition-all">
+                        <span class="block text-xs font-medium text-zinc-500 tracking-wide uppercase mb-1">Next</span>
+                        <span class="text-base font-bold text-white group-hover:text-blue-400 flex items-center justify-end gap-1 transition-colors">
+                            Database Integration
+                            <svg class="w-4 h-4 text-zinc-500 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                        </span>
+                    </Link>
+                </div>
+            </footer>
         </article>
-        <aside class="hidden lg:block">
-            <div class="sticky top-24 text-sm">
+        <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <div class="text-sm">
                 <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                 <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
                         <li><a href="#overview" class="block pl-4 -ml-px border-l border-transparent hover:text-white hover:border-zinc-500 transition-colors">What You'll Learn</a></li>
@@ -527,63 +557,3 @@ def require_auth(func):
 
 default = AuthenticationGuide
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

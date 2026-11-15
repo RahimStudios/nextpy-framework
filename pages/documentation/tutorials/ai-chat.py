@@ -68,20 +68,18 @@ async def chat(request, message: str = ""):
 @component
 def ChatPage():
     return (
-        &lt;div class="max-w-3xl mx-auto h-[80vh] flex flex-col"&gt;
-            &lt;h1 class="text-2xl font-bold mb-4"&gt;AI Chat&lt;/h1&gt;
-            &lt;ChatWindow /&gt;
-        &lt;/div&gt;
+        <div class="max-w-3xl mx-auto h-[80vh] flex flex-col">
+            <h1 class="text-2xl font-bold mb-4">AI Chat</h1>
+            <ChatWindow />
+        </div>
     )
 
 default = ChatPage"""
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -92,17 +90,17 @@ default = ChatPage"""
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">
                         AI Chat App
                     </h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <p class="leading-relaxed text-zinc-300">
                         Build an AI-powered chat application with NextPy.
                     </p>
                 </header>
 
                 <div id="overview" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Overview</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         This tutorial builds a chat UI where the browser owns the message list and a server action proxies requests to an LLM API. The API key never reaches the client — it stays in the server action's environment.
                     </p>
                 </div>
@@ -127,7 +125,7 @@ default = ChatPage"""
 
                 <div id="chat-ui" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">The chat component</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Messages live in <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">useState</code> — each update re-renders only the bound nodes. <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">_server_result</code> and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">_server_loading</code> are the reserved keys the runtime fills after the action returns. A <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">useRef</code> pins the scroll container to the newest message.
                     </p>
                     <EnhancedCodeBlock lang="python" filename="components/chat_window.py" snippet={chat_ui_example} />
@@ -135,7 +133,7 @@ default = ChatPage"""
 
                 <div id="server-action" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">The server action</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">@server_action()</code> functions are async Python that run on the server. Return a plain dict — it is serialized to JSON and lands in <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">_server_result</code>:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="lib/chat_actions.py" snippet={action_example} />
@@ -143,11 +141,11 @@ default = ChatPage"""
 
                 <div id="wiring" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Wiring the page</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         The page stays a plain <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">@component</code> — only the interactive island hydrates:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/chat.py" snippet={page_example} />
-                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-300">
                         <li>Set <code class="font-mono text-xs">OPENAI_API_KEY</code> (or your provider's key) in the environment — never in source.</li>
                         <li>Swap the endpoint for any OpenAI-compatible API, or call a local model over <code class="font-mono text-xs">httpx</code>.</li>
                         <li>For multi-turn chat, persist messages with <code class="font-mono text-xs">nextpy.db</code> and pass history into the action.</li>
@@ -176,7 +174,7 @@ default = ChatPage"""
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -192,70 +190,8 @@ default = ChatPage"""
     )
 
 
-
-
 def getServerSideProps(context):
     return {"props": {"title": "AI Chat App - NextPy Docs"}}
 
 default = AIChatApp
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

@@ -62,9 +62,10 @@ class SafeExpressionEngine:
         # Math (safe only)
         'pow': pow,
         
-        # Type checking (safe only)
+        # Type checking (safe only). getattr/hasattr are deliberately absent:
+        # they bypass the SAFE_ATTRIBUTES whitelist and allow reaching dunder
+        # attributes (e.g. getattr(obj, '__class__')).
         'isinstance': isinstance, 'callable': callable, 'type': type,
-        'hasattr': hasattr, 'getattr': getattr,
         
         # Iteration utilities
         'iter': iter, 'next': next,
@@ -175,13 +176,7 @@ class SafeExpressionEngine:
         
         if isinstance(node, ast.Constant):
             return node.value
-            
-        elif isinstance(node, ast.Num):  # Python < 3.8
-            return node.n
-            
-        elif isinstance(node, ast.Str):  # Python < 3.8
-            return node.s
-            
+
         elif isinstance(node, ast.Name):
             # Only allow safe names from context or whitelist
             if node.id in self.context:

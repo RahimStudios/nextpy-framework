@@ -25,7 +25,7 @@ class TestPSXComponents:
     
     def test_state_management(self):
         """Test useState hook"""
-        from nextpy.psx import component, useState
+        from nextpy.psx import component, useState, psx
         
         @component
         def Counter(props=None):
@@ -117,20 +117,23 @@ class TestRouter:
     
     def test_dynamic_route_matching(self):
         """Test dynamic route matching"""
+        import re
         from nextpy.core.router import Router, Route
-        
+
         router = Router(pages_dir="pages", templates_dir="templates")
-        
-        # Create a dynamic route
+
+        # Dynamic routes use named-group regexes, e.g. /users/(?P<id>[^/]+)
         route = Route(
             path="/users/:id",
             file_path=Path("test"),
             is_dynamic=True,
             param_names=["id"],
-            pattern=router._create_route_from_file.__self__._Route__pattern
+            pattern=re.compile(r"^/users/(?P<id>[^/]+)$"),
         )
-        
-        # This would need actual implementation testing
+
+        assert route.matches("/users/42") == {"id": "42"}
+        assert route.matches("/users") is None
+        assert route.matches("/users/42/posts") is None
 
 
 class TestServerActions:
@@ -241,7 +244,7 @@ class TestInteractiveComponents:
     def test_interactive_component_decorator(self):
         """Test @interactive_component decorator"""
         from nextpy.psx.hydration import interactive_component
-        from nextpy.psx import useState
+        from nextpy.psx import useState, psx
         
         @interactive_component
         def InteractiveCounter(props=None):

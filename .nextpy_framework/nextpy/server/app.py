@@ -21,6 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.websockets import WebSocketState
 
 # Import PSX for complete integration
@@ -42,7 +43,7 @@ from nextpy.core.data_fetching import (
     PageNotFoundError,
     RedirectError,
 )
-from nextpy.server.middleware import NextPyMiddleware, CSRFMiddleware, RateLimitMiddleware
+from nextpy.server.middleware import NextPyMiddleware, CSRFMiddleware, RateLimitMiddleware, CacheMiddleware
 from nextpy.security import security_manager
 from nextpy.jsx_preprocessor import JSXSyntaxError
 from nextpy.websocket import manager, handle_websocket
@@ -256,6 +257,11 @@ class NextPyApp:
         )
 
         self.app.add_middleware(NextPyMiddleware)
+        # Immutable caching for static assets — previously defined but never
+        # registered, so every asset was revalidated on each page view.
+        self.app.add_middleware(CacheMiddleware)
+        # Pages embed large inline hydration scripts; gzip is a big win.
+        self.app.add_middleware(GZipMiddleware, minimum_size=1024)
 
         csrf_origins = [
             origin for origin in cors_origins if origin != "*"
@@ -297,7 +303,6 @@ class NextPyApp:
             # Add other security headers
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
-            response.headers["X-XSS-Protection"] = "1; mode=block"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
             response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
             response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
@@ -463,8 +468,9 @@ class NextPyApp:
                     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
                     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
                     xml += '  <url>\n'
-                    xml += f'    <loc>https://nextpy-framework.onrender.com/</loc>\n'
-                    xml += f'    <lastmod>2026-03-06</lastmod>\n'
+                    base = str(request.base_url).rstrip('/')
+                    xml += f'    <loc>{base}/</loc>\n'
+                    xml += f'    <lastmod>{__import__("datetime").datetime.now().strftime("%Y-%m-%d")}</lastmod>\n'
                     xml += '    <changefreq>daily</changefreq>\n'
                     xml += '    <priority>1.0</priority>\n'
                     xml += '  </url>\n'
@@ -499,10 +505,11 @@ class NextPyApp:
                     return result
                 else:
                     # Fallback robots.txt
-                    robots_content = """User-agent: *
+                    base_url = str(request.base_url).rstrip('/')
+                    robots_content = f"""User-agent: *
 Allow: /
 
-Sitemap: https://nextpy-framework.onrender.com/sitemap.xml
+Sitemap: {base_url}/sitemap.xml
 """
                     return Response(content=robots_content, media_type="text/plain")
             except Exception as e:
@@ -518,9 +525,11 @@ Allow: /
         self.app.add_route("/sitemap.xml", sitemap_handler, methods=["GET"])
         self.app.add_route("/robots.txt", robots_handler, methods=["GET"])
         
-        # Add debug API routes
-        self._add_debug_routes()
-        
+        # Add debug API routes — dev-only; these expose component/event/
+        # performance internals and must never be reachable in production.
+        if self.debug:
+            self._add_debug_routes()
+
         # Add server actions endpoint
         self._add_server_actions_routes()
             
@@ -663,7 +672,10 @@ Allow: /
             except Exception as e:
                 if self.debug:
                     print(f"Server actions list error: {e}")
-                return JSONResponse({"error": str(e)}, status_code=500)
+                return JSONResponse(
+                    {"error": str(e) if self.debug else "Internal server error"},
+                    status_code=500,
+                )
         
         # Execute a server action
         from fastapi.responses import Response as FastAPIResponse
@@ -702,20 +714,35 @@ Allow: /
                 if self.debug:
                     import traceback
                     traceback.print_exc()
-                return JSONResponse({"error": str(e)}, status_code=500)
-        
+                return JSONResponse(
+                    {"error": str(e) if self.debug else "Internal server error"},
+                    status_code=500,
+                )
+
         # Get server action schema
-        async def get_action_schema(request: Request, action_name: str):
+        async def get_action_schema(request: Request):
+            # add_route doesn't inject path params as arguments — read them
+            # from the request scope instead.
+            action_name = request.path_params.get("action_name", "")
             try:
                 action = ServerAction.get_action(action_name)
                 if not action:
                     return JSONResponse({"error": "action not found"}, status_code=404)
-                
-                # Get type hints for schema
-                import inspect
+
+                # Get type hints for schema — serialize types to names so the
+                # response is JSON-encodable (raw type objects are not).
+                # get_type_hints lives in `typing`, not `inspect`.
+                import typing
                 original = getattr(action, '_original_func', action)
-                hints = inspect.get_type_hints(original)
-                
+                try:
+                    hints = typing.get_type_hints(original)
+                except Exception:
+                    hints = getattr(original, '__annotations__', {}) or {}
+                hints = {
+                    name: (t.__name__ if isinstance(t, type) else str(t))
+                    for name, t in hints.items()
+                }
+
                 return JSONResponse({
                     "name": action_name,
                     "schema": hints,
@@ -724,12 +751,18 @@ Allow: /
             except Exception as e:
                 if self.debug:
                     print(f"Action schema error: {e}")
-                return JSONResponse({"error": str(e)}, status_code=500)
+                return JSONResponse(
+                    {"error": str(e) if self.debug else "Internal server error"},
+                    status_code=500,
+                )
         
         # Register server action routes
         self.app.add_route("/__nextpy/actions", list_actions, methods=["GET"])
         self.app.add_route("/__nextpy/actions/execute", execute_action, methods=["POST"])
-        self.app.add_route("/__nextpy/actions/{action_name}/schema", get_action_schema, methods=["GET"])
+        if self.debug:
+            # Schema introspection is a dev-tooling endpoint — it exposes
+            # function signatures, so keep it out of production.
+            self.app.add_route("/__nextpy/actions/{action_name}/schema", get_action_schema, methods=["GET"])
             
     def _convert_route_to_fastapi_path(self, route_path: str) -> str:
         """Convert router path with regex patterns to FastAPI-compatible path"""
@@ -1049,6 +1082,13 @@ Allow: /
                     context["__nextpy_props_loaded"] = True
                     if page_revalidate is not None and hasattr(route, "renderer"):
                         route.renderer.revalidate_cache[str(route.file_path)] = int(page_revalidate)
+                except PageNotFoundError:
+                    return await self._render_404(request)
+                except RedirectError as e:
+                    return RedirectResponse(
+                        url=e.destination,
+                        status_code=308 if e.permanent else 307,
+                    )
                 except Exception as e:
                     if self.debug:
                         print(f"Data fetching error for component route: {e}")
@@ -1072,8 +1112,10 @@ Allow: /
                         ):
                             yield chunk
                 else:
-                    stream_html = self.router.render_route(
-                        route, context, include_layout=True
+                    # SSR render is synchronous CPU work — keep it off the
+                    # event loop so concurrent requests aren't blocked.
+                    stream_html = await asyncio.to_thread(
+                        self.router.render_route, route, context, True
                     )
                     if '<a ' in stream_html:
                         stream_html = self._mark_internal_links(stream_html)
@@ -1107,8 +1149,12 @@ Allow: /
                     _stream_body(), media_type="text/html", headers=headers
                 )
 
-            html = self.router.render_route(
-                route, context, include_layout=not want_fragment
+            # SSR render is synchronous CPU work — offload to a thread so one
+            # expensive page can't stall every concurrent request. Component
+            # state is thread-local and caches are dicts, so this is safe.
+            html = await asyncio.to_thread(
+                self.router.render_route,
+                route, context, not want_fragment,
             )
 
             if '<a ' in html:
@@ -1362,7 +1408,15 @@ Allow: /
         import inspect
 
         try:
-            signature = inspect.signature(handler)
+            # Cache the signature on the function — inspect.signature is
+            # surprisingly expensive and this runs per API request.
+            signature = getattr(handler, "_nextpy_signature", None)
+            if signature is None:
+                signature = inspect.signature(handler)
+                try:
+                    handler._nextpy_signature = signature
+                except (AttributeError, TypeError):
+                    pass
             parameters = signature.parameters
         except (TypeError, ValueError):
             parameters = {}
@@ -1410,7 +1464,8 @@ Allow: /
 
         if asyncio.iscoroutinefunction(handler):
             return await call()
-        return call()
+        # Sync handlers must not block the event loop — offload to a thread.
+        return await asyncio.to_thread(call)
 
     def _ensure_tailwind_compiled(self) -> None:
         """Conditionally build Tailwind CSS if env var is set and file is outdated"""
@@ -1958,8 +2013,7 @@ Allow: /
         </head>
         <body>
             <h1>🚨 CRITICAL SYSTEM ERROR</h1>
-            <p>Original Error: {str(original_error)}</p>
-            <p>Fallback Error: {str(fallback_error)}</p>
+            {f'<p>Original Error: {str(original_error)}</p><p>Fallback Error: {str(fallback_error)}</p>' if self.debug else '<p>An unexpected critical error occurred. Check the server logs.</p>'}
             <p>Please check the server logs for more information.</p>
         </body>
         </html>
@@ -2094,4 +2148,25 @@ def create_app(
         admin_site=admin_site,
     )
     _api_app = nextpy_app.app
+
+    # Production-safety warnings — loud but non-fatal so dev workflows keep
+    # working while deploys get a clear signal in logs.
+    try:
+        from nextpy.config import settings as _settings
+        _insecure = []
+        for _key in ("jwt_secret", "session_secret", "secret_key"):
+            _val = _settings.get(_key) or ""
+            if not _val or _val.startswith("change-me"):
+                _insecure.append(_key)
+        if _insecure:
+            print(
+                "⚠️  NextPy: insecure default secrets detected "
+                f"({', '.join(_insecure)}). Set JWT_SECRET, SESSION_SECRET and "
+                "SECRET_KEY environment variables before deploying."
+            )
+        if debug:
+            print("⚠️  NextPy: debug mode is ON — disable for production.")
+    except Exception:
+        pass
+
     return nextpy_app.app

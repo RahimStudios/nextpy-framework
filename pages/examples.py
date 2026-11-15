@@ -32,12 +32,12 @@ def Home(props=None):
             if docHeight > 0:
                 setScrollProgress((scrollTop / docHeight) * 100)
 
+            current = "overview"
             for sec_id in ["overview", "tabs", "cards", "accordion"]:
                 el = document.getElementById(sec_id)
-                if el:
-                    rect = el.getBoundingClientRect()
-                    if rect.top <= 220 and rect.bottom >= 220:
-                        setActiveSection(sec_id)
+                if el and el.getBoundingClientRect().top <= 200:
+                    current = sec_id
+            setActiveSection(current)
 
             cards_el = document.getElementById("cards")
             if cards_el:
@@ -46,6 +46,7 @@ def Home(props=None):
                     setCardsVisible(True)
 
         window.addEventListener("scroll", OnScroll)
+        document.addEventListener("nextpy:navigate", OnScroll)
         OnScroll()
         return lambda: window.removeEventListener("scroll", OnScroll)
 
@@ -150,6 +151,8 @@ def Home(props=None):
 
     acc_icon = "ml-4 text-blue-600 font-bold text-xl transition-transform duration-300"
 
+    progress_style = f"width: {scrollProgress}%"
+
     # ---------------------------------------------------------------- render
     return (
         <div class="flex min-h-screen font-sans antialiased text-slate-900 bg-slate-50 selection:bg-blue-600 selection:text-white">
@@ -157,7 +160,7 @@ def Home(props=None):
             {/* Scroll progress bar */}
             <div class="fixed top-0 left-0 right-0 z-50 h-1 bg-slate-200">
                 <div
-                    style={{"width": f"{scrollProgress}%"}}
+                    style={progress_style}
                     class="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-400 transition-all duration-150 ease-out"
                 ></div>
             </div>

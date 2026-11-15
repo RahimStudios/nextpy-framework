@@ -1,6 +1,6 @@
 """Security & Sandboxing — NextPy Documentation"""
 
-from nextpy.psx import component, Link, register_component, interactive_component, useState, useEffect
+from nextpy.psx import component, Link, register_component
 from pages.documentation._components.enhanced_codeblock import EnhancedCodeBlock
 
 register_component("EnhancedCodeBlock", EnhancedCodeBlock)
@@ -58,11 +58,9 @@ async def create_job(request: Request, response: Response, title: str, ...):
     ..."""
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -88,22 +86,22 @@ async def create_job(request: Request, response: Response, title: str, ...):
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">Security & Sandboxing</h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">Security & Sandboxing</h1>
+                    <p class="leading-relaxed text-zinc-300">
                         NextPy runs on FastAPI with server-rendered escaping by default. This page covers the auth primitives, action guards, and deployment settings that keep an app safe.
                     </p>
                 </header>
 
                 <div id="output-escaping" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Output escaping</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Text interpolated into <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">psx()</code> templates and JSX expressions is HTML-escaped by the renderer — user content can't inject markup. Raw HTML requires an explicit opt-in, so stored XSS is off by default.
                     </p>
                 </div>
 
                 <div id="passwords" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Passwords &amp; sessions</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.auth</code> provides salted password hashing, session creation, and cookie helpers. Sessions are opaque tokens stored server-side — clear the cookie on logout:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="lib/auth.py" snippet={password_example} />
@@ -111,7 +109,7 @@ async def create_job(request: Request, response: Response, title: str, ...):
 
                 <div id="guards" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Auth guards</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Wrap sensitive API handlers with <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">require_auth</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">require_user</code>, or <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">require_role</code> — they work on request-first functions and raise 401/403 before your code runs. Server actions instead resolve identity with <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_user_id_from_request</code>:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="lib/actions.py" snippet={auth_example} />
@@ -119,7 +117,7 @@ async def create_job(request: Request, response: Response, title: str, ...):
 
                 <div id="action-security" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Server action security</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Declare <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">auth=True</code> and optional <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">roles</code> on <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">@server_action</code>. Validate input with <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">ValidationError</code> — never trust client-supplied IDs without checking they belong to the session user:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="lib/actions.py" snippet={action_example} />
@@ -127,7 +125,7 @@ async def create_job(request: Request, response: Response, title: str, ...):
 
                 <div id="deployment" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Deployment hardening</h2>
-                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>Set <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">DEBUG=false</code> — stack traces and debug endpoints are disabled in production.</li>
                         <li>Use a strong <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">SECRET_KEY</code> from the environment, never committed.</li>
                         <li>Terminate TLS at your reverse proxy; set secure cookie flags for session cookies.</li>
@@ -157,7 +155,7 @@ async def create_job(request: Request, response: Response, title: str, ...):
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -178,63 +176,3 @@ def getServerSideProps(context):
 
 default = Security
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

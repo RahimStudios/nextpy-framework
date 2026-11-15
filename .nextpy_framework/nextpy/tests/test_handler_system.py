@@ -5,7 +5,7 @@ Verify that Python event handlers are properly extracted, converted, and registe
 """
 
 import sys
-sys.path.insert(0, '/home/ibrahim-fonyuy/Downloads/NextPyVision (1)/NextPyVision/.nextpy_framework')
+sys.path.insert(0, '.nextpy_framework')
 
 from nextpy.psx import psx, component, useState
 from nextpy.psx.hydration import interactive_component

@@ -5,6 +5,7 @@ Integrates AST nodes, safe evaluation, and logic execution
 
 import ast
 import html
+import re
 from typing import Any, Dict, List, Optional, Union
 from .ast_nodes import (
     PSXNode, PSXNodeUnion, ExpressionNode, LogicNode, IfNode, ForNode, WhileNode, TryNode, PSXASTParser,
@@ -457,7 +458,15 @@ class PSXRuntime:
         if node.self_closing:
             # Ensure tag name is not empty
             tag = node.tag if node.tag else 'div'
-            return f'<{tag}{attr_str} />'
+            # Only void elements may use the self-closing syntax in HTML —
+            # `<div ... />` is parsed as an OPEN tag and swallows following
+            # siblings, breaking page nesting.
+            if tag.lower() in ('area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+                               'input', 'link', 'meta', 'param', 'source',
+                               'track', 'wbr', 'circle', 'ellipse', 'line',
+                               'path', 'polygon', 'polyline', 'rect'):
+                return f'<{tag}{attr_str} />'
+            return f'<{tag}{attr_str}></{tag}>'
             
         html_content = f'<{node.tag}{attr_str}>'
         html_content += self._render_node_list(node.children)
@@ -545,6 +554,8 @@ class PSXRuntime:
                     return str(result)
                     
             except Exception as e:
+                import traceback, sys as _s
+                traceback.print_exc(file=_s.stderr)
                 # Fallback to error div
                 return f'<div class="component-error">Error rendering {node.name}: {html.escape(str(e))}</div>'
         else:
@@ -566,6 +577,29 @@ class PSXRuntime:
     def _escape_html(self, text: str) -> str:
         """Escape HTML special characters in text"""
         return html.escape(text)
+
+
+def _render_if_branch(branch_text: str, context: Dict[str, Any]) -> str:
+    """Render a conditional branch to HTML when it contains component tags.
+
+    ``data-if-true``/``data-if-false`` store PSX source that the client
+    runtime swaps via ``innerHTML`` — but the JS side can only substitute
+    ``{expr}`` placeholders, it cannot compile components like ``<Motion>``.
+    Branches with capitalized (component) tags are therefore rendered to
+    HTML server-side here; plain-HTML branches keep PSX source so client-side
+    expression evaluation still works.
+    """
+    if not branch_text or not re.search(r'<[A-Z]', branch_text):
+        return branch_text
+    try:
+        from .parser import psx
+        wrapped = psx('<div>' + branch_text + '</div>', dict(context) if context else None)
+        html_out = wrapped.to_html()
+        if html_out.startswith('<div>') and html_out.endswith('</div>'):
+            return html_out[5:-6]
+        return html_out
+    except Exception:
+        return branch_text
 
 
 def process_python_logic(psx_str: str, context: Dict[str, Any],
@@ -705,8 +739,11 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
                     else:
                         enhanced_context[var_decl] = item
                     
+                    # Mark loop scope so bare attr={expr} values are substituted
+                    body_ctx = dict(enhanced_context)
+                    body_ctx['_psx_in_loop'] = True
                     # Process loop body
-                    processed_body = process_python_logic(loop_body, enhanced_context)
+                    processed_body = process_python_logic(loop_body, body_ctx)
                     result_parts.append(processed_body)
                 
                 return ''.join(result_parts)
@@ -760,8 +797,8 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
                 
                 # Escape the condition for HTML attribute using html.escape
                 escaped_condition = html.escape(condition)
-                escaped_if_true = html.escape(if_result)
-                escaped_if_false = html.escape(else_result)
+                escaped_if_true = html.escape(_render_if_branch(if_result, enhanced_context))
+                escaped_if_false = html.escape(_render_if_branch(else_result, enhanced_context))
                 
                 return f'<span data-if-condition="{escaped_condition}" data-if-true="{escaped_if_true}" data-if-false="{escaped_if_false}">{result}</span>'
                     
@@ -901,8 +938,8 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
                     
                     # Escape the condition for HTML attribute
                     escaped_condition = html.escape(condition)
-                    escaped_if_true = html.escape(if_result)
-                    escaped_if_false = html.escape(else_result)
+                    escaped_if_true = html.escape(_render_if_branch(if_result, enhanced_context))
+                    escaped_if_false = html.escape(_render_if_branch(else_result, enhanced_context))
                     
                     return f'<span data-if-condition="{escaped_condition}" data-if-true="{escaped_if_true}" data-if-false="{escaped_if_false}">{result}</span>'
                 else:
@@ -917,7 +954,7 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
                     # FIX: Wrap conditional content in a span with data attributes for client-side updates
                     if_result = process_python_logic(if_part, enhanced_context)
                     escaped_condition = html.escape(condition)
-                    escaped_if_true = html.escape(if_result)
+                    escaped_if_true = html.escape(_render_if_branch(if_result, enhanced_context))
                     
                     return f'<span data-if-condition="{escaped_condition}" data-if-true="{escaped_if_true}" data-if-false="">{result}</span>'
                         
@@ -953,6 +990,10 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
                     # Set loop variable in context
                     loop_context = enhanced_context.copy()
                     loop_context[var_name] = item
+                    # Mark loop scope: bare attr={expr} values referencing the
+                    # loop variable can never be reactive (the var only exists
+                    # during string expansion), so they must be substituted now.
+                    loop_context['_psx_in_loop'] = True
                     
                     # Process loop body (which may contain JSX)
                     processed_body = process_python_logic(loop_body, loop_context)
@@ -1170,8 +1211,8 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
             
             # FIX: Wrap conditional content in a span with data attributes for client-side updates
             escaped_condition = html.escape(condition)
-            escaped_if_true = html.escape(if_result)
-            escaped_if_false = html.escape(else_result)
+            escaped_if_true = html.escape(_render_if_branch(if_result, enhanced_context))
+            escaped_if_false = html.escape(_render_if_branch(else_result, enhanced_context))
             # FIX: Add data-component-id for dependency tracking
             component_id = enhanced_context.get('_component_id', '')
             
@@ -1204,6 +1245,7 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
                 # Create a new context for each iteration
                 loop_context = enhanced_context.copy()
                 loop_context[var_name] = item
+                loop_context['_psx_in_loop'] = True
                 
                 # Process the loop body with the new context
                 processed_body = process_python_logic(loop_body, loop_context)
@@ -1252,8 +1294,19 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
 
         # Skip attribute values (preceded by '=') — these are for the PSX parser
         # e.g. class={expr}, onclick={handler}, value={state}
+        # Exception: inside {for}/{while} bodies the loop variable only exists
+        # during this string-level expansion, so attr exprs must substitute now.
+        in_loop = bool(enhanced_context.get('_psx_in_loop'))
         match_start = match.start()
-        if match_start > 0:
+        # Unquoted attribute position: attr={expr} — the substituted value
+        # must be quoted or the tag parser mangles the rest of the tag.
+        is_attr = False
+        if in_loop and match_start > 0:
+            j = match_start - 1
+            while j >= 0 and result[j].isspace():
+                j -= 1
+            is_attr = j >= 0 and result[j] == '='
+        elif not in_loop and match_start > 0:
             char_before = result[match_start - 1]
             if char_before == '=' or (char_before.isspace() and match_start > 1 and result[match_start - 2] == '='):
                 continue
@@ -1277,6 +1330,8 @@ def process_python_logic(psx_str: str, context: Dict[str, Any],
             else:
                 replacement = str(evaluated)
 
+            if is_attr and not (replacement.startswith('"') or replacement.startswith("'")):
+                replacement = '"' + replacement.replace('"', '&quot;') + '"'
             replacements.append((full_match, replacement))
 
         except Exception:

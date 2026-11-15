@@ -1,0 +1,7 @@
+"""AI Elements — animation playground section layout."""
+
+from pages._anim.nav import GroupLayout
+
+
+def Layout(children, **props):
+    return GroupLayout(children=children, group="ai", **(props or {}))

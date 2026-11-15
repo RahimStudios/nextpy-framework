@@ -5,11 +5,14 @@ FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies including Node.js for Tailwind
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
 
 # Copy requirements
 COPY requirements.txt .
@@ -25,10 +28,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies including Node.js for Tailwind
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv

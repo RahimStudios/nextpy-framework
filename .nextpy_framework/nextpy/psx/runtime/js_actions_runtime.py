@@ -104,6 +104,21 @@ class NextPyActionRuntime {
         return this.components.get(componentId);
     }
 
+    unregisterComponent(componentId) {
+        // Drop every per-component registry entry. DOM listeners die with
+        // the elements, but these Maps would otherwise retain closures and
+        // state forever across SPA navigations.
+        this.components.delete(componentId);
+        this.functions.delete(componentId);
+        this.dependencyMap.delete(componentId);
+        this.signals.delete(componentId);
+        this.refs.delete(componentId);
+        this._oldValues.delete(componentId);
+        if (window.nextpyComponentHandlers) {
+            delete window.nextpyComponentHandlers[componentId];
+        }
+    }
+
     _buildDependencyMap(componentId) {
         // FIX: Scan DOM and build dependency map for conditional elements
         const conditionalElements = document.querySelectorAll(`[data-if-condition]`);
@@ -1216,6 +1231,19 @@ class NextPyActionRuntime {
     /** Computed value of a motion style prop on el ('' if unavailable). */
     _computedMotionValue(el, prop) {
         try {
+            // Motion-style props map onto CSS individual transform properties.
+            if (prop === 'x' || prop === 'y') {
+                const t = this._computedTranslate(el);
+                return this._pxVal(prop === 'x' ? t[0] : t[1]);
+            }
+            if (prop === 'rotate') {
+                const r = getComputedStyle(el).rotate;
+                return (r && r !== 'none') ? r : '0deg';
+            }
+            if (prop === 'scale') {
+                const s = getComputedStyle(el).scale;
+                return (s && s !== 'none') ? s : '1';
+            }
             const v = getComputedStyle(el).getPropertyValue(this._cssPropName(prop));
             return (v === null || v === undefined) ? '' : String(v).trim();
         } catch (e) { return ''; }
@@ -1244,10 +1272,52 @@ class NextPyActionRuntime {
      * Scalars are expanded to [currentValue, target] — a single-element
      * keyframe array produces no visible tween in WAAPI.
      */
+    /** Current CSS `translate` property as [x, y] pixel numbers. */
+    _computedTranslate(el) {
+        try {
+            const v = getComputedStyle(el).translate || 'none';
+            if (v === 'none') return [0, 0];
+            const parts = v.trim().split(/\s+/).map(parseFloat);
+            return [parts[0] || 0, parts[1] || 0];
+        } catch (e) { return [0, 0]; }
+    }
+
+    /** Coerce a motion axis value (number|string) to a px string for translate. */
+    _pxVal(v) {
+        if (v === null || v === undefined || v === '' || v === 'none') return '0px';
+        if (typeof v === 'number') return v + 'px';
+        const s = String(v).trim();
+        if (s === '') return '0px';
+        return /px|%|em|rem|vh|vw|pt|pc|in|cm|mm|q$/.test(s) ? s : parseFloat(s) + 'px';
+    }
+
+    /**
+     * Expand one x/y axis spec to a keyframe list. Scalars become
+     * [current, target] so gestures tween from the resting position.
+     */
+    _motionAxisVals(arr, cur) {
+        if (!arr || !arr.length) return null;
+        if (arr.length === 1) return [cur, arr[0]];
+        return arr.slice();
+    }
+
     _psxKeyframes(spec, el) {
         const kf = {};
+        const xy = { x: null, y: null };
         for (const [prop, value] of Object.entries(spec || {})) {
-            const vals = Array.isArray(value) ? value.slice() : [value];
+            // Motion-style x/y have no CSS equivalent — merged into `translate` below.
+            if (prop === 'x' || prop === 'y') {
+                xy[prop] = Array.isArray(value) ? value.slice() : [value];
+                continue;
+            }
+            // Unitless rotate needs an angle unit for CSS/WAAPI.
+            let val = value;
+            if (prop === 'rotate') {
+                val = Array.isArray(val)
+                    ? val.map(v => (typeof v === 'number' ? v + 'deg' : v))
+                    : (typeof val === 'number' ? val + 'deg' : val);
+            }
+            const vals = Array.isArray(val) ? val.slice() : [val];
             if (vals.length === 1) {
                 const target = vals[0];
                 const cur = el ? this._computedMotionValue(el, prop) : '';
@@ -1255,6 +1325,20 @@ class NextPyActionRuntime {
             } else {
                 kf[prop] = vals;
             }
+        }
+        // Merge x/y into a single `translate` keyframe track.
+        if (xy.x || xy.y) {
+            const curT = el ? this._computedTranslate(el) : [0, 0];
+            const xs = this._motionAxisVals(xy.x, curT[0]);
+            const ys = this._motionAxisVals(xy.y, curT[1]);
+            const n = Math.max(xs ? xs.length : 1, ys ? ys.length : 1);
+            const tvals = [];
+            for (let i = 0; i < n; i++) {
+                const xv = xs ? xs[Math.min(i, xs.length - 1)] : curT[0];
+                const yv = ys ? ys[Math.min(i, ys.length - 1)] : curT[1];
+                tvals.push(this._pxVal(xv) + ' ' + this._pxVal(yv));
+            }
+            kf['translate'] = tvals.length > 1 ? tvals : [tvals[0], tvals[0]];
         }
         return kf;
     }
@@ -1270,9 +1354,19 @@ class NextPyActionRuntime {
     }
 
     _applyInstantStyles(el, styleSpec) {
+        const xy = { x: null, y: null };
         for (const [prop, value] of Object.entries(styleSpec || {})) {
             const vals = Array.isArray(value) ? value : [value];
-            el.style[prop] = vals[vals.length - 1];
+            const last = vals[vals.length - 1];
+            if (prop === 'x' || prop === 'y') { xy[prop] = last; continue; }
+            if (prop === 'rotate' && typeof last === 'number') { el.style[prop] = last + 'deg'; continue; }
+            el.style[prop] = last;
+        }
+        // Apply x/y as the CSS `translate` property (no x/y CSS props exist).
+        if (xy.x !== null || xy.y !== null) {
+            const cur = this._computedTranslate(el);
+            el.style.translate = this._pxVal(xy.x !== null ? xy.x : cur[0]) + ' ' +
+                                 this._pxVal(xy.y !== null ? xy.y : cur[1]);
         }
     }
 

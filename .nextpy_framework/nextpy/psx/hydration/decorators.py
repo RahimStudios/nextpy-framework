@@ -1102,14 +1102,16 @@ def _extract_state_and_derived(func: Callable) -> Tuple[List[str], Dict[str, str
             # inside brackets/parens — not valid JS.
             if re.search(r'\bfor\s+\w+\s+in\b', expr):
                 continue
-            # f-strings are allowed only when every {expr} hole is a plain
-            # state variable — the client runtime evaluates f-strings, but
+            # f-strings are allowed when every {expr} hole is a plain
+            # state variable or an already-captured derived variable —
+            # the client runtime evaluates f-strings and resolves
+            # derived->derived dependencies via fixpoint iteration, but
             # holes referencing locals/props/comprehensions would break.
             if re.search(r'\bf[\'"]', expr):
                 holes = re.findall(r'\{([^{}]+)\}', expr)
-                state_set = set(state_keys)
+                allowed_names = set(state_keys) | set(derived.keys())
                 if not all(
-                    re.fullmatch(r'[A-Za-z_]\w*', h.strip()) and h.strip() in state_set
+                    re.fullmatch(r'[A-Za-z_]\w*', h.strip()) and h.strip() in allowed_names
                     for h in holes
                 ):
                     continue

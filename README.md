@@ -12,12 +12,14 @@
 ![Python](https://img.shields.io/pypi/pyversions/nextpy-framework)
 ![License](https://img.shields.io/github/license/RahimStudios/nextpy-framework)
 ![Stars](https://img.shields.io/github/stars/RahimStudios/nextpy-framework)
-
-
+![Status](https://img.shields.io/badge/status-production--ready-brightgreen)
+![Version](https://img.shields.io/badge/version-5.2.0-blue)
 
 
 
 Build modern web applications using Python, PSX, file-based routing, server-side rendering, static generation, React-style hooks, and integrated AI development tools.
+
+**NextPy v5 is production-grade**: SSR/SSG/ISR rendering, streaming SSR, selective hydration, server actions, built-in authentication, admin panel, ORM, background tasks, WebSocket real-time, middleware, plugins, security hardening, and a fully documented API — all in a single Python package with no Node.js toolchain required.
 
 [Documentation](https://nextpy.dev) •
 [Examples](https://nextpy.dev/examples) •
@@ -35,13 +37,20 @@ Build modern web applications using Python, PSX, file-based routing, server-side
 
 NextPy is a Python-first full-stack framework inspired by the developer experience of Next.js while introducing powerful innovations such as:
 
-* PSX (Python Syntax Extension)
-* File-based routing
-* Server-side rendering (SSR)
-* Static site generation (SSG)
-* API routes
-* React-style hooks in Python
-* Built-in AI coding assistant
+* PSX (Python Syntax Extension) — JSX-style components written in pure Python
+* File-based routing with layouts, loading, error, and not-found boundaries
+* Server-side rendering (SSR), static generation (SSG), incremental static regeneration (ISR), and streaming SSR
+* Selective hydration with fine-grained signals and `requestAnimationFrame` batching
+* React-style hooks in Python (useState, useEffect, useReducer, useRef, useContext + Provider, and 15+ custom hooks)
+* Server Actions for type-safe client→server calls
+* Built-in authentication (JWT + sessions), role guards, and password hashing
+* Auto-generated admin panel for SQLAlchemy models
+* ORM with models, sessions, pagination, and query helpers
+* Background task queues with retries
+* WebSocket real-time channels and server-driven state sync
+* Middleware stack: CSRF origin checks, rate limiting, caching, security headers
+* Plugin system for the compilation pipeline
+* Production CLI: `nextpy dev`, `build`, `start`, `export`, `createsuperuser`, `routes`
 * Modern CLI tooling
 * Enterprise-ready architecture
 
@@ -192,51 +201,43 @@ default = TodoPage
 
 ### Full-Stack by Default
 
-* Frontend with PSX components
+* Frontend with PSX components and selective hydration
 * Backend with FastAPI
 * Server Actions for client-server communication
-* API Routes with automatic routing
-* Database Integration with SQLAlchemy
+* API Routes with automatic routing (`/api` prefix + file-based routes)
+* Database Integration with SQLAlchemy ORM
 * State Synchronization with WebSocket support
-* Authentication & Authorization
-* Real-time updates
+* Authentication & Authorization (JWT, sessions, role guards)
+* Real-time updates via channels and state sync
+* Auto-generated admin CRUD panel
+* Background jobs, caching, rate limiting, and security middleware
 * Everything in one framework
 
 ---
 
-## Full-Stack Capabilities
+## Production Readiness
 
-NextPy v5.0 provides enhanced full-stack features:
+NextPy v5 is built for production deployments:
 
-- **Server Actions**: Direct client-to-server function calls
-- **State Synchronization**: Real-time state management
-- **Type-Safe APIs**: Automatic validation and type checking
-- **WebSocket Integration**: Built-in real-time updates
-- **Database-Backed State**: Persistent state management
+- **Rendering**: SSR, SSG, ISR with stale-while-revalidate, streaming SSR, and SPA fragment navigation
+- **Security**: automatic security headers (CSP, X-Frame-Options, Referrer-Policy), CSRF origin validation, rate limiting, input sanitization, and debug-gated error pages
+- **Reliability**: bounded caches, connection cleanup, graceful websocket disconnects, and startup warnings for default secrets
+- **Operations**: `nextpy build`/`start`/`export`, ASGI entry point (`main:app`), health endpoints, and environment-based configuration
+- **Quality**: 110-test suite covering routing, rendering, hydration, server actions, websockets, and utilities
 
-
-[Read the Full-Stack Guide](FULLSTACK_GUIDE.md)
+See the [deployment guide](http://localhost:5000/documentation/howto/deployment) and [middleware guide](http://localhost:5000/documentation/howto/middleware-guide) for production details.
 
 
 
 ## Documentation
 
-Visit the official documentation:
+Full documentation ships with the framework — run `nextpy dev` and visit `/documentation`, or browse the source at `pages/documentation/`:
 
-https://nextpy.dev/docs
-
-Documentation includes:
-
-* Getting Started
-* Routing
-* PSX
-* Components
-* Hooks
-* Data Fetching
-* API Routes
-* Deployment
-* AI Assistant
-* CLI Reference
+* Tutorials — first app, todo app, blog, AI chat, dashboard
+* Getting Started — installation, project structure, layouts/pages, linking, data fetching, error handling, styling, route handlers
+* How-to Guides — auth, database, API, state, forms, background tasks, real-time, admin panel, middleware, plugins, streaming, debugging, testing, deployment
+* Core Concepts — architecture, PSX internals, routing engine, rendering, state model, compilation, security, comparisons
+* API Reference — CLI, config, components, PSX API, hooks, events, server actions, auth, state sync, utils, security, caching
 
 ---
 

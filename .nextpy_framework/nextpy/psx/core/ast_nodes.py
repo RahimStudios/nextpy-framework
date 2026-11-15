@@ -173,7 +173,7 @@ class PSXASTParser:
         """Check if AST node is safe for evaluation"""
         allowed_nodes = {
             ast.Expression, ast.BinOp, ast.UnaryOp, ast.Compare, ast.BoolOp,
-            ast.Num, ast.Str, ast.Name, ast.Load, ast.Constant,
+            ast.Name, ast.Load, ast.Constant,
             ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow,
             ast.UAdd, ast.USub, ast.Not, ast.And, ast.Or,
             ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,

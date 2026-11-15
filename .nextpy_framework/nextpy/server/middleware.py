@@ -33,7 +33,6 @@ class NextPyMiddleware(BaseHTTPMiddleware):
         
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
         
         if request.state.is_htmx:
             response.headers["HX-Push-Url"] = str(request.url.path)
@@ -193,5 +192,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 )
             timestamps.append(now)
             self._hits[key] = timestamps
+
+            # Bound memory: keys idle for >10 min can never produce hits in
+            # the 60s window again, so drop them. Runs at most once per 60s.
+            if now - getattr(self, "_last_sweep", 0.0) > 60.0:
+                self._last_sweep = now
+                idle_cutoff = now - 600.0
+                stale = [k for k, v in self._hits.items()
+                         if not v or v[-1] < idle_cutoff]
+                for k in stale:
+                    del self._hits[k]
+                # Hard cap as a safety net against churny unique IPs.
+                if len(self._hits) > 10000:
+                    for k in list(self._hits.keys())[:len(self._hits) - 10000]:
+                        del self._hits[k]
 
         return await call_next(request)

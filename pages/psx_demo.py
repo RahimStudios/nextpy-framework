@@ -68,14 +68,15 @@ def Home(props=None):
             if doc_height > 0:
                 set_scroll_progress((scroll_top / doc_height) * 100)
 
+            current = "overview"
             for sec_id in ["overview", "motion", "panel", "island"]:
                 el = document.getElementById(sec_id)
-                if el:
-                    rect = el.getBoundingClientRect()
-                    if rect.top <= 200 and rect.bottom >= 200:
-                        set_active_section(sec_id)
+                if el and el.getBoundingClientRect().top <= 200:
+                    current = sec_id
+            set_active_section(current)
 
         window.addEventListener("scroll", OnScroll)
+        document.addEventListener("nextpy:navigate", OnScroll)
         OnScroll()
         return lambda: window.removeEventListener("scroll", OnScroll)
 

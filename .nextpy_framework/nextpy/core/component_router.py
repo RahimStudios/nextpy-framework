@@ -755,9 +755,13 @@ class ComponentRouter:
             params = route.matches(url_path)
             if params is not None:
                 if not route.is_dynamic:
+                    # Bound the cache — every distinct static URL adds an
+                    # entry forever otherwise.
+                    if len(self._route_cache) >= 2048:
+                        self._route_cache.pop(next(iter(self._route_cache)), None)
                     self._route_cache[url_path] = route
                 return (route, params)
-                
+
         return None
         
     def render_route(
@@ -960,8 +964,9 @@ class ComponentRouter:
 
         except Exception as e:
             print(f"ERROR: Failed to render route: {e}")
-            import traceback
-            traceback.print_exc()
+            if debug:
+                import traceback
+                traceback.print_exc()
 
             if debug:
                 from ..server.debug import render_debug_error_html

@@ -52,9 +52,12 @@ class ConnectionManager:
         if client_id in self.connection_metadata:
             del self.connection_metadata[client_id]
         
-        # Remove from all subscriptions
-        for channel_subs in self.subscribers.values():
-            channel_subs.discard(client_id)
+        # Remove from all subscriptions (and drop now-empty channels so the
+        # subscribers dict doesn't grow forever).
+        for channel in list(self.subscribers.keys()):
+            self.subscribers[channel].discard(client_id)
+            if not self.subscribers[channel]:
+                del self.subscribers[channel]
     
     async def send_to_client(self, client_id: str, event: Dict[str, Any]):
         """Send structured event to specific client"""
@@ -93,7 +96,10 @@ class ConnectionManager:
     
     async def emit_state_update(self, component_id: str, state: Dict[str, Any]):
         """Emit structured state update event and store state"""
-        # Store the component state
+        # Store the component state — bound the dict; component_ids are
+        # unique per render, so without a cap this grows forever.
+        if len(self.component_states) >= 5000 and component_id not in self.component_states:
+            self.component_states.pop(next(iter(self.component_states)), None)
         self.component_states[component_id] = state
         
         event = {
@@ -179,7 +185,19 @@ async def handle_websocket(websocket: WebSocket):
         # Main message loop
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
+            try:
+                message = json.loads(data)
+            except (json.JSONDecodeError, ValueError):
+                # Malformed message — report and keep the connection alive
+                # instead of letting the exception kill the client.
+                await manager.send_to_client(client_id, {
+                    "type": "ERROR",
+                    "message": "Malformed JSON message",
+                    "timestamp": int(asyncio.get_event_loop().time())
+                })
+                continue
+            if not isinstance(message, dict):
+                continue
             
             # Route message to appropriate handler
             msg_type = message.get("type")

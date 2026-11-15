@@ -5,6 +5,15 @@ import sys
 import os
 from pathlib import Path
 
+import pytest
+
+pytest.skip(
+    "Manual verification script: test_server() launches a blocking "
+    "uvicorn dev server (uvicorn.run) and never returns, so it cannot "
+    "run under pytest.",
+    allow_module_level=True,
+)
+
 # Add the framework to path
 sys.path.insert(0, str(Path(__file__).parent / ".nextpy_framework"))
 

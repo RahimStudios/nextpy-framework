@@ -5,7 +5,7 @@ NextPy Authentication - JWT, Session, and Password support
 import jwt
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, Iterable
 from functools import wraps
 from fastapi import HTTPException, Request, Response
@@ -39,21 +39,28 @@ class AuthManager:
     """Handle JWT and session authentication"""
     
     @staticmethod
-    def create_token(user_id: int, expires_delta: Optional[timedelta] = None) -> str:
-        """Create JWT token"""
+    def create_token(user_id: int, expires_delta: Optional[timedelta] = None,
+                     expires_in: Optional[int] = None) -> str:
+        """Create JWT token.
+
+        ``expires_delta`` takes a timedelta; ``expires_in`` takes seconds —
+        the convention used by most JWT libraries.
+        """
+        if expires_in is not None:
+            expires_delta = timedelta(seconds=expires_in)
         if expires_delta is None:
-            expires_delta = timedelta(hours=settings.jwt_expiration_hours)
+            expires_delta = timedelta(hours=settings.get("jwt_expiration_hours", 24))
         
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
         payload = {"user_id": user_id, "exp": expire}
         
-        return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+        return jwt.encode(payload, settings.get("jwt_secret", "change-me"), algorithm=settings.get("jwt_algorithm", "HS256"))
     
     @staticmethod
     def verify_token(token: str) -> Optional[int]:
         """Verify JWT token and return user_id"""
         try:
-            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            payload = jwt.decode(token, settings.get("jwt_secret", "change-me"), algorithms=[settings.get("jwt_algorithm", "HS256")])
             user_id = payload.get("user_id")
             if user_id is None:
                 return None

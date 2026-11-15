@@ -5,7 +5,7 @@ Test convert_handler_attributes_in_html directly
 """
 
 import sys
-sys.path.insert(0, '/home/ibrahim-fonyuy/Downloads/NextPyVision (1)/NextPyVision/.nextpy_framework')
+sys.path.insert(0, '.nextpy_framework')
 
 from nextpy.psx.hydration.decorators import convert_handler_attributes_in_html
 

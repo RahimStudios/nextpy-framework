@@ -1,12 +1,12 @@
 import json
-from nextpy.psx import component, Link, register_component, interactive_component, useState, useEffect
+from nextpy.psx import component, Link, register_component
 from pages.documentation._components.enhanced_codeblock import EnhancedCodeBlock, CodeTabs, FileTree
+
 
 # Register components
 register_component("EnhancedCodeBlock", EnhancedCodeBlock)
 register_component("CodeTabs", CodeTabs)
 register_component("FileTree", FileTree)
-
 @component
 def Installation():
     # --- DATA PREPARATION ---
@@ -35,16 +35,13 @@ def Installation():
     ])
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
             <!-- MAIN CONTENT AREA -->
             <!-- Strict max-w-4xl for optimal line length (approx 75-85 chars) -->
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
 
                 <!-- Top Breadcrumb & Actions -->
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -73,10 +70,10 @@ def Installation():
 
                 <!-- Page Header -->
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">
                         Installation
                     </h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <p class="leading-relaxed text-zinc-300">
                         Create a new NextPy app and run it locally.
                     </p>
                 </header>
@@ -85,7 +82,7 @@ def Installation():
                 <div id="quick-start" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Quick start</h2>
                     
-                    <ol class="list-decimal pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <ol class="list-decimal pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>Create a new NextPy app named <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">my-app</code></li>
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">cd my-app</code> and start the dev server.</li>
                         <li>Visit <code class="text-blue-400 font-mono text-sm">http://localhost:8000</code>.</li>
@@ -93,7 +90,7 @@ def Installation():
 
                     <CodeTabs tabs='{quickstart_tabs}' default_tab="pip" />
 
-                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>
                             <code class="text-zinc-200 font-mono text-xs px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">--yes</code> skips prompts using saved preferences or defaults. The default setup enables Python 3.11+, Tailwind CSS, and the NextPy App Router, with standard import aliases.
                         </li>
@@ -103,8 +100,8 @@ def Installation():
                 <!-- Section: System requirements -->
                 <div id="system-requirements" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">System requirements</h2>
-                    <p class="text-base leading-7 text-zinc-400">Before you begin, make sure your development environment meets the following requirements:</p>
-                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">Before you begin, make sure your development environment meets the following requirements:</p>
+                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>Minimum Python version: <a href="#" class="text-blue-400 hover:underline">3.11</a></li>
                         <li>Operating systems: macOS, Windows (including WSL), and Linux.</li>
                     </ul>
@@ -113,26 +110,26 @@ def Installation():
                 <!-- Section: Supported browsers -->
                 <div id="supported-browsers" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Supported browsers</h2>
-                    <p class="text-base leading-7 text-zinc-400">NextPy supports modern browsers with zero configuration.</p>
-                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">NextPy supports modern browsers with zero configuration.</p>
+                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>Chrome 111+</li>
                         <li>Edge 111+</li>
                         <li>Firefox 111+</li>
                         <li>Safari 16.4+</li>
                     </ul>
-                    <p class="text-base leading-7 text-zinc-400">Learn more about <a href="#" class="text-blue-400 hover:underline">browser support</a>, including how to configure polyfills and target specific browsers.</p>
+                    <p class="text-base leading-7 text-zinc-300">Learn more about <a href="#" class="text-blue-400 hover:underline">browser support</a>, including how to configure polyfills and target specific browsers.</p>
                 </div>
 
                 <!-- Section: Create with the CLI -->
                 <div id="create-with-cli" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Create with the CLI</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         The quickest way to create a new NextPy app is using <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy create</code>, which sets up everything automatically for you. To create a project, run:
                     </p>
 
                     <CodeTabs tabs='{cli_tabs}' default_tab="pip" />
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">On installation, you'll see the following prompts:</p>
+                    <p class="text-base leading-7 text-zinc-300 mt-6">On installation, you'll see the following prompts:</p>
 
                     <EnhancedCodeBlock
                         lang="txt"
@@ -144,7 +141,7 @@ def Installation():
                 <!-- Section: Manual installation -->
                 <div id="manual-installation" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Manual installation</h2>
-                    <p class="text-base leading-7 text-zinc-400">To manually create a new NextPy app, install the required packages:</p>
+                    <p class="text-base leading-7 text-zinc-300">To manually create a new NextPy app, install the required packages:</p>
 
                     <CodeTabs tabs='{cli_tabs}' default_tab="pip" />
 
@@ -159,7 +156,7 @@ def Installation():
                         </div>
                     </div>
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">Then, add the following scripts to your <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.config.py</code> file:</p>
+                    <p class="text-base leading-7 text-zinc-300 mt-6">Then, add the following scripts to your <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.config.py</code> file:</p>
 
                     <EnhancedCodeBlock
                         lang="python"
@@ -167,8 +164,8 @@ def Installation():
                         snippet="from nextpy import Config&#10;&#10;config = Config(&#10;    app_name=&#34;my-app&#34;,&#10;    debug=True,&#10;    port=8000,&#10;    tailwind=True&#10;)"
                     />
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">These scripts refer to the different stages of developing an application:</p>
-                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">These scripts refer to the different stages of developing an application:</p>
+                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy dev</code>: Starts the development server using Turbopack (default bundler).</li>
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy build</code>: Builds the application for production.</li>
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy start</code>: Starts the production server.</li>
@@ -178,9 +175,9 @@ def Installation():
                 <!-- Section: Create the pages directory -->
                 <div id="create-pages-directory" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h3 class="text-xl font-semibold text-white tracking-tight">Create the <code class="text-zinc-200 font-mono text-lg px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages</code> directory</h3>
-                    <p class="text-base leading-7 text-zinc-400">NextPy uses file-system routing, which means the routes in your application are determined by how you structure your files.</p>
+                    <p class="text-base leading-7 text-zinc-300">NextPy uses file-system routing, which means the routes in your application are determined by how you structure your files.</p>
                     
-                    <p class="text-base leading-7 text-zinc-400 mt-6">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">
                         Create an <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages</code> folder. Then, inside <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages</code>, create a <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">layout.psx</code> file. This file is the <a href="#" class="text-blue-400 hover:underline">root layout</a>. It's required and must contain the HTML structure.
                     </p>
 
@@ -190,7 +187,7 @@ def Installation():
                         snippet="from nextpy.psx import component, psx&#10;&#10;@component&#10;def RootLayout(children):&#10;    return psx(&#34;&#34;&#34;&#10;        &lt;html lang=&#34;en&#34;&gt;&#10;            &lt;body&gt;{children}&lt;/body&gt;&#10;        &lt;/html&gt;&#10;    &#34;&#34;&#34;)"
                     />
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">Create a home page <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages/index.py</code> with some initial content:</p>
+                    <p class="text-base leading-7 text-zinc-300 mt-6">Create a home page <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages/index.py</code> with some initial content:</p>
 
                     <EnhancedCodeBlock
                         lang="python"
@@ -198,7 +195,7 @@ def Installation():
                         snippet="from nextpy.psx import component, psx&#10;&#10;@component&#10;def Page():&#10;    return psx(&#34;&lt;h1&gt;Hello, NextPy!&lt;/h1&gt;&#34;)"
                     />
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">
                         Both <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">layout.psx</code> and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">index.py</code> will be rendered when the user visits the root of your application <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">/</code>.
                     </p>
 
@@ -218,11 +215,11 @@ def Installation():
                 <!-- Section: Create the public folder -->
                 <div id="create-public-folder" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h3 class="text-xl font-semibold text-white tracking-tight">Create the <code class="text-zinc-200 font-mono text-lg px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">public</code> folder <span class="text-zinc-500 font-normal text-base">(optional)</span></h3>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Create a <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">public</code> folder at the root of your project to store static assets such as images, fonts, etc. Files inside <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">public</code> can then be referenced by your code starting from the base URL <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">/</code>.
                     </p>
                     
-                    <p class="text-base leading-7 text-zinc-400 mt-6">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">
                         You can then reference these assets using the root path <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">/</code>. For example, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">public/profile.png</code> can be referenced as <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">/profile.png</code>:
                     </p>
 
@@ -236,7 +233,7 @@ def Installation():
                 <!-- Section: Run the development server -->
                 <div id="run-dev-server" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Run the development server</h2>
-                    <ol class="list-decimal pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <ol class="list-decimal pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>Run <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy dev</code> to start the development server.</li>
                         <li>Visit <code class="text-blue-400 font-mono text-sm">http://localhost:8000</code> to view your application.</li>
                         <li>Edit the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages/index.py</code> file and save it to see the updated result in your browser.</li>
@@ -249,7 +246,7 @@ def Installation():
                     <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 bg-zinc-900/50 text-sm text-zinc-300">
                         <span class="font-semibold text-white">Minimum mypy version:</span> <span class="font-mono text-xs bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">v1.8.0</span>
                     </div>
-                    <p class="text-base leading-7 text-zinc-400 mt-4">
+                    <p class="text-base leading-7 text-zinc-300 mt-4">
                         NextPy comes with built-in support for Python type hints. To add strict type checking to your project, install <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">mypy</code> and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">ruff</code>. NextPy will automatically respect the type checking rules during the build process.
                     </p>
                 </div>
@@ -257,11 +254,11 @@ def Installation():
                 <!-- Section: Set up your editor -->
                 <div id="setup-editor" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Set up your editor</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         The App Router names files by convention, like <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">index.py</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">layout.psx</code>, and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">api.py</code>, so your editor quickly fills with same-named tabs. Label each tab with its enclosing folders, like <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">blog/&#91;id&#93;</code>, so you can tell them apart.
                     </p>
                     
-                    <p class="text-base leading-7 text-zinc-400 mt-6">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">
                         In VS Code 1.88+ or Cursor, add <a href="#" class="text-blue-400 hover:underline">custom editor labels</a> to <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">.vscode/settings.json</code>. Labeling two folders deep keeps dynamic routes like <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">blog/&#91;id&#93;/index.py</code> from all collapsing to the same <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">&#91;id&#93;</code> label:
                     </p>
 
@@ -282,9 +279,9 @@ def Installation():
                 <!-- Section: Set up linting -->
                 <div id="setup-linting" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Set up linting</h2>
-                    <p class="text-base leading-7 text-zinc-400">NextPy supports linting with <strong>Ruff</strong> (fast Python linter + formatter). Choose a linter and run it directly via <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">ruff.toml</code> scripts.</p>
+                    <p class="text-base leading-7 text-zinc-300">NextPy supports linting with <strong>Ruff</strong> (fast Python linter + formatter). Choose a linter and run it directly via <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">ruff.toml</code> scripts.</p>
                     
-                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-3 text-base leading-7 text-zinc-300">
                         <li>Use <strong>Ruff</strong> (comprehensive rules):</li>
                     </ul>
 
@@ -305,11 +302,11 @@ def Installation():
                 <!-- Section: Set up Absolute Imports -->
                 <div id="setup-imports" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Set up Absolute Imports and Module Path Aliases</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         NextPy has in-built support for absolute imports via your <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.config.py</code> file.
                     </p>
                     
-                    <p class="text-base leading-7 text-zinc-400 mt-6">These options allow you to alias project directories to absolute paths, making it easier and cleaner to import modules. For example:</p>
+                    <p class="text-base leading-7 text-zinc-300 mt-6">These options allow you to alias project directories to absolute paths, making it easier and cleaner to import modules. For example:</p>
 
                     <EnhancedCodeBlock
                         lang="python"
@@ -317,7 +314,7 @@ def Installation():
                         snippet="# Before&#10;from ...components.button import Button&#10;&#10;# After&#10;from components.button import Button"
                     />
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">To configure absolute imports, add the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">baseUrl</code> configuration option to your <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.config.py</code> file. For example:</p>
+                    <p class="text-base leading-7 text-zinc-300 mt-6">To configure absolute imports, add the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">baseUrl</code> configuration option to your <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.config.py</code> file. For example:</p>
 
                     <EnhancedCodeBlock
                         lang="python"
@@ -329,17 +326,17 @@ def Installation():
                 <!-- Section: Upgrade your NextPy app -->
                 <div id="upgrade" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Upgrade your NextPy app</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Keep your NextPy version up to date. Each release ships security patches, bug fixes, and performance optimizations alongside new features, and staying current keeps every individual upgrade small. Run the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">upgrade</code> command:
                     </p>
 
                     <CodeTabs tabs='{upgrade_tabs}' default_tab="pip" />
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">
                         Upgrading also updates the documentation bundled inside the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy</code> package at <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">node_modules/nextpy/dist/docs/</code>. New features arrive with their docs, and existing pages pick up new guidance and pitfalls discovered along the way.
                     </p>
 
-                    <p class="text-base leading-7 text-zinc-400 mt-6">
+                    <p class="text-base leading-7 text-zinc-300 mt-6">
                         See <a href="#" class="text-blue-400 hover:underline">Upgrading</a> for version guides and manual upgrade steps, or the <a href="#" class="text-blue-400 hover:underline">preview docs</a> to explore features before they ship in a stable version.
                     </p>
                     
@@ -372,7 +369,7 @@ def Installation():
             </article>
 
             <!-- RIGHT SIDEBAR (ON THIS PAGE) -->
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto scrollbar-none">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     
@@ -439,8 +436,6 @@ def Installation():
     )
 
 
-
-
 def getServerSideProps(context):
     return {
         "props": {
@@ -450,63 +445,4 @@ def getServerSideProps(context):
 
 default = Installation
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
 
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

@@ -8,7 +8,17 @@ Tests:
 """
 
 import sys
-sys.path.insert(0, '/home/ibrahim-fonyuy/Downloads/NextPyVision (1)/NextPyVision/.nextpy_framework')
+sys.path.insert(0, '.nextpy_framework')
+
+import pytest
+
+pytest.skip(
+    "Legacy manual verification script (no pytest test functions); "
+    "it exercises private ComponentHydrator APIs "
+    "(_extract_handlers_from_source, _safe_eval) that were removed in "
+    "the hydration refactor.",
+    allow_module_level=True,
+)
 
 from nextpy.psx import component, useState, psx
 from nextpy.psx.hydration import interactive_component

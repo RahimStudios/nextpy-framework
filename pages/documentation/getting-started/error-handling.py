@@ -16,11 +16,10 @@ from nextpy.utils import PropsResult
 def Page(props):
     post = props.get("post")
     if post is None:
-        return &lt;p&gt;Post unavailable&lt;/p&gt;
-    return &lt;article&gt;&lt;h1&gt;{post["title"]}&lt;/h1&gt;&lt;/article&gt;
+        return <p>Post unavailable</p>
+    return <article><h1>{post["title"]}</h1></article>
 
 @getServerSideProps
-
 
 
 def getServerSideProps(context):
@@ -94,21 +93,19 @@ def ContactForm():
     useEffect(handle_result, [result])
 
     return (
-        &lt;form onsubmit={submit}&gt;
-            &lt;input value={email} oninput={lambda e: setEmail(e.target.value)} /&gt;
-            &lt;div style={"display: " + ("block" if error else "none")} class="text-red-600 text-sm"&gt;
+        <form onsubmit={submit}>
+            <input value={email} oninput={lambda e: setEmail(e.target.value)} />
+            <div style={"display: " + ("block" if error else "none")} class="text-red-600 text-sm">
                 {error}
-            &lt;/div&gt;
-            &lt;button type="submit"&gt;Send&lt;/button&gt;
-        &lt;/form&gt;
+            </div>
+            <button type="submit">Send</button>
+        </form>
     )"""
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -134,15 +131,15 @@ def ContactForm():
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">Error Handling</h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">Error Handling</h1>
+                    <p class="leading-relaxed text-zinc-300">
                         Errors surface at four layers &mdash; data fetching, API routes, server actions, and the client. Each has its own mechanism; this page covers all of them.
                     </p>
                 </header>
 
                 <div id="data-fetching-errors" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Data fetching errors</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Catch failures inside <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">getServerSideProps</code> and return graceful props &mdash; an unhandled exception produces a 500. Use <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">PropsResult(notFound=True)</code> for missing resources and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">PropsResult(redirect=...)</code> for auth gates:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/posts/[slug].py" snippet={gssp_example} />
@@ -151,7 +148,7 @@ def ContactForm():
 
                 <div id="api-errors" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">API route errors</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Raise FastAPI's <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">HTTPException</code> for proper status codes, or send a <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">(body, status)</code> tuple:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/api/posts/[id].py" snippet={api_example} />
@@ -159,7 +156,7 @@ def ContactForm():
 
                 <div id="server-action-errors" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Server action errors</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Raise <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">ValidationError(field, message)</code> for field-level failures or <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">ServerActionError(message, code)</code> for general failures. The client receives a structured <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">&#123;success: False, error: ...&#125;</code> result:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="lib/actions.py" snippet={action_example} />
@@ -167,7 +164,7 @@ def ContactForm():
 
                 <div id="client-errors" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Client-side display</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Keep error elements mounted but hidden &mdash; toggle visibility from state so screen readers and CSS transitions behave predictably:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="components/contact_form.py" snippet={client_example} />
@@ -195,7 +192,7 @@ def ContactForm():
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -216,63 +213,3 @@ def getServerSideProps(context):
 
 default = ErrorHandlingGuide
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

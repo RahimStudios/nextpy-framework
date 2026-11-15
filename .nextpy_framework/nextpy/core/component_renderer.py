@@ -56,13 +56,17 @@ class ComponentRenderer:
         if current_time - cache_entry.get('timestamp', 0) > self.cache_timeout:
             return False
             
-        # In debug mode, check file modification time
-        if self.debug and file_path.exists():
-            file_mtime = file_path.stat().st_mtime
+        # Check file modification time in ALL modes — one stat() is far
+        # cheaper than serving stale HTML for up to cache_timeout seconds.
+        if file_path.exists():
+            try:
+                file_mtime = file_path.stat().st_mtime
+            except OSError:
+                return False
             cache_mtime = cache_entry.get('file_mtime', 0)
             if file_mtime > cache_mtime:
                 return False
-                
+
         return True
         
     def get_revalidate(self, file_path: Path) -> Optional[int]:
@@ -349,11 +353,25 @@ class ComponentRenderer:
             
             # Check if the original file has an interactive component decorator
             has_interactive_decorator = False
+            original_content = ""
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    original_content = f.read()
+                # Cache file content by (path, mtime) — this read ran on
+                # every render, bypassing the module cache entirely.
+                _key = str(file_path)
+                _mtime = file_path.stat().st_mtime if file_path.exists() else 0
+                cached_src = getattr(self, '_source_cache', {}).get(_key)
+                if cached_src and cached_src[0] == _mtime:
+                    original_content = cached_src[1]
+                else:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        original_content = f.read()
+                    if not hasattr(self, '_source_cache'):
+                        self._source_cache = {}
+                    if len(self._source_cache) > 200:
+                        self._source_cache.clear()
+                    self._source_cache[_key] = (_mtime, original_content)
                 has_interactive_decorator = '@interactive_component' in original_content
-            except:
+            except Exception:
                 pass
             
             # Render the component with props
@@ -434,6 +452,10 @@ class ComponentRenderer:
             
             # Cache the rendered content (never for request-specific SSR pages)
             if render_cache_key is not None:
+                # Bound the cache — distinct context keys can grow without
+                # limit under varied query strings.
+                if len(self.render_cache) >= 500:
+                    self.render_cache.pop(next(iter(self.render_cache)), None)
                 self.render_cache[render_cache_key] = {
                     'html': html,
                     'timestamp': time.time(),
@@ -454,7 +476,10 @@ class ComponentRenderer:
         title = html.escape(props.get('title', 'NextPy App'))
         description = html.escape(props.get('description', 'NextPy Application'))
 
-        dev_mode = props.get("dev", True)
+        # Default to the renderer's debug flag — previously defaulted True,
+        # which injected the dev error-overlay/websocket scripts into
+        # production pages that didn't explicitly pass dev=False.
+        dev_mode = props.get("dev", getattr(self, 'debug', False))
 
         # 🔥 Inject Dev Tools (only in dev mode)
         dev_scripts = ""
@@ -752,8 +777,22 @@ class ComponentRenderer:
     def _render_error_page(self, error: str, file_path: Path) -> str:
         """Render a professional NextPy error page (production-grade UI)"""
 
-        safe_error = html.escape(error)
-        safe_path = html.escape(str(file_path))
+        # In production, don't leak error internals or absolute file paths.
+        if getattr(self, 'debug', False):
+            safe_error = html.escape(error)
+            safe_path = html.escape(str(file_path))
+            error_detail_html = f"""
+            <div class="section">
+                <div class="file">{safe_path}</div>
+
+                <div class="toggle" onclick="toggleError()">Show details</div>
+
+                <pre id="errorBox">{safe_error}</pre>
+            </div>"""
+        else:
+            safe_error = "An internal error occurred while rendering this page."
+            safe_path = ""
+            error_detail_html = ""
 
         # Inject the new action runtime script
         action_runtime_script = ""
@@ -931,13 +970,7 @@ class ComponentRenderer:
             An error occurred while rendering a component.
         </div>
 
-        <div class="section">
-            <div class="file">{safe_path}</div>
-
-            <div class="toggle" onclick="toggleError()">Show details</div>
-
-            <pre id="errorBox">{safe_error}</pre>
-        </div>
+        {error_detail_html}
 
         <div class="actions">
 
@@ -1174,10 +1207,12 @@ class ComponentRenderer:
             keys_to_remove = [key for key in self.render_cache.keys() if key.startswith(str(file_path))]
             for key in keys_to_remove:
                 del self.render_cache[key]
+            self.revalidate_cache.pop(file_key, None)
         else:
             # Clear all cache
             self.cache.clear()
             self.render_cache.clear()
+            self.revalidate_cache.clear()
             self.cache_stats['invalidations'] += len(self.cache)
     
     def get_cache_stats(self) -> Dict[str, Any]:

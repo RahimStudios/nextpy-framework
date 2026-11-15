@@ -1,6 +1,6 @@
 """Production Building - NextPy Documentation"""
 
-from nextpy.psx import component, Link, register_component, interactive_component, useState, useEffect
+from nextpy.psx import component, Link, register_component
 from pages.documentation._components.enhanced_codeblock import EnhancedCodeBlock
 
 register_component("EnhancedCodeBlock", EnhancedCodeBlock)
@@ -51,11 +51,9 @@ nextpy createsuperuser
 nextpy flushdb'''
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -66,17 +64,17 @@ nextpy flushdb'''
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">
                         Production Building
                     </h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <p class="leading-relaxed text-zinc-300">
                         Learn how to build and optimize your NextPy application for production.
                     </p>
                 </header>
 
                 <div id="overview" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Overview</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
         The NextPy CLI covers the whole lifecycle: <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy dev</code> for development with hot reload, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy build</code> for an optimized production bundle, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy start</code> to serve it, and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy export</code> for fully static output.
                     </p>
                 </div>
@@ -84,7 +82,7 @@ nextpy flushdb'''
                 <div id="commands" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">The four commands</h2>
                     <EnhancedCodeBlock lang="bash" filename="terminal" snippet={cli_example} />
-                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-300">
                         <li><strong>dev</strong> — reload and debug on by default; pass <code class="font-mono text-xs">--no-reload</code> or <code class="font-mono text-xs">--no-debug</code> to disable.</li>
                         <li><strong>build</strong> — writes optimized assets to <code class="font-mono text-xs">out/</code>; every optimization can be toggled.</li>
                         <li><strong>start</strong> — production server; reload and debug are off.</li>
@@ -94,7 +92,7 @@ nextpy flushdb'''
 
                 <div id="build-options" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Build options</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Tune the optimizer per deploy — e.g. disable code splitting for a single-file bundle:
                     </p>
                     <EnhancedCodeBlock lang="bash" filename="terminal" snippet={options_example} />
@@ -102,7 +100,7 @@ nextpy flushdb'''
 
                 <div id="environment" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Production environment</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Settings resolve from environment variables — set them in <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">.env</code> locally and in your host's secret store in production:
                     </p>
                     <EnhancedCodeBlock lang="bash" filename=".env" snippet={env_example} />
@@ -135,7 +133,7 @@ nextpy flushdb'''
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -151,70 +149,8 @@ nextpy flushdb'''
     )
 
 
-
-
 def getServerSideProps(context):
     return {"props": {"title": "Production Building - NextPy Docs"}}
 
 default = BuildingGuide
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

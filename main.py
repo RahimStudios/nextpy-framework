@@ -14,47 +14,58 @@ sys.path.insert(0, str(Path(__file__).parent / ".nextpy_framework"))
 
 
 
-# Compile Tailwind CSS using framework's npm script; this keeps paths consistent regardless
-# of where the user runs the server from.
+# Compile Tailwind CSS before starting the application
 proj_root = Path.cwd()
 framework_dir = Path(__file__).parent
 
 try:
     print("Compiling Tailwind CSS...")
-    # If the project root doesn't have a styles.css yet, warn the user and create a minimal one.
-    styles_file = proj_root / "styles.css"
+    # Ensure styles.css exists in project root
+    styles_file = proj_root / "styles" / "styles.css"
     if not styles_file.exists():
-        print("Warning: styles.css not found in project root, creating a default file.")
-        styles_file.write_text("@tailwind base;\n@tailwind components;\n@tailwind utilities;\n")
+        print("Warning: styles/styles.css not found, creating a default file.")
+        styles_file.parent.mkdir(parents=True, exist_ok=True)
+        styles_file.write_text("@import \"tailwindcss\";\n")
 
     import shutil
 
     npm_bin = shutil.which("npm")
     if not npm_bin:
-        raise FileNotFoundError("npm not found on PATH")
+        print("Warning: npm not found on PATH. Skipping Tailwind compilation.")
+        print("Install Node.js from https://nodejs.org/ to enable Tailwind CSS.")
+    else:
+        # Check if package.json exists in project root
+        package_json = proj_root / "package.json"
+        if package_json.exists():
+            # Ensure node dependencies are installed
+            node_modules = proj_root / "node_modules"
+            if not node_modules.exists():
+                print("Installing Node.js dependencies...")
+                try:
+                    lockfile = proj_root / "package-lock.json"
+                    if lockfile.exists():
+                        subprocess.run([npm_bin, "ci"], cwd=str(proj_root), check=True)
+                    else:
+                        subprocess.run([npm_bin, "install"], cwd=str(proj_root), check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"Warning: npm install failed: {e}")
+                    print("You can try running 'npm install' manually.")
 
-    # Ensure node deps are present. Prefer `npm ci` when a lockfile exists.
-    lockfile = framework_dir / "package-lock.json"
-    node_modules = framework_dir / "node_modules"
-    try:
-        if not node_modules.exists():
-            if lockfile.exists():
-                subprocess.run([npm_bin, "ci"], cwd=str(framework_dir), check=True)
-            else:
-                subprocess.run([npm_bin, "install"], cwd=str(framework_dir), check=True)
+            # Run Tailwind CSS build with pinned version 4.3.3
+            try:
+                # Use npx with specific version to ensure v4.3.3 is used
+                subprocess.run([npm_bin, "exec", "--", "tailwindcss@4.3.3", "-i", "./styles/styles.css", "-o", "./public/tailwind.css", "--minify"], cwd=str(proj_root), check=True)
+                print("Tailwind CSS v4.3.3 compiled successfully.")
+            except subprocess.CalledProcessError as e:
+                print(f"Error compiling Tailwind CSS: {e}")
+                print("You can try running 'npx tailwindcss@4.3.3 -i ./styles/styles.css -o ./public/tailwind.css --minify' manually.")
+        else:
+            print("Warning: package.json not found in project root. Skipping Tailwind compilation.")
+            print("Create a package.json with Tailwind CSS dependencies to enable Tailwind.")
 
-        # Run the build script defined in the vendored framework's package.json
-        subprocess.run([npm_bin, "run", "build:tailwind"], cwd=str(framework_dir), check=True)
-        print("Tailwind CSS compiled successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error compiling Tailwind CSS: {e}")
-        print("You can try running `cd .nextpy_framework/nextpy && npm ci && npm run build:tailwind` manually.")
-except subprocess.CalledProcessError as e:
-    print(f"Error compiling Tailwind CSS: {e}")
-    print("You can try running `cd .nextpy_framework/nextpy && npm ci && npm run build:tailwind` manually.")
-except FileNotFoundError:
-    print("Error: npm not found. Make sure Node.js is installed and available on PATH.")
-    print("See https://nodejs.org/ for installation instructions.")
+except Exception as e:
+    print(f"Warning: Tailwind CSS compilation failed: {e}")
+    print("The application will continue without Tailwind CSS.")
 
 
 import nextpy as nx
@@ -87,17 +98,21 @@ from nextpy.db import init_db
 from nextpy.config import settings
 import os
 
-# Ensure database URL is absolute path for consistency
+# Get database URL from settings
 db_url = settings["database_url"]
-if db_url.startswith("sqlite:///"):
-    db_path = db_url.replace("sqlite:///", "")
-    if not os.path.isabs(db_path):
-        # Make it relative to the project directory
-        project_dir = Path(__file__).parent
-        abs_path = str(project_dir / db_path)
-        db_url = f"sqlite:///{abs_path}"
 
-init_db(db_url)
+# Initialize database with error handling
+try:
+    init_db(db_url)
+except Exception as e:
+    print(f"⚠️  Database initialization failed: {e}")
+    print("🔄 Using fallback database configuration...")
+    # Try with a simple SQLite database
+    try:
+        init_db("sqlite:///./nextpy_fallback.db")
+    except Exception as fallback_error:
+        print(f"❌ Fallback database also failed: {fallback_error}")
+        print("⚠️  Continuing without database - some features may not work")
 
 admin_site = AdminSite()
 admin_site.register(User)

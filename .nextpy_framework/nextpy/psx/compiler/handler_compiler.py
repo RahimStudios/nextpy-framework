@@ -35,6 +35,49 @@ class HandlerCompiler(ast.NodeVisitor):
         # FIX: Track useState assignments to map setters to state variables
         self.state_setter_map: Dict[str, str] = {}  # {setter_name: state_var_name}
     
+    def extract_handlers(self, source: str) -> Dict[str, List[Dict[str, Any]]]:
+        """Backwards-compatible handler extraction from a source string.
+
+        Older callers passed raw Python source containing ``def`` handler
+        functions; the modern API is ``extract_handlers_from_function`` /
+        ``extract_inline_handlers``. This shim parses the source, extracts
+        each top-level ``def`` block, and compiles it like a named handler.
+        """
+        handlers: Dict[str, List[Dict[str, Any]]] = {}
+        if not isinstance(source, str):
+            return handlers
+
+        import re as _re
+        lines = source.split('\n')
+        current = None
+        buf: List[str] = []
+
+        def _flush():
+            nonlocal current, buf
+            if current and buf:
+                code = '\n'.join(buf)
+                try:
+                    compiled = compile_handler_to_actions(
+                        code, f"handler_{current}")
+                    if compiled:
+                        handlers[current] = compiled
+                except Exception:
+                    handlers[current] = [{'type': 'RAW', 'code': code}]
+            current, buf = None, []
+
+        for line in lines:
+            m = _re.match(r'\s*def\s+(\w+)\s*\(', line)
+            if m:
+                _flush()
+                current = m.group(1)
+                buf = [line]
+            elif current and (line.startswith('    ') or line.startswith('\t') or not line.strip()):
+                buf.append(line)
+            elif current and line.strip() and not line.startswith((' ', '\t')):
+                _flush()
+        _flush()
+        return handlers
+
     def extract_handlers_from_function(self, func: Callable, component_name: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         """Extract and compile handlers from a component function"""
         self.handlers.clear()

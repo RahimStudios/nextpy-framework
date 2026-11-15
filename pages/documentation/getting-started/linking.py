@@ -13,11 +13,11 @@ def LinkingGuide():
 @component
 def Navigation():
     return (
-        &lt;nav class="flex gap-4"&gt;
-            &lt;Link href="/"&gt;Home&lt;/Link&gt;
-            &lt;Link href="/about"&gt;About&lt;/Link&gt;
-            &lt;Link href="/contact"&gt;Contact&lt;/Link&gt;
-        &lt;/nav&gt;
+        <nav class="flex gap-4">
+            <Link href="/">Home</Link>
+            <Link href="/about">About</Link>
+            <Link href="/contact">Contact</Link>
+        </nav>
     )"""
 
     dynamic_example = """from nextpy.psx import component, Link
@@ -26,13 +26,13 @@ def Navigation():
 def UserList(props):
     users = props.get("users", [])
     return (
-        &lt;div class="space-y-2"&gt;
+        <div class="space-y-2">
             {for user in users:
-                &lt;Link href={"/users/" + str(user["id"])} class="block p-2 hover:bg-zinc-800 rounded"&gt;
+                <Link href={"/users/" + str(user["id"])} class="block p-2 hover:bg-zinc-800 rounded">
                     {user["name"]}
-                &lt;/Link&gt;
+                </Link>
             }
-        &lt;/div&gt;
+        </div>
     )"""
 
     programmatic_example = """from nextpy.psx import interactive_component, useState, useEffect, callServerAction
@@ -55,11 +55,11 @@ def LoginForm():
     useEffect(handle_result, [_server_result])
 
     return (
-        &lt;form onsubmit={submit}&gt;
-            &lt;input value={email} oninput={lambda e: setEmail(e.target.value)} /&gt;
-            &lt;input type="password" value={password} oninput={lambda e: setPassword(e.target.value)} /&gt;
-            &lt;button type="submit" disabled={_server_loading}&gt;Login&lt;/button&gt;
-        &lt;/form&gt;
+        <form onsubmit={submit}>
+            <input value={email} oninput={lambda e: setEmail(e.target.value)} />
+            <input type="password" value={password} oninput={lambda e: setPassword(e.target.value)} />
+            <button type="submit" disabled={_server_loading}>Login</button>
+        </form>
     )"""
 
     active_example = """from nextpy.psx import interactive_component, useState, useEffect
@@ -83,18 +83,16 @@ def Navigation():
         return base + " text-zinc-400 hover:text-white"
 
     return (
-        &lt;nav class="flex gap-2"&gt;
-            &lt;Link href="/" class={link_class("/")}&gt;Home&lt;/Link&gt;
-            &lt;Link href="/docs" class={link_class("/docs")}&gt;Docs&lt;/Link&gt;
-        &lt;/nav&gt;
+        <nav class="flex gap-2">
+            <Link href="/" class={link_class("/")}>Home</Link>
+            <Link href="/docs" class={link_class("/docs")}>Docs</Link>
+        </nav>
     )"""
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -120,24 +118,24 @@ def Navigation():
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">
                         Linking and Navigation
                     </h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <p class="leading-relaxed text-zinc-300">
                         NextPy uses file-system routing: every file under <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages/</code> becomes a URL. This page covers the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Link</code> component, dynamic hrefs, programmatic navigation, and active-link states.
                     </p>
                 </header>
 
                 <div id="overview" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Overview</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Clicking a <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Link</code> does not reload the page. The client router prefetches the target, swaps the content inside your layouts, updates the URL with <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">history.pushState</code>, and restores scroll position on back/forward navigation.
                     </p>
                 </div>
 
                 <div id="link-component" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">The Link Component</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Import <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Link</code> from <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.psx</code>. It renders a real anchor tag — SEO-friendly and middle-clickable — while intercepting internal navigations for SPA transitions. External URLs and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">target="_blank"</code> links fall through to normal browser behavior.
                     </p>
 
@@ -163,7 +161,7 @@ def Navigation():
 
                 <div id="dynamic-links" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Dynamic Links</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Build hrefs from data with f-strings or concatenation inside a <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">{'{for ...}'}</code> loop. Dynamic segments like <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">pages/users/[id].py</code> receive their values through the same URL shape:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/users.py" snippet={dynamic_example} />
@@ -171,7 +169,7 @@ def Navigation():
 
                 <div id="programmatic-navigation" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Programmatic Navigation</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         After a server action succeeds — login, form submit, delete — navigate with <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">window.navigateTo(path)</code>. The alias <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">window.__nextpyRouter.navigate(path)</code> does the same. Both go through the client router: history entry, scroll reset, and layout-preserving page swap.
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/login.py" snippet={programmatic_example} />
@@ -179,7 +177,7 @@ def Navigation():
 
                 <div id="active-links" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Active Link States</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Read the current path from <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">window.location.pathname</code> and listen for the <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy:navigate</code> DOM event to re-evaluate after every client-side navigation:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="components/navbar.py" snippet={active_example} />
@@ -207,7 +205,7 @@ def Navigation():
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -223,72 +221,9 @@ def Navigation():
     )
 
 
-
-
-
 def getServerSideProps(context):
     return {"props": {"title": "Linking and Navigation - NextPy Docs"}}
 
 
 default = LinkingGuide
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

@@ -1,6 +1,6 @@
 """Utilities API - NextPy Documentation"""
 
-from nextpy.psx import component, Link, register_component, interactive_component, useState, useEffect
+from nextpy.psx import component, Link, register_component
 from pages.documentation._components.enhanced_codeblock import EnhancedCodeBlock
 
 register_component("EnhancedCodeBlock", EnhancedCodeBlock)
@@ -9,9 +9,7 @@ register_component("EnhancedCodeBlock", EnhancedCodeBlock)
 @component
 def UtilitiesAPI():
     db_example = """from nextpy.db import get_session, paginate, apply_filters
-from nextpy.db import User, Post, Todo, Job, Application
-
-
+from nextpy.db import User, UserSession, Post, Todo, Job, Application
 
 
 def getServerSideProps(context):
@@ -40,12 +38,58 @@ def validate(payload):
         raise ValueError("Email is required")
     return payload"""
 
-    return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
+    helpers_example = """from nextpy.db import (
+    init_db, get_db, get_session, session,
+    paginate, apply_filters, get_or_none, get_or_404,
+    transaction, batch_get, eager_load, serialize_model, count_by,
+)
 
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+# Initialize once at startup (creates tables, returns the Database)
+db_manager = init_db()          # or init_db("postgresql+psycopg2://...")
+
+# Sessions
+db = get_session()              # session() is an alias
+with transaction() as db:       # commit on success, rollback on error
+    db.add(todo)
+
+# Single-row fetch
+user = get_or_none(db, User, 1)        # -> User | None
+post = get_or_404(db, Post, 7, "Post") # -> raises LookupError
+
+# Batch fetch by a column, keyed dict
+rows = batch_get(db, Post, [1, 2, 3], key="id")
+# -> {1: <Post>, 2: <Post>, 3: <Post>}
+
+# Eager-load relationships (selectinload, avoids N+1)
+q = eager_load(db.query(Job), Job.employer, Job.applications)
+
+# Serialization to plain dicts (datetimes -> isoformat)
+data = serialize_model(user, fields=["id", "email"], exclude=["hashed_password"])
+
+# Grouped counts
+counts = count_by(db, Application, "status", filters={"job_id": 5})
+# -> {"pending": 3, "accepted": 1}"""
+
+    models_example = """from nextpy.db import User, UserSession, Post, Todo, Job, Application
+
+# User        - id, email, username, full_name, hashed_password,
+#               role (job_seeker|employer), bio, company_name, is_active, created_at
+# UserSession - id, user_id, created_at, expires_at (DB-backed login sessions)
+# Post        - id, title, slug, content, excerpt, author_id,
+#               published, created_at, updated_at
+# Todo        - id, title, completed, created_at, updated_at
+# Job         - id, title, company, location, description,
+#               salary_min, salary_max, job_type, experience_level,
+#               employer_id -> users.id, is_active + relationships
+#               (applications, employer)
+# Application - id, job_id -> jobs.id, applicant_id -> users.id,
+#               cover_letter, resume_url, status (pending|accepted|rejected)
+#               + lazy="joined" relationships to job and applicant"""
+
+    return (
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -56,36 +100,48 @@ def validate(payload):
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">Utilities</h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">Utilities</h1>
+                    <p class="leading-relaxed text-zinc-300">
                         Server-side helpers shipped with NextPy: the database session layer, caching, server actions, and security utilities.
                     </p>
                 </header>
 
                 <div id="database" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Database (nextpy.db)</h2>
-                    <p class="text-base leading-7 text-zinc-400">
-                        SQLAlchemy-backed session management with pagination, filtering, and helper queries. Built-in models include <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">User</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Post</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Todo</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Job</code>, and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Application</code>.
+                    <p class="text-base leading-7 text-zinc-300">
+                        SQLAlchemy-backed session management with pagination, filtering, and helper queries. Built-in models include <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">User</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">UserSession</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Post</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Todo</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Job</code>, and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Application</code>.
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/index.py" snippet={db_example} />
-                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-300">
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_session()</code> / <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">session()</code> &mdash; scoped DB session.</li>
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">paginate(query, page, per_page)</code> &mdash; returns <code class="font-mono text-xs">&#123;items, total, page, pages, has_next, has_prev&#125;</code>.</li>
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">apply_filters(query, model, filters, allowed, search, search_fields)</code> &mdash; safe dynamic filtering.</li>
-                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_or_none</code> / <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_or_404</code> &mdash; fetch by id with optional 404.</li>
-                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">transaction()</code> &mdash; context manager for atomic writes.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_or_none</code> / <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_or_404</code> &mdash; fetch by primary key; <code class="font-mono text-xs">get_or_404(db, model, id, name)</code> raises <code class="font-mono text-xs">LookupError</code>.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">transaction()</code> &mdash; context manager yielding a session that commits on success and rolls back on error.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">init_db(url=None)</code> / <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">get_db()</code> &mdash; initialize and retrieve the global <code class="font-mono text-xs">Database</code> (URL from arg or <code class="font-mono text-xs">DATABASE_URL</code>, default <code class="font-mono text-xs">sqlite:///./nextpy.db</code>).</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">batch_get(db, model, ids, key="id")</code> &mdash; one query for many rows, returned as a dict keyed by <code class="font-mono text-xs">key</code>.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">eager_load(query, *paths)</code> &mdash; applies <code class="font-mono text-xs">selectinload</code> to relationship paths, avoiding N+1 queries.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">serialize_model(obj, fields=None, exclude=())</code> &mdash; converts a model's columns to a plain dict; datetimes become ISO strings.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">count_by(db, model, group_field, filters=None)</code> &mdash; grouped counts via a single <code class="font-mono text-xs">GROUP BY</code> query; optional filters go through <code class="font-mono text-xs">apply_filters</code>.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Page</code> dataclass &mdash; <code class="font-mono text-xs">paginate()</code> returns <code class="font-mono text-xs">Page(items, total, page, per_page, pages, has_next, has_prev)</code> with a <code class="font-mono text-xs">to_dict(include_items=False)</code> serializer; <code class="font-mono text-xs">max_per_page</code> defaults to 100.</li>
+                        <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">Database</code> / <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">DatabaseConfig</code> &mdash; connection manager; env-tunable via <code class="font-mono text-xs">DB_ECHO</code>, <code class="font-mono text-xs">DB_POOL_SIZE</code>, <code class="font-mono text-xs">DB_MAX_OVERFLOW</code>; methods <code class="font-mono text-xs">get_session()</code>, <code class="font-mono text-xs">create_tables()</code>, <code class="font-mono text-xs">drop_tables()</code>, <code class="font-mono text-xs">close()</code>.</li>
                     </ul>
+                    <p class="text-base leading-7 text-zinc-300">
+                        Built-in models live on <code class="font-mono text-xs">Base</code> (= <code class="font-mono text-xs">Model</code>): <strong class="text-zinc-200">User</strong>, <strong class="text-zinc-200">UserSession</strong>, <strong class="text-zinc-200">Post</strong>, <strong class="text-zinc-200">Todo</strong>, <strong class="text-zinc-200">Job</strong>, and <strong class="text-zinc-200">Application</strong> (a job board schema with <code class="font-mono text-xs">Job.applications</code>/<code class="font-mono text-xs">employer</code> and <code class="font-mono text-xs">Application.job</code>/<code class="font-mono text-xs">applicant</code> relationships).
+                    </p>
+                    <EnhancedCodeBlock lang="python" filename="nextpy/db.py" snippet={models_example} />
+                    <EnhancedCodeBlock lang="python" filename="pages/index.py" snippet={helpers_example} />
                 </div>
 
                 <div id="cache" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Caching (nextpy.cache)</h2>
-                    <p class="text-base leading-7 text-zinc-400">An in-process TTL cache with decorator and manual invalidation:</p>
+                    <p class="text-base leading-7 text-zinc-300">An in-process TTL cache with decorator and manual invalidation:</p>
                     <EnhancedCodeBlock lang="python" filename="pages/dashboard.py" snippet={cache_example} />
                 </div>
 
                 <div id="server-actions" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Server actions (nextpy.server_actions)</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Named actions invoked from the client via <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">callServerAction</code>. Actions can declare validators and return JSON-safe payloads.
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/actions/auth_actions.py" snippet={actions_example} />
@@ -93,7 +149,7 @@ def validate(payload):
 
                 <div id="security" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Security & auth helpers</h2>
-                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-400">
+                    <ul class="list-disc pl-6 space-y-2 text-base leading-7 text-zinc-300">
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.security</code> &mdash; password hashing, token helpers, and request guards.</li>
                         <li><code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">nextpy.auth</code> &mdash; session cookies, current-user resolution, and OAuth helpers.</li>
                     </ul>
@@ -121,7 +177,7 @@ def validate(payload):
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -142,63 +198,3 @@ def getServerSideProps(context):
 
 default = UtilitiesAPI
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

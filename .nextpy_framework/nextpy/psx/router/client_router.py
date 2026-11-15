@@ -82,6 +82,12 @@ CLIENT_ROUTER_SCRIPT = r"""
                 });
                 if (resp.ok) {
                     const html = await resp.text();
+                    // Bound the prefetch cache — full page HTML per URL
+                    // would otherwise accumulate forever.
+                    if (this.prefetchCache.size >= 30) {
+                        const oldest = this.prefetchCache.keys().next().value;
+                        this.prefetchCache.delete(oldest);
+                    }
                     this.prefetchCache.set(url, {
                         html,
                         timestamp: Date.now()
@@ -122,10 +128,17 @@ CLIENT_ROUTER_SCRIPT = r"""
             const container = document.querySelector(this.containerSelector);
             if (!container) return;
 
-            // Clean up existing hydrated components
+            // Clean up existing hydrated components — also drop the runtime's
+            // per-component registries so SPA navigation doesn't leak
+            // Maps/listeners for every page ever visited.
             if (window.nextpyComponents) {
                 Object.keys(window.nextpyComponents).forEach(id => {
                     try { window.nextpyComponents[id].destroy(); } catch (e) {}
+                    try {
+                        if (window.NextPyActionRuntime && window.NextPyActionRuntime.unregisterComponent) {
+                            window.NextPyActionRuntime.unregisterComponent(id);
+                        }
+                    } catch (e) {}
                 });
                 window.nextpyComponents = {};
             }

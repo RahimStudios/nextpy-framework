@@ -736,15 +736,25 @@ def psx(psx_str: str, context: Dict[str, Any] = None) -> PSXElement:
         try:
             frame = inspect.currentframe().f_back
             if frame:
+                # Merge module globals first so imported components/helpers
+                # resolve inside JSX; locals override globals on collision.
+                # Callables are kept — <MyComponent /> resolution needs them.
                 captured = {
+                    k: v
+                    for k, v in frame.f_globals.items()
+                    if (
+                        not k.startswith('_')
+                        and not isinstance(v, type)
+                    )
+                }
+                captured.update({
                     k: v
                     for k, v in frame.f_locals.items()
                     if (
                         not k.startswith('_')
-                        and not callable(v)
                         and not isinstance(v, type)
                     )
-                }
+                })
         except Exception:
             pass
         merged: Dict[str, Any] = captured

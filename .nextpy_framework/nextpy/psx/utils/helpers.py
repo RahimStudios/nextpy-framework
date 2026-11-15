@@ -33,10 +33,26 @@ class PSXCompiler:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             return self.compile_psx(content, context)
         except Exception as e:
             return f"<!-- File Error: {e} -->"
+
+    def compile_file(self, file_path: str, context: Dict[str, Any] = None) -> str:
+        """Alias for compile_psx_file (source-code in, HTML out)."""
+        return self.compile_psx_file(file_path, context)
+
+    def is_psx_file(self, file_path: str) -> bool:
+        """Check if a file likely contains PSX/JSX syntax."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return (
+                "<" in content and ">" in content and
+                ("return (" in content or "return(" in content or "psx(" in content)
+            )
+        except Exception:
+            return False
 
 
 class PSXPreprocessor:
@@ -174,18 +190,18 @@ class PSXLegacyCompiler:
 _compiler = PSXCompiler()
 
 
-def compile_psx(source_code: str) -> str:
+def compile_psx(source_code: str, context: Dict[str, Any] = None) -> str:
     """
     Compile PSX syntax into valid Python code
     """
-    return _compiler.compile_psx(source_code)
+    return _compiler.compile_psx(source_code, context)
 
 
-def compile_psx_file(file_path: str) -> str:
+def compile_psx_file(file_path: str, context: Dict[str, Any] = None) -> str:
     """
     Compile a Python file containing PSX syntax
     """
-    return _compiler.compile_file(file_path)
+    return _compiler.compile_psx_file(file_path, context)
 
 
 def is_psx_file(file_path: str) -> bool:

@@ -1,5 +1,8 @@
 # NextPy Framework Requirements
-fastapi>=0.100.0
+# Keep in sync with pyproject.toml — fastapi>=0.122 pulls a starlette that is
+# compatible with httpx>=0.28 (older starlette TestClient breaks on httpx 0.28).
+fastapi>=0.122.0
+starlette>=0.40.0
 uvicorn>=0.23.0
 jinja2>=3.1.0
 pydantic>=2.0.0
@@ -9,7 +12,7 @@ watchdog>=3.0.0
 python-multipart>=0.0.6
 pillow>=10.0.0
 aiofiles>=23.0.0
-httpx>=0.24.0,<0.25  # ensure compatibility with Starlette TestClient
+httpx>=0.28.1
 sqlalchemy>=2.0.0
 python-dotenv>=1.0.0
 pyjwt>=2.8.0

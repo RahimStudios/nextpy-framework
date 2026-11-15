@@ -1,0 +1,47 @@
+"""Animation Playground — root layout."""
+
+from nextpy.psx import component, Link
+
+
+@component
+def Layout(children, **props):
+    props = props or {}
+    title = props.get("title", "Animation Playground — NextPy")
+
+    return (
+        <html>
+            <head>
+                <title>{title}</title>
+                <link rel="shortcut icon" href="/static/images/icon.png" type="image/x-icon" />
+                <link href="/tailwind.css" rel="stylesheet" />
+            </head>
+            <body class="bg-[#000000] text-zinc-300 antialiased">
+                <div class="flex min-h-screen flex-col">
+                    <header class="sticky top-0 z-50 w-full border-b border-zinc-800/60 bg-black backdrop-blur">
+                        <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+                            <div class="flex items-center gap-6">
+                                <Link href="/" class="text-sm font-semibold text-white">NextPy</Link>
+                                <span class="text-zinc-700">/</span>
+                                <Link href="/animation-playground" class="text-sm text-zinc-400 transition-colors hover:text-white">Animations</Link>
+                            </div>
+                            <nav class="flex items-center gap-5 text-sm text-zinc-500">
+                                <Link href="/animation-playground/components" class="transition-colors hover:text-zinc-200">Components</Link>
+                                <Link href="/animation-playground/ai" class="transition-colors hover:text-zinc-200">AI</Link>
+                                <Link href="/animation-playground/utilities" class="transition-colors hover:text-zinc-200">Utilities</Link>
+                                <Link href="/documentation" class="transition-colors hover:text-zinc-200">Docs</Link>
+                            </nav>
+                        </div>
+                    </header>
+                    <main class="flex-1">
+                        {children}
+                    </main>
+                    <footer class="border-t border-zinc-800/60 py-6">
+                        <div class="mx-auto flex max-w-5xl items-center justify-between px-6 text-xs text-zinc-600">
+                            <span>Motion — Web Animations API, no JS bundle.</span>
+                            <Link href="/animation-playground/components" class="transition-colors hover:text-zinc-400">All animations →</Link>
+                        </div>
+                    </footer>
+                </div>
+            </body>
+        </html>
+    )

@@ -3,7 +3,7 @@ NextPy - The Python Web Framework
 Full-stack framework with file-based routing, SSR, SSG, and enhanced client-server sync
 """
 
-__version__ = "5.0.0"
+__version__ = "5.2.0"
 
 from nextpy.core.router import Router, Route, DynamicRoute
 from nextpy.core.renderer import Renderer
@@ -92,6 +92,10 @@ from nextpy.psx import (
     
     # Utils
     compile_psx, compile_psx_file, is_psx_file, PSXCompiler,
+    create_context, Context, Provider,
+    map_list, filter_list, reduce_list, find_list, some_list, every_list,
+    conditional, and_condition, or_condition, ternary, key_value,
+    create_onfullscreenchange, create_onfullscreenerror,
 )
 
 # Legacy hooks for backward compatibility
@@ -176,6 +180,10 @@ __all__ = [
     
     # PSX Utils
     'compile_psx', 'compile_psx_file', 'is_psx_file', 'PSXCompiler',
+    'create_context', 'Context', 'Provider',
+    'map_list', 'filter_list', 'reduce_list', 'find_list', 'some_list', 'every_list',
+    'conditional', 'and_condition', 'or_condition', 'ternary', 'key_value',
+    'create_onfullscreenchange', 'create_onfullscreenerror',
     
     # Legacy hooks
     'legacy_useState', 'legacy_useEffect', 'legacy_useContext', 'legacy_useReducer',

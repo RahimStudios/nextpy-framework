@@ -7,10 +7,10 @@ def Introduction(props):
 
     <!-- Document Header -->
     <header class="mb-12">
-        <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+        <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">
             Welcome to NextPy!
         </h1>
-        <p class="text-lg leading-relaxed text-zinc-400">
+        <p class="leading-relaxed text-zinc-400">
             NextPy is a flexible, highly optimized Python framework for building full-stack web applications. By utilizing pre-compiled structures, it unifies user interfaces, routing patterns, and data persistence models under a single clean execution layer.
         </p>
     </header>

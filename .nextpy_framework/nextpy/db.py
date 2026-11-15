@@ -27,32 +27,85 @@ class DatabaseConfig:
     
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./nextpy.db")
-        # Convert relative SQLite path to absolute path to ensure consistency
-        if self.database_url.startswith("sqlite:///"):
-            db_path = self.database_url.replace("sqlite:///", "")
-            if not os.path.isabs(db_path):
-                # Make it relative to the current working directory
-                abs_path = os.path.abspath(db_path)
-                self.database_url = f"sqlite:///{abs_path}"
+        # Debug: print the original URL
+        print(f"🔍 Database URL from config: {self.database_url}")
+        # For SQLite, ensure we have the correct format with three slashes
+        if self.database_url.startswith("sqlite://"):
+            # Remove any extra slashes to ensure proper format
+            # sqlite:///path -> sqlite:///path (three slashes for absolute path)
+            # sqlite://path -> sqlite:///path (add missing slash)
+            # sqlite:////path -> sqlite:///path (remove extra slash)
+            parts = self.database_url.split("://", 1)
+            if len(parts) == 2:
+                scheme, path = parts
+                # Normalize the path to have exactly the right number of slashes
+                if path.startswith("/"):
+                    # Absolute path - ensure three slashes after sqlite:
+                    path = path.lstrip("/")
+                    self.database_url = f"{scheme}:///{path}"
+                else:
+                    # Relative path - use sqlite:///./path format
+                    self.database_url = f"{scheme}:///./{path}"
+        # Debug: print the final URL
+        print(f"✅ Normalized Database URL: {self.database_url}")
+        # Validate URL format for common database types
+        if self.database_url.startswith("postgresql") or self.database_url.startswith("postgres"):
+            # Ensure PostgreSQL URL has proper format
+            if "://" not in self.database_url:
+                self.database_url = f"postgresql:///{self.database_url}"
+        elif self.database_url.startswith("mysql"):
+            # Ensure MySQL URL has proper format
+            if "://" not in self.database_url:
+                self.database_url = f"mysql:///{self.database_url}"
         self.echo = os.getenv("DB_ECHO", "false").lower() == "true"
         self.pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
         self.max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
         
     def get_engine(self):
-        """Get SQLAlchemy engine"""
-        if self.database_url.startswith("sqlite"):
+        """Get SQLAlchemy engine with robust URL handling"""
+        try:
+            if self.database_url.startswith("sqlite"):
+                return create_engine(
+                    self.database_url,
+                    echo=self.echo,
+                    connect_args={"check_same_thread": False}
+                )
+            elif self.database_url.startswith("postgresql") or self.database_url.startswith("postgres"):
+                # PostgreSQL URL
+                return create_engine(
+                    self.database_url,
+                    echo=self.echo,
+                    pool_size=self.pool_size,
+                    max_overflow=self.max_overflow,
+                    pool_pre_ping=True
+                )
+            elif self.database_url.startswith("mysql"):
+                # MySQL URL
+                return create_engine(
+                    self.database_url,
+                    echo=self.echo,
+                    pool_size=self.pool_size,
+                    max_overflow=self.max_overflow,
+                    pool_pre_ping=True
+                )
+            else:
+                # Try to create engine with the URL as-is
+                return create_engine(
+                    self.database_url,
+                    echo=self.echo,
+                    pool_size=self.pool_size,
+                    max_overflow=self.max_overflow,
+                    pool_pre_ping=True
+                )
+        except Exception as e:
+            print(f"❌ Failed to create database engine: {e}")
+            print(f"🔄 URL was: {self.database_url}")
+            # Fallback to SQLite
+            print("🔄 Falling back to SQLite database...")
             return create_engine(
-                self.database_url,
+                "sqlite:///./nextpy_fallback.db",
                 echo=self.echo,
                 connect_args={"check_same_thread": False}
-            )
-        else:
-            return create_engine(
-                self.database_url,
-                echo=self.echo,
-                pool_size=self.pool_size,
-                max_overflow=self.max_overflow,
-                pool_pre_ping=True
             )
 
 
@@ -86,11 +139,48 @@ _db: Optional[Database] = None
 
 
 def init_db(database_url: Optional[str] = None) -> Database:
-    """Initialize global database instance"""
+    """Initialize global database instance with robust error handling"""
     global _db
-    _db = Database(database_url)
-    _db.create_tables()
-    return _db
+    try:
+        _db = Database(database_url)
+        _db.create_tables()
+        return _db
+    except Exception as e:
+        # If database initialization fails, try with a simple SQLite fallback
+        print(f"⚠️  Database initialization failed: {e}")
+        print("🔄 Falling back to SQLite database...")
+        try:
+            # Use a simple SQLite database in the current directory
+            fallback_url = "sqlite:///./nextpy_fallback.db"
+            _db = Database(fallback_url)
+            _db.create_tables()
+            print("✅ Fallback database initialized successfully")
+            return _db
+        except Exception as fallback_error:
+            print(f"❌ Fallback database also failed: {fallback_error}")
+            # Create a dummy database object that won't crash the app
+            _db = DummyDatabase()
+            return _db
+
+
+class DummyDatabase:
+    """Dummy database object for when database initialization fails"""
+    def __init__(self):
+        self.config = type('obj', (object,), {'database_url': 'sqlite:///./dummy.db'})()
+        self.engine = None
+        self.SessionLocal = None
+    
+    def get_session(self):
+        raise RuntimeError("Database not available")
+    
+    def create_tables(self):
+        pass
+    
+    def drop_tables(self):
+        pass
+    
+    def close(self):
+        pass
 
 
 def get_db() -> Database:

@@ -1,208 +1,200 @@
-from nextpy.psx import component as interactive_component
+from nextpy.psx import component, Link
 
-@interactive_component
+
+@component
 def AboutPage(props=None):
-    props=props or {}
-    title=props.get('title')
-    
-    return(
-        <div>
+    props = props or {}
+    title = props.get('title', 'About NextPy')
 
-        <div class="px-4 py-20 bg-gradient-to-br from-blue-50 to-indigo-50">
-            <div class="max-w-6xl mx-auto text-center">
-                <h1 class="mb-6 text-5xl font-bold text-transparent md:text-6xl bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text">{title}</h1>
-                <p class="max-w-3xl mx-auto text-xl text-gray-600">Bridging Python's power with modern web development. Build production-ready applications faster.</p>
-            </div>
-        </div>
+    principles = [
+        ("One language", "Frontend and backend in Python — no context-switching, no glue code."),
+        ("Zero JS build", "PSX compiles to a reactive runtime served inline — nothing to bundle."),
+        ("Web fundamentals", "SSR, SSG, ISR, streaming and server actions — the full modern stack."),
+        ("Batteries included", "ORM, auth, CLI, caching and API routes ship in the box."),
+    ]
 
-        <div class="max-w-6xl px-4 py-16 mx-auto">
-            
-            <div class="mb-20">
-                <h2 class="mb-6 text-4xl font-bold text-gray-900">Our Mission</h2>
-                <div class="grid items-center gap-12 md:grid-cols-2">
+    stack = [
+        ("Backend", "FastAPI + Uvicorn", "High-performance async framework with automatic OpenAPI documentation."),
+        ("Frontend", "PSX + Tailwind CSS", "Reactive Python UI compiled to the browser — no JavaScript toolchain."),
+        ("Database", "SQLAlchemy ORM", "First-class models with support for SQLite, PostgreSQL and MySQL."),
+        ("Auth", "Session Auth + Guards", "Cookie sessions, login actions and protected routes out of the box."),
+        ("Real-time", "WebSocket + Streaming", "Live updates, pub/sub channels and streaming responses."),
+        ("Tooling", "CLI + Utilities", "nextpy create, dev and build — plus caching, metadata and SEO helpers."),
+    ]
+
+    shipped = [
+        ("PSX engine", "Signal-based reactivity, selective hydration, WAAPI animations and FLIP transitions — all from Python."),
+        ("SSR, SSG, ISR & SPA router", "Three rendering modes with client-side navigation, prefetching and per-layout asset loading."),
+        ("Server actions & API routes", "Secure RPC-style actions plus REST endpoints and streaming responses."),
+        ("Auth, ORM & CLI", "Cookie sessions, SQLAlchemy models, route guards and a scaffolding CLI."),
+        ("Animation playground", "138 live animation demos with copy-paste PSX code — Motion, gestures, FLIP, exits."),
+        ("Documentation site", "Tutorials, concepts, how-to guides and the full API reference."),
+    ]
+
+    roadmap = [
+        "First-class file uploads",
+        "Built-in internationalization (i18n)",
+        "Pytest-style app testing API",
+        "Plugin & template ecosystem",
+        "Page-level WebSocket hooks",
+    ]
+
+    return (
+        <div class="font-sans antialiased">
+
+            {/* Hero */}
+            <section class="relative overflow-hidden border-b border-gray-100">
+                <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_4px)] [background-size:16px_16px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+                <div class="relative px-4 mx-auto max-w-7xl pt-20 pb-16 sm:pt-24 sm:pb-20 lg:px-8">
+                    <div class="max-w-3xl mx-auto text-center">
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">About</p>
+                        <h1 class="mt-3 text-4xl font-extrabold tracking-tight text-gray-950 sm:text-6xl">{title}</h1>
+                        <p class="max-w-2xl mx-auto mt-6 text-lg leading-8 text-gray-600">
+                            Bridging Python's power with modern web development. Build production-ready
+                            applications faster — frontend and backend in one language.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            {/* Mission */}
+            <section class="py-24 bg-white">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="max-w-2xl">
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Our mission</p>
+                        <h2 class="mt-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                            Python developers shouldn't have to leave Python to ship on the web.
+                        </h2>
+                    </div>
+                    <div class="grid items-start gap-12 mt-12 lg:grid-cols-2">
+                        <div class="space-y-5 text-base leading-7 text-gray-600">
+                            <p>
+                                NextPy was created to solve a fundamental problem: Python developers
+                                shouldn't have to abandon their preferred language or ecosystem to build
+                                modern web applications.
+                            </p>
+                            <p>
+                                We combined the rendering model of modern meta-frameworks with Python's
+                                elegance — creating a framework that lets you write pages, components,
+                                server logic and API routes in a single language, with a reactive UI
+                                engine that needs no JavaScript build step.
+                            </p>
+                            <p>
+                                The result is a full-stack framework that stays out of your way:
+                                file-based routing, SSR/SSG/ISR rendering, server actions, an ORM,
+                                authentication and a CLI — all batteries included.
+                            </p>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            {for p in principles:
+                                <div class="p-6 border border-gray-200 rounded-2xl">
+                                    <h3 class="text-base font-bold text-gray-900">{p[0]}</h3>
+                                    <p class="mt-1.5 text-sm leading-6 text-gray-600">{p[1]}</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Tech stack */}
+            <section class="py-24 bg-gray-50 border-y border-gray-100">
+                <div class="px-6 mx-auto max-w-7xl lg:px-8">
+                    <div class="max-w-2xl mx-auto lg:text-center">
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Tech stack</p>
+                        <h2 class="mt-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Built on proven technology</h2>
+                        <p class="mt-4 text-lg text-gray-600">Every layer is a production-grade component — nothing reinvented, nothing bolted on.</p>
+                    </div>
+                    <div class="grid gap-6 mt-16 sm:grid-cols-2 lg:grid-cols-3">
+                        {for t in stack:
+                            <div class="p-6 bg-white border border-gray-200 rounded-2xl">
+                                <p class="text-xs font-semibold tracking-wider text-gray-400 uppercase">{t[0]}</p>
+                                <h3 class="mt-2 text-lg font-bold text-gray-900">{t[1]}</h3>
+                                <p class="mt-2 text-sm leading-6 text-gray-600">{t[2]}</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </section>
+
+            {/* What's shipped */}
+            <section class="py-24 bg-white">
+                <div class="grid gap-12 px-6 mx-auto max-w-7xl lg:grid-cols-2 lg:px-8">
                     <div>
-                        <p class="mb-4 text-xl text-gray-700">NextPy was created to solve a fundamental problem: Python developers shouldn't have to abandon their preferred language or ecosystem to build modern web applications.</p>
-                        <p class="mb-4 text-lg text-gray-600">We combined the best of Next.js philosophy with Python's elegance, creating a framework that lets you:</p>
-                        <ul class="space-y-3">
-                            <li class="flex items-center gap-3">
-                                <div class="flex items-center justify-center w-10 h-10 text-white rounded-lg shadow-lg bg-gradient-to-br from-yellow-500 to-orange-600">
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                    </svg>
-                                </div>
-                                <span class="text-gray-700">Write Python from frontend to backend</span>
-                            </li>
-                            <li class="flex items-center gap-3">
-                                <div class="flex items-center justify-center w-10 h-10 text-white rounded-lg shadow-lg bg-gradient-to-br from-green-500 to-emerald-600">
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                    </svg>
-                                </div>
-                                <span class="text-gray-700">Deploy production apps in minutes, not months</span>
-                            </li>
-                            <li class="flex items-center gap-3">
-                                <div class="flex items-center justify-center w-10 h-10 text-white rounded-lg shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600">
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                                    </svg>
-                                </div>
-                                <span class="text-gray-700">Use familiar patterns from Next.js/React</span>
-                            </li>
-                            <li class="flex items-center gap-3">
-                                <div class="flex items-center justify-center w-10 h-10 text-white rounded-lg shadow-lg bg-gradient-to-br from-purple-500 to-pink-600">
-                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                    </svg>
-                                </div>
-                                <span class="text-gray-700">Leverage Python's rich ecosystem</span>
-                            </li>
+                        <p class="text-sm font-semibold tracking-wider text-blue-600 uppercase">Shipped</p>
+                        <h2 class="mt-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">What NextPy includes today</h2>
+                        <ul class="mt-10 space-y-6">
+                            {for s in shipped:
+                                <li class="flex items-start gap-4">
+                                    <div class="flex items-center justify-center flex-shrink-0 w-6 h-6 mt-0.5 text-white rounded-full bg-emerald-600">
+                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                                    </div>
+                                    <div>
+                                        <strong class="text-gray-900">{s[0]}</strong>
+                                        <p class="mt-1 text-sm leading-6 text-gray-600">{s[1]}</p>
+                                    </div>
+                                </li>
+                            }
                         </ul>
                     </div>
-                    <div class="p-8 text-white bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl">
-                        <h3 class="mb-4 text-2xl font-bold">Why NextPy?</h3>
-                        <div class="space-y-4">
-                            <div class="p-4 bg-white rounded-lg bg-opacity-20">
-                                <strong>For Python Developers</strong>
-                                <p class="mt-2 text-sm opacity-90">Write complete web apps in Python without JavaScript fatigue</p>
-                            </div>
-                            <div class="p-4 bg-white rounded-lg bg-opacity-20">
-                                <strong>For Teams</strong>
-                                <p class="mt-2 text-sm opacity-90">Unified language stack reduces context switching</p>
-                            </div>
-                            <div class="p-4 bg-white rounded-lg bg-opacity-20">
-                                <strong>For Startups</strong>
-                                <p class="mt-2 text-sm opacity-90">Move fast with file-based routing and hot reload</p>
-                            </div>
+                    <div>
+                        <p class="text-sm font-semibold tracking-wider text-gray-400 uppercase">On the roadmap</p>
+                        <div class="mt-10 p-8 bg-gray-50 border border-gray-200 rounded-2xl">
+                            <ul class="space-y-4">
+                                {for r in roadmap:
+                                    <li class="flex items-center gap-3 text-gray-700">
+                                        <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                                        {r}
+                                    </li>
+                                }
+                            </ul>
+                            <p class="mt-6 text-sm text-gray-500">Roadmap items are prioritized by community need — vote on GitHub Discussions.</p>
+                        </div>
+                        <div class="grid gap-4 mt-8 sm:grid-cols-2">
+                            <Link href="/" className="block p-6 text-center transition-all bg-gray-950 rounded-2xl hover:bg-gray-800">
+                                <span class="text-sm font-bold text-white">Try the framework →</span>
+                            </Link>
+                            <Link href="/documentation" className="block p-6 text-center transition-all border border-gray-300 rounded-2xl hover:bg-gray-50">
+                                <span class="text-sm font-bold text-gray-900">Read the docs</span>
+                            </Link>
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-           
-            <div class="p-12 mb-20 bg-gray-50 rounded-2xl">
-                <h2 class="mb-12 text-4xl font-bold text-gray-900">Tech Stack</h2>
-                <div class="grid gap-8 md:grid-cols-3">
-                    <div class="p-6 transition bg-white shadow-sm rounded-xl hover:shadow-lg">
-                        <div class="flex items-center justify-center w-16 h-16 mb-4 text-white shadow-lg bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl">
-                            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
+            {/* Community CTA */}
+            <section class="px-6 pb-24 mx-auto max-w-7xl lg:px-8">
+                <div class="relative px-8 py-16 overflow-hidden text-center text-white bg-gray-950 sm:px-16 rounded-3xl">
+                    <div class="absolute inset-0 bg-[radial-gradient(#1f2937_1px,transparent_4px)] [background-size:16px_16px] opacity-40"></div>
+                    <div class="relative">
+                        <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Join the community</h2>
+                        <p class="max-w-xl mx-auto mt-4 text-lg text-gray-400">
+                            NextPy is open-source. Contribute, report issues, or just say hello.
+                        </p>
+                        <div class="flex flex-wrap justify-center gap-4 mt-10">
+                            <Link href="https://github.com/RAHIMSTUDIOS/nextpy-framework" target="_blank" className="px-8 py-3 text-sm font-bold text-white transition border border-gray-700 rounded-full hover:bg-gray-800">
+                                GitHub
+                            </Link>
+                            <Link href="/documentation" className="px-8 py-3 text-sm font-bold text-gray-950 transition bg-white rounded-full hover:bg-gray-200">
+                                Documentation
+                            </Link>
+                            <Link href="https://github.com/RAHIMSTUDIOS/nextpy-framework/discussions" target="_blank" className="px-8 py-3 text-sm font-bold text-white transition border border-gray-700 rounded-full hover:bg-gray-800">
+                                Discussions
+                            </Link>
                         </div>
-                        <h3 class="mb-2 text-xl font-bold">Backend</h3>
-                        <p class="mb-3 text-gray-600">FastAPI + Uvicorn</p>
-                        <p class="text-sm text-gray-500">High-performance async framework with auto-generated API docs</p>
-                    </div>
-                    
-                    <div class="p-6 transition bg-white shadow-sm rounded-xl hover:shadow-lg">
-                        <div class="flex items-center justify-center w-16 h-16 mb-4 text-white shadow-lg bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl">
-                            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                            </svg>
-                        </div>
-                        <h3 class="mb-2 text-xl font-bold">Frontend</h3>
-                        <p class="mb-3 text-gray-600">Jinja2 + HTMX + Tailwind CSS</p>
-                        <p class="text-sm text-gray-500">Modern templating with SPA-like interactivity</p>
-                    </div>
-                    
-                    <div class="p-6 transition bg-white shadow-sm rounded-xl hover:shadow-lg">
-                        <div class="flex items-center justify-center w-16 h-16 mb-4 text-white shadow-lg bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-                            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
-                            </svg>
-                        </div>
-                        <h3 class="mb-2 text-xl font-bold">Database</h3>
-                        <p class="mb-3 text-gray-600">SQLAlchemy ORM</p>
-                        <p class="text-sm text-gray-500">Support for SQLite, PostgreSQL, MySQL</p>
-                    </div>
-
-                    <div class="p-6 transition bg-white shadow-sm rounded-xl hover:shadow-lg">
-                        <div class="flex items-center justify-center w-16 h-16 mb-4 text-white shadow-lg bg-gradient-to-br from-red-500 to-pink-600 rounded-xl">
-                            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                            </svg>
-                        </div>
-                        <h3 class="mb-2 text-xl font-bold">Auth</h3>
-                        <p class="mb-3 text-gray-600">JWT + Sessions</p>
-                        <p class="text-sm text-gray-500">Built-in authentication system</p>
-                    </div>
-
-                    <div class="p-6 transition bg-white shadow-sm rounded-xl hover:shadow-lg">
-                        <div class="flex items-center justify-center w-16 h-16 mb-4 text-white shadow-lg bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl">
-                            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                        <h3 class="mb-2 text-xl font-bold">Real-time</h3>
-                        <p class="mb-3 text-gray-600">WebSocket Support</p>
-                        <p class="text-sm text-gray-500">Live updates and streaming capabilities</p>
-                    </div>
-
-                    <div class="p-6 transition bg-white shadow-sm rounded-xl hover:shadow-lg">
-                        <div class="flex items-center justify-center w-16 h-16 mb-4 text-white shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
-                            <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                        </div>
-                        <h3 class="mb-2 text-xl font-bold">Utilities</h3>
-                        <p class="mb-3 text-gray-600">20+ Components & Tools</p>
-                        <p class="text-sm text-gray-500">Email, uploads, caching, search & more</p>
                     </div>
                 </div>
-            </div>
-
-            
-            <div class="mb-20">
-                <h2 class="mb-12 text-4xl font-bold text-gray-900">Version History</h2>
-                <div class="space-y-6">
-                    <div class="pb-6 pl-6 border-l-4 border-blue-600">
-                        <h3 class="text-2xl font-bold text-gray-900">v1.0.0</h3>
-                        <p class="mb-3 text-gray-600">November 2025 - Initial Release</p>
-                        <ul class="space-y-2 text-gray-700">
-                            <li>✅ File-based routing with dynamic routes</li>
-                            <li>✅ SSR and SSG support</li>
-                            <li>✅ Database integration (SQLAlchemy)</li>
-                            <li>✅ JWT authentication and sessions</li>
-                            <li>✅ 20+ pre-built UI components</li>
-                            <li>✅ WebSocket real-time support</li>
-                            <li>✅ CLI with code generators</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="pb-6 pl-6 border-l-4 border-gray-300 opacity-60">
-                        <h3 class="text-2xl font-bold text-gray-900">v1.1.0</h3>
-                        <p class="mb-3 text-gray-600">Coming Soon</p>
-                        <ul class="space-y-2 text-gray-700">
-                            <li>🔮 GraphQL support</li>
-                            <li>🔮 Built-in analytics</li>
-                            <li>🔮 AI/ML integrations</li>
-                            <li>🔮 Advanced caching strategies</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            
-            <div class="p-12 text-center text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl">
-                <h2 class="mb-6 text-4xl font-bold">Join the Community</h2>
-                <p class="mb-8 text-xl opacity-90">NextPy is open-source. Contribute, report issues, or just say hello!</p>
-                <div class="flex flex-wrap justify-center gap-4">
-                    <a href="#" class="px-8 py-3 font-semibold text-blue-600 transition bg-white rounded-lg hover:bg-gray-100">GitHub</a>
-                    <a href="#" class="px-8 py-3 font-semibold text-white transition border-2 border-white rounded-lg hover:bg-white hover:text-blue-600">Discord</a>
-                    <a href="#" class="px-8 py-3 font-semibold text-white transition border-2 border-white rounded-lg hover:bg-white hover:text-blue-600">Docs</a>
-                </div>
-            </div>
+            </section>
         </div>
-        </div>
-        
-
     )
-    
+
+
 def getServerSideProps(context):
-    # Fetch any necessary data for the About page here
     return {
         'props': {
             'title': 'About NextPy'
         }
     }
-    
+
+
 default = AboutPage

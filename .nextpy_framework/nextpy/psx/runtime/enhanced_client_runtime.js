@@ -359,6 +359,81 @@
         };
     }
 
+    // ── PSX hooks shim ──────────────────────────────────────────────────────
+    // PSX components are server-rendered in Python; the hydration runtime only
+    // patches DOM bindings and never re-invokes component functions, so these
+    // hooks have no call site during normal rendering. They are exposed for
+    // parity with the Python implementations (nextpy.psx.components.component)
+    // and for any client code that drives them manually.
+    //
+    //   useContext(ctx)          — reads window.__nextpyContextStack (Provider
+    //                              pushes {context, value} frames around its
+    //                              subtree render on the server; client code
+    //                              may push frames the same way).
+    //   useDeferredValue(value)  — returns the previous value for one tick
+    //                              (microtask) after the input changes.
+    //   useTransition()          — startTransition(cb) runs cb and reports
+    //                              isPending until the microtask queue drains.
+    //   useImperativeHandle(...) — writes the handle onto ref.current, matching
+    //                              the Python useRef shape ({ current } object).
+    window.__nextpyContextStack = window.__nextpyContextStack || [];
+    window.__nextpyHooks = {
+        useContext(context) {
+            const stack = window.__nextpyContextStack;
+            for (let i = stack.length - 1; i >= 0; i--) {
+                const frame = stack[i];
+                if (frame.context === context || frame.context == context) {
+                    return frame.value;
+                }
+            }
+            return context && context.default_value !== undefined
+                ? context.default_value
+                : context && context.defaultValue !== undefined
+                    ? context.defaultValue
+                    : undefined;
+        },
+
+        useDeferredValue(value) {
+            const state = window.__nextpyDeferredState ||
+                (window.__nextpyDeferredState = { current: value });
+            if (state.current === value) return state.current;
+            // Return the previous value for this tick; the next call sees
+            // the new value already committed.
+            const previous = state.current;
+            state.current = value;
+            return previous;
+        },
+
+        useTransition() {
+            const state = window.__nextpyTransitionState ||
+                (window.__nextpyTransitionState = { pending: 0 });
+            return [state.pending > 0, function startTransition(cb) {
+                state.pending += 1;
+                try {
+                    return cb();
+                } finally {
+                    // Transition "completes" once the microtask queue drains.
+                    queueMicrotask(() => { state.pending = Math.max(0, state.pending - 1); });
+                }
+            }];
+        },
+
+        useImperativeHandle(ref, createHandle, deps) {
+            if (!ref) return;
+            // Refs are { current } objects (same shape as useRef); fall back to
+            // a plain property assignment for dict-like refs.
+            try {
+                ref.current = createHandle();
+            } catch (e) {
+                ref['current'] = createHandle();
+            }
+        },
+
+        useRef(initialValue) {
+            return { current: initialValue };
+        }
+    };
+
     // Initialize the client
     const nextpyClient = new NextPyClient();
     

@@ -59,7 +59,7 @@ def EnhancedCodeBlock(props):
     filename_html = ''
     if filename:
         filename_html = (
-            '<span class="text-xs font-mono font-medium text-zinc-400 select-none tracking-tight">'
+            '<span class="text-xs font-mono font-medium text-zinc-300/90 select-none tracking-tight truncate max-w-[280px] inline-block align-bottom">'
             + html.escape(str(filename)) + '</span>'
         )
 
@@ -67,23 +67,30 @@ def EnhancedCodeBlock(props):
     # rendered through a {snippet} expression inside <code> (whitespace-pre
     # preserves formatting) which escapes markup as text.
     return psx(f"""
-        <div class="my-6 overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950 font-sans shadow-sm antialiased group">
-            <div class="flex items-center justify-between px-4 py-2 border-b border-zinc-800/80 bg-zinc-900/40 select-none">
-                <div class="flex items-center gap-2.5">
-                    {filename_html}
-                    <span class="px-1.5 py-0.5 text-[10px] font-mono font-semibold tracking-wider text-zinc-500 uppercase bg-zinc-900 rounded border border-zinc-800">
-                        {lang_display}
-                    </span>
+        <div class="my-6 overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0a0a0c] font-sans shadow-[0_8px_30px_rgb(0,0,0,0.35)] antialiased group ring-1 ring-white/[0.03]">
+            <div class="flex items-center justify-between pl-4 pr-3 py-2.5 border-b border-zinc-800/60 bg-gradient-to-b from-zinc-900/70 to-zinc-900/30 select-none">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="flex items-center gap-1.5 shrink-0" aria-hidden="true">
+                        <span class="w-3 h-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                        <span class="w-3 h-3 rounded-full bg-[#febc2e] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                        <span class="w-3 h-3 rounded-full bg-[#28c840] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                    </div>
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        {filename_html}
+                        <span class="shrink-0 px-1.5 py-0.5 text-[10px] font-mono font-semibold tracking-wider text-zinc-500 uppercase bg-zinc-900/80 rounded-md border border-zinc-800/80">
+                            {lang_display}
+                        </span>
+                    </div>
                 </div>
                 <button
-                    class="text-xs text-zinc-400 transition hover:text-sky-400 flex items-center gap-1"
+                    class="shrink-0 ml-3 inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-100 bg-zinc-900/60 hover:bg-zinc-800/70 border border-zinc-800/70 hover:border-zinc-700 rounded-lg transition-all duration-150"
                     onclick="navigator.clipboard.writeText(this.closest('.group').querySelector('code').innerText);var l=this.querySelector('.cb-label');l.textContent='Copied';setTimeout(()=>l.textContent='Copy',1500)"
                 >
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
                     <span class="cb-label">Copy</span>
                 </button>
             </div>
-            <code class="block p-5 overflow-x-auto text-sm leading-relaxed text-zinc-200 scrollbar-thin bg-zinc-950/80 {code_class}">{{snippet}}</code>
+            <code class="block p-5 overflow-x-auto text-[13px] leading-[1.7] text-zinc-200 scrollbar-thin bg-[#0a0a0c] selection:bg-blue-500/25 selection:text-blue-100 {code_class}">{{snippet}}</code>
         </div>
     """)
 
@@ -147,9 +154,16 @@ def CodeTabs(props):
     panel_exprs = ''.join(f'{{panel_{i}}}' for i in range(len(code_panels)))
 
     return psx(f"""
-        <div class="my-6 overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950 font-sans shadow-sm antialiased">
-            <div class="flex border-b border-zinc-800/80 bg-zinc-900/20 select-none">
-                {tab_buttons_stream}
+        <div class="my-6 overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0a0a0c] font-sans shadow-[0_8px_30px_rgb(0,0,0,0.35)] antialiased ring-1 ring-white/[0.03]">
+            <div class="flex items-center border-b border-zinc-800/60 bg-gradient-to-b from-zinc-900/70 to-zinc-900/30 select-none">
+                <div class="flex items-center gap-1.5 pl-4 shrink-0" aria-hidden="true">
+                    <span class="w-3 h-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                    <span class="w-3 h-3 rounded-full bg-[#febc2e] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                    <span class="w-3 h-3 rounded-full bg-[#28c840] shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.3)]"></span>
+                </div>
+                <div class="flex-1 flex items-center min-w-0 overflow-x-auto">
+                    {tab_buttons_stream}
+                </div>
             </div>
             <div>
                 {panel_exprs}

@@ -1,6 +1,6 @@
 """Styling — NextPy Documentation"""
 
-from nextpy.psx import component, Link, register_component, interactive_component, useState, useEffect
+from nextpy.psx import component, Link, register_component, interactive_component, useState
 from pages.documentation._components.enhanced_codeblock import EnhancedCodeBlock
 
 register_component("EnhancedCodeBlock", EnhancedCodeBlock)
@@ -13,13 +13,13 @@ def StylingGuide():
 @component
 def Card():
     return (
-        &lt;div class="max-w-sm rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg hover:shadow-xl transition-shadow"&gt;
-            &lt;h3 class="text-lg font-semibold text-white"&gt;Card title&lt;/h3&gt;
-            &lt;p class="mt-2 text-sm text-zinc-400"&gt;Styled entirely with utility classes.&lt;/p&gt;
-            &lt;button class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"&gt;
+        <div class="max-w-sm rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg hover:shadow-xl transition-shadow">
+            <h3 class="text-lg font-semibold text-white">Card title</h3>
+            <p class="mt-2 text-sm text-zinc-400">Styled entirely with utility classes.</p>
+            <button class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500">
                 Action
-            &lt;/button&gt;
-        &lt;/div&gt;
+            </button>
+        </div>
     )"""
 
     state_example = """from nextpy.psx import interactive_component, useState
@@ -32,15 +32,15 @@ def Toggle():
         return active if on else inactive
 
     return (
-        &lt;button
+        <button
             onclick={lambda e: setOn(not on)}
             class={cls(
                 "bg-emerald-600 text-white",
                 "bg-zinc-800 text-zinc-400"
             )}
-        &gt;
+        >
             {"ON" if on else "OFF"}
-        &lt;/button&gt;
+        </button>
     )"""
 
     css_example = """# assets/styles/custom.css
@@ -57,12 +57,12 @@ def Toggle():
 @component
 def RootLayout(children):
     return psx(\"\"\"
-        &lt;html&gt;
-            &lt;head&gt;
-                &lt;link rel=\"stylesheet\" href=\"/static/css/custom.css\" /&gt;
-            &lt;/head&gt;
-            &lt;body&gt;{children}&lt;/body&gt;
-        &lt;/html&gt;
+        <html>
+            <head>
+                <link rel=\"stylesheet\" href=\"/static/css/custom.css\" />
+            </head>
+            <body>{children}</body>
+        </html>
     \"\"\")"""
 
     psx_style_example = """from nextpy.psx import component, psx
@@ -71,15 +71,13 @@ def RootLayout(children):
 def Page():
     cls = "bg-blue-600 text-white"
     return psx(f\"\"\"
-        &lt;button class="{cls} px-4 py-2 rounded-lg"&gt;Click&lt;/button&gt;
+        <button class="{cls} px-4 py-2 rounded-lg">Click</button>
     \"\"\")"""
 
     return (
-        <div class="flex flex-col xl:flex-row items-start justify-between gap-12 w-full max-w-6xl mx-auto">
-                <DocsScrollSpy />
-
-            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-16 pb-24 pt-6">
-                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-6">
+        <div class="flex flex-col xl:flex-row items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <article class="flex-1 min-w-0 max-w-4xl antialiased text-zinc-300 selection:bg-blue-500/20 selection:text-blue-300 space-y-12 pb-24 pt-6">
+                <div class="flex items-center justify-between border-b border-zinc-800/50 pb-4">
                     <div class="flex items-center gap-2 text-sm font-medium text-zinc-400">
                         <span>Documentation</span>
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -105,15 +103,15 @@ def Page():
                 </div>
 
                 <header id="header" class="mb-12">
-                    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">Styling</h1>
-                    <p class="text-lg leading-relaxed text-zinc-400">
+                    <h1 class="text-2xl sm:text-2xl font-bold tracking-tight text-white mb-6">Styling</h1>
+                    <p class="leading-relaxed text-zinc-300">
                         NextPy ships with Tailwind CSS out of the box. Write utility classes directly in your markup — the JIT compiler scans your pages, components, and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">psx()</code> strings and generates only the CSS you use.
                     </p>
                 </header>
 
                 <div id="utility-classes" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Utility classes</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         Every element accepts a <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">class</code> attribute. Combine layout, spacing, color, and state utilities — responsive prefixes like <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">sm:</code>, <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">md:</code>, and <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">dark:</code> work as usual:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="components/card.py" snippet={tailwind_example} />
@@ -121,7 +119,7 @@ def Page():
 
                 <div id="conditional-styles" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Conditional styles</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">class</code> accepts expressions, so state-driven styling is just a Python ternary or helper function. When state changes, only the class attribute updates — no re-render of the whole page:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="components/toggle.py" snippet={state_example} />
@@ -129,7 +127,7 @@ def Page():
 
                 <div id="custom-css" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Custom CSS</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         For styles Tailwind can't express, drop a stylesheet in <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">assets/styles/</code> and link it from your root layout. Custom classes compose with utilities — use <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">!important</code> sparingly:
                     </p>
                     <EnhancedCodeBlock lang="css" filename="assets/styles/custom.css" snippet={css_example} />
@@ -138,7 +136,7 @@ def Page():
 
                 <div id="psx-strings" class="space-y-6 pt-8 border-t border-zinc-800/50">
                     <h2 class="text-2xl font-semibold text-white tracking-tight">Styling inside psx() strings</h2>
-                    <p class="text-base leading-7 text-zinc-400">
+                    <p class="text-base leading-7 text-zinc-300">
                         The Tailwind scanner also reads class attributes inside <code class="text-zinc-200 font-mono text-sm px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800">psx()</code> template strings, so dynamically built markup gets its utilities generated too. Dynamic class fragments are safe — the scanner matches complete utility tokens:
                     </p>
                     <EnhancedCodeBlock lang="python" filename="pages/index.py" snippet={psx_style_example} />
@@ -166,7 +164,7 @@ def Page():
                 </footer>
             </article>
 
-            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-6 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
+            <aside class="hidden xl:block w-64 shrink-0 sticky top-24 pt-4 pl-8 pb-24 h-[calc(100vh-6rem)] overflow-y-auto">
                 <div class="text-sm">
                     <h4 class="font-semibold text-white mb-4 tracking-wide">On this page</h4>
                     <ul class="space-y-3 font-medium text-zinc-400 border-l border-zinc-800/50">
@@ -181,72 +179,9 @@ def Page():
     )
 
 
-
-
-
 def getServerSideProps(context):
     return {"props": {"title": "Styling - NextPy Docs"}}
 
 
 default = StylingGuide
 
-@interactive_component
-def DocsScrollSpy():
-    [scroll_progress, set_scroll_progress] = useState(0)
-
-    def SetupScroll():
-        def OnScroll():
-            doc_height = document.documentElement.scrollHeight - window.innerHeight
-            if doc_height > 0:
-                set_scroll_progress((window.scrollY / doc_height) * 100)
-
-            current = ""
-            sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-            for sec in sections:
-                rect = sec.getBoundingClientRect()
-                if rect.top <= 160:
-                    current = sec.id
-                in_view = rect.top < window.innerHeight * 0.92 and rect.bottom > 0
-                if in_view:
-                    sec.setAttribute("data-docs-revealed", "")
-                else:
-                    sec.removeAttribute("data-docs-revealed")
-
-            links = document.querySelectorAll("aside a[href^='#'], nav a[href^='#']")
-            for a in links:
-                if a.getAttribute("href") == "#" + current:
-                    a.setAttribute("data-docs-toc-active", "")
-                else:
-                    a.removeAttribute("data-docs-toc-active")
-
-            path = window.location.pathname
-            nav_links = document.querySelectorAll("aside a[href^='/']")
-            for a in nav_links:
-                if a.getAttribute("href") == path:
-                    a.setAttribute("data-docs-nav-active", "")
-                    parent = a.closest("details")
-                    if parent:
-                        parent.setAttribute("open", "")
-                else:
-                    a.removeAttribute("data-docs-nav-active")
-
-        sections = document.querySelectorAll("article div[id], article header[id], section[id]")
-        for sec in sections:
-            sec.setAttribute("data-docs-reveal", "")
-
-        window.addEventListener("scroll", OnScroll)
-        document.addEventListener("nextpy:navigate", OnScroll)
-        OnScroll()
-        return lambda: window.removeEventListener("scroll", OnScroll)
-
-    useEffect(SetupScroll, [])
-
-    progress_style = f"width: {scroll_progress}%"
-
-    return (
-        <div class="fixed top-0 left-0 right-0 z-[70] h-[3px] pointer-events-none">
-            <div style={progress_style} class="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 transition-[width] duration-100"></div>
-        </div>
-    )
-
-register_component("DocsScrollSpy", DocsScrollSpy)

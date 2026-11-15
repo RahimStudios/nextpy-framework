@@ -207,8 +207,13 @@ def Page(**props):
     first = router.render_route(route, context_for(params))
     second = router.render_route(route, context_for(params))
 
-    assert "Error rendering route" in first
-    assert "Error rendering route" in second
+    # Non-debug renders return the generic error marker; debug mode returns
+    # the detailed "Error rendering route" page. Either way the route must
+    # re-render (not serve a cached error) on every request.
+    assert ("Error rendering route" in first
+            or 'data-nextpy-error="true"' in first)
+    assert ("Error rendering route" in second
+            or 'data-nextpy-error="true"' in second)
     assert calls["n"] == 2
 
 
