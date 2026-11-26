@@ -41,6 +41,12 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy application
 COPY . .
 
+# Pre-compile Tailwind CSS during build (if package.json exists)
+RUN if [ -f package.json ] && [ -d node_modules ]; then \
+    echo "Pre-compiling Tailwind CSS..." && \
+    npm run build:tailwind || echo "Tailwind compilation skipped"; \
+    fi
+
 # Set environment variables
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
